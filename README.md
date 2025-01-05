@@ -20,8 +20,9 @@ fmt.Println(value)
 // hello
 ```
 
-The v0.1 API is implemented and preparing for its first release. The behavior
-contract is recorded in [the architecture notes](docs/ARCHITECTURE.md).
+The initial API and the self-contained v0.2–v0.4 roadmap capabilities are
+implemented and preparing for release. The behavior contract is recorded in
+[the architecture notes](docs/ARCHITECTURE.md).
 
 ## Object schemas
 
@@ -76,6 +77,11 @@ port := goshape.Transform(
 Use `Refine` methods for rules that keep the same output type. Object-level
 refinements can validate relationships between fields.
 
+GoShape also provides `Enum`, `Literal`, same-output-type `Union`/`OneOf`, and
+`Nullable` schemas. `Nullable(schema)` returns `Schema[*T]`, preserving the
+difference between JSON `null` and a non-null value. Typed `[]T` and
+`map[string]T` inputs are supported in addition to decoded JSON values.
+
 ## Structured errors
 
 ```go
@@ -102,16 +108,60 @@ user, err := goshape.ParseJSON(userSchema, requestBody)
 
 JSON is an adapter, not GoShape's core representation. `ParseJSON` accepts
 exactly one JSON value and retains numeric precision with `encoding/json.Number`.
+Context and reader variants are available as `ParseJSONContext`,
+`ParseJSONReader`, and `ParseJSONReaderContext`.
 
-## v0.1 schemas and rules
+## Explicit coercion
 
-- `String`: `Trim`, `Min`, `Max`, `Len`, `Pattern`, `Email`, `Refine`
-- `Int`, `Int64`, `Float64`: `Min`, `Max`, `Gt`, `Gte`, `Lt`, `Lte`, `Refine`
-- `Bool`: `Refine`
-- `Slice`: `Min`, `Max`, `Refine`
-- `Map`: `Refine`
+Strict constructors do not convert strings or unrelated Go scalar types. Use
+the explicit constructors when conversion is intended:
+
+```go
+port := goshape.CoerceInt().Min(1).Max(65535)
+enabled := goshape.CoerceBool()
+timeout := goshape.CoerceDuration()
+createdAt := goshape.CoerceTime()
+```
+
+Additional schemas include `Time`, `Duration`, `URL`, `UUID`, and `IP`.
+
+## JSON Schema and OpenAPI
+
+```go
+document, err := goshape.JSONSchema(userSchema)
+requestBody, err := openapi.JSONRequestBody(userSchema, true)
+```
+
+The first call produces JSON Schema Draft 2020-12. The second produces an
+OpenAPI 3.1 request body. Metadata can be attached to any schema:
+
+```go
+homepage := goshape.Annotate(goshape.URL()).
+	Title("Homepage").
+	Description("Absolute homepage URL").
+	Example("https://example.com")
+```
+
+Custom refinements and transforms cannot be represented faithfully, so their
+export returns `UnsupportedSchemaError` instead of silently losing behavior.
+
+Dependency-free adapters are available at:
+
+- `github.com/rhevorn/goshape/jsonschema`
+- `github.com/rhevorn/goshape/openapi`
+- `github.com/rhevorn/goshape/http` (package name `goshapehttp`)
+
+## Schemas and rules
+
+- `String`: normalization, length, pattern, containment, and format rules
+- `Int`, `Int64`, `Float64`: bounds, sign, allowed-value, and custom rules
+- `Bool`, `Time`, `Duration`, `URL`, `UUID`, `IP`
+- `Enum`, `Literal`, `Union`/`OneOf`, `Nullable`
+- `Slice`: `Min`, `Max`, `NonEmpty`, `Unique`, `Refine`
+- `Map`: `Min`, `Max`, `NonEmpty`, `Refine`
 - `Object`: `Strict`, `Strip`, `Refine`
-- Composition: `Field`, `Optional`, `Default`, `Transform`, generic `Refine`
+- Composition: `Field`, `Optional`, `Default`, `Transform`, `Refine`,
+  `RefineContext`
 
 ## Design goals
 

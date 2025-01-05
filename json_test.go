@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -25,6 +26,18 @@ func TestParseJSON(t *testing.T) {
 	}
 	if got.Count != 10 || got.Ratio != 1.25 {
 		t.Fatalf("ParseJSON = %#v", got)
+	}
+}
+
+func TestParseJSONReader(t *testing.T) {
+	t.Parallel()
+
+	got, err := ParseJSONReader(String().Min(1), strings.NewReader(`"value"`))
+	if err != nil || got != "value" {
+		t.Fatalf("ParseJSONReader = %q, %v", got, err)
+	}
+	if _, err := ParseJSONReader(String(), nil); err == nil {
+		t.Fatal("nil JSON reader was accepted")
 	}
 }
 

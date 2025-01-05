@@ -1,12 +1,17 @@
 package goshape
 
-import "context"
+import (
+	"context"
+	"reflect"
+)
 
 // SliceSchema parses []any by applying a typed element schema to every item.
 type SliceSchema[T any] struct {
 	element     Schema[T]
 	rules       []lengthRule
 	refinements []refinement[[]T]
+	constraints []map[string]any
+	unique      bool
 }
 
 // Slice returns a schema for a slice of element values.
@@ -20,13 +25,38 @@ func Slice[T any](element Schema[T]) SliceSchema[T] {
 // Min requires at least n elements.
 func (s SliceSchema[T]) Min(n int) SliceSchema[T] {
 	s.rules = appendCopy(s.rules, minLengthRule("Slice", n))
+	s.constraints = appendCopy(s.constraints, map[string]any{"minItems": n})
 	return s
 }
 
 // Max allows at most n elements.
 func (s SliceSchema[T]) Max(n int) SliceSchema[T] {
 	s.rules = appendCopy(s.rules, maxLengthRule("Slice", n))
+	s.constraints = appendCopy(s.constraints, map[string]any{"maxItems": n})
 	return s
+}
+
+// NonEmpty requires at least one element.
+func (s SliceSchema[T]) NonEmpty() SliceSchema[T] { return s.Min(1) }
+
+// Unique requires every pair of parsed elements to be deeply unequal.
+func (s SliceSchema[T]) Unique() SliceSchema[T] {
+	s.unique = true
+	s.constraints = appendCopy(s.constraints, map[string]any{"uniqueItems": true})
+	return s
+}
+
+func (s SliceSchema[T]) buildJSONSchema() (map[string]any, error) {
+	if err := unsupportedIfRefined(len(s.refinements)); err != nil {
+		return nil, err
+	}
+	items, err := buildJSONSchema(s.element)
+	if err != nil {
+		return nil, err
+	}
+	document := map[string]any{"type": "array", "items": items}
+	applyConstraints(document, s.constraints)
+	return document, nil
 }
 
 // Refine adds custom validation after every element has parsed successfully.
@@ -46,6 +76,15 @@ func (s SliceSchema[T]) ParseContext(ctx context.Context, value any) ([]T, error
 		return nil, err
 	}
 	input, ok := value.([]any)
+	if !ok {
+		if typed, typedOK := value.([]T); typedOK {
+			input = make([]any, len(typed))
+			for i := range typed {
+				input[i] = typed[i]
+			}
+			ok = true
+		}
+	}
 	if !ok {
 		return nil, validationError(invalidType("[]any", value))
 	}
@@ -77,6 +116,21 @@ func (s SliceSchema[T]) ParseContext(ctx context.Context, value any) ([]T, error
 	}
 	if len(issues) != 0 {
 		return nil, &ValidationError{Issues: issues}
+	}
+	if s.unique {
+		for i := 0; i < len(result); i++ {
+			for j := 0; j < i; j++ {
+				if reflect.DeepEqual(result[i], result[j]) {
+					return nil, validationError(Issue{
+						Code:     CodeInvalidValue,
+						Path:     Path{IndexPath(i)},
+						Message:  "must contain unique items",
+						Expected: "unique item",
+						Received: result[i],
+					})
+				}
+			}
+		}
 	}
 
 	refinementIssues, err := runRefinements(ctx, result, s.refinements)

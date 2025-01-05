@@ -14,6 +14,7 @@ const (
 	CodeInvalidFormat   = "invalid_format"
 	CodeInvalidValue    = "invalid_value"
 	CodeInvalidEnum     = "invalid_enum"
+	CodeInvalidUnion    = "invalid_union"
 	CodeInvalidString   = "invalid_string"
 	CodeInvalidNumber   = "invalid_number"
 	CodeInvalidEmail    = "invalid_email"

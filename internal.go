@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 )
 
 type refinement[T any] func(T) error
@@ -33,10 +34,7 @@ func contextError(err error, ctx context.Context) error {
 }
 
 func invalidType(expected string, received any) Issue {
-	actual := "nil"
-	if received != nil {
-		actual = fmt.Sprintf("%T", received)
-	}
+	actual := typeNameOf(received)
 	return Issue{
 		Code:     CodeInvalidType,
 		Message:  fmt.Sprintf("expected %s, received %s", expected, actual),
@@ -45,14 +43,29 @@ func invalidType(expected string, received any) Issue {
 	}
 }
 
+func typeNameOf(value any) string {
+	if value == nil {
+		return "nil"
+	}
+	return fmt.Sprintf("%T", value)
+}
+
+func genericTypeName[T any]() string {
+	return reflect.TypeOf((*T)(nil)).Elem().String()
+}
+
 func runRefinements[T any](ctx context.Context, value T, refinements []refinement[T]) ([]Issue, error) {
 	var issues []Issue
 	for _, refine := range refinements {
 		if err := checkContext(ctx); err != nil {
 			return nil, err
 		}
-		if err := refine(value); err != nil {
-			issues = append(issues, issuesFromError(err)...)
+		refinementErr := refine(value)
+		if contextErr := contextError(refinementErr, ctx); contextErr != nil {
+			return nil, contextErr
+		}
+		if refinementErr != nil {
+			issues = append(issues, issuesFromError(refinementErr)...)
 		}
 	}
 	if err := checkContext(ctx); err != nil {

@@ -29,13 +29,22 @@ func (s refineSchema[T]) ParseContext(ctx context.Context, value any) (T, error)
 		var zero T
 		return zero, err
 	}
-	if err := s.refine(parsed); err != nil {
+	refinementErr := s.refine(parsed)
+	if contextErr := contextError(refinementErr, ctx); contextErr != nil {
 		var zero T
-		return zero, &ValidationError{Issues: issuesFromError(err)}
+		return zero, contextErr
+	}
+	if refinementErr != nil {
+		var zero T
+		return zero, &ValidationError{Issues: issuesFromError(refinementErr)}
 	}
 	if err := checkContext(ctx); err != nil {
 		var zero T
 		return zero, err
 	}
 	return parsed, nil
+}
+
+func (s refineSchema[T]) buildJSONSchema() (map[string]any, error) {
+	return nil, &UnsupportedSchemaError{Operation: "custom refinement"}
 }

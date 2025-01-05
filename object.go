@@ -10,6 +10,7 @@ import (
 type ObjectField[T any] interface {
 	fieldName() string
 	parseAndSet(context.Context, *T, any, bool) ([]Issue, error)
+	buildJSONField() (map[string]any, bool, error)
 }
 
 // FieldDef connects an input field schema to a strongly typed setter.
@@ -83,6 +84,17 @@ func (f FieldDef[T, V]) parseAndSet(ctx context.Context, target *T, input any, p
 	}
 	f.setter(target, parsed)
 	return nil, nil
+}
+
+func (f FieldDef[T, V]) buildJSONField() (map[string]any, bool, error) {
+	document, err := buildJSONSchema(f.schema)
+	if err != nil {
+		return nil, false, err
+	}
+	if f.hasDefault {
+		document["default"] = f.defaultValue
+	}
+	return document, !f.optional, nil
 }
 
 // ObjectSchema parses string-keyed input into T through typed field setters.
@@ -188,4 +200,31 @@ func (s ObjectSchema[T]) ParseContext(ctx context.Context, value any) (T, error)
 		return zero, &ValidationError{Issues: refinementIssues}
 	}
 	return candidate, nil
+}
+
+func (s ObjectSchema[T]) buildJSONSchema() (map[string]any, error) {
+	if err := unsupportedIfRefined(len(s.refinements)); err != nil {
+		return nil, err
+	}
+	properties := make(map[string]any, len(s.fields))
+	required := make([]string, 0, len(s.fields))
+	for _, field := range s.fields {
+		document, isRequired, err := field.buildJSONField()
+		if err != nil {
+			return nil, err
+		}
+		properties[field.fieldName()] = document
+		if isRequired {
+			required = append(required, field.fieldName())
+		}
+	}
+	document := map[string]any{
+		"type":                 "object",
+		"properties":           properties,
+		"additionalProperties": !s.strict,
+	}
+	if len(required) != 0 {
+		document["required"] = required
+	}
+	return document, nil
 }

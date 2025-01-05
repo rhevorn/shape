@@ -9,7 +9,26 @@ import (
 type MapSchema[T any] struct {
 	value       Schema[T]
 	refinements []refinement[map[string]T]
+	rules       []lengthRule
+	constraints []map[string]any
 }
+
+// Min requires at least n entries.
+func (s MapSchema[T]) Min(n int) MapSchema[T] {
+	s.rules = appendCopy(s.rules, minLengthRule("Map", n))
+	s.constraints = appendCopy(s.constraints, map[string]any{"minProperties": n})
+	return s
+}
+
+// Max allows at most n entries.
+func (s MapSchema[T]) Max(n int) MapSchema[T] {
+	s.rules = appendCopy(s.rules, maxLengthRule("Map", n))
+	s.constraints = appendCopy(s.constraints, map[string]any{"maxProperties": n})
+	return s
+}
+
+// NonEmpty requires at least one entry.
+func (s MapSchema[T]) NonEmpty() MapSchema[T] { return s.Min(1) }
 
 // Map returns a schema for a string-keyed map.
 func Map[T any](value Schema[T]) MapSchema[T] {
@@ -37,6 +56,15 @@ func (s MapSchema[T]) ParseContext(ctx context.Context, value any) (map[string]T
 	}
 	input, ok := value.(map[string]any)
 	if !ok {
+		if typed, typedOK := value.(map[string]T); typedOK {
+			input = make(map[string]any, len(typed))
+			for key, item := range typed {
+				input[key] = item
+			}
+			ok = true
+		}
+	}
+	if !ok {
 		return nil, validationError(invalidType("map[string]any", value))
 	}
 
@@ -45,9 +73,17 @@ func (s MapSchema[T]) ParseContext(ctx context.Context, value any) (map[string]T
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
+	var issues []Issue
+	for _, rule := range s.rules {
+		if issue := rule(len(input)); issue != nil {
+			issues = append(issues, *issue)
+		}
+	}
+	if len(issues) != 0 {
+		return nil, &ValidationError{Issues: issues}
+	}
 
 	result := make(map[string]T, len(input))
-	var issues []Issue
 	for _, key := range keys {
 		if err := checkContext(ctx); err != nil {
 			return nil, err
@@ -74,4 +110,17 @@ func (s MapSchema[T]) ParseContext(ctx context.Context, value any) (map[string]T
 		return nil, &ValidationError{Issues: refinementIssues}
 	}
 	return result, nil
+}
+
+func (s MapSchema[T]) buildJSONSchema() (map[string]any, error) {
+	if err := unsupportedIfRefined(len(s.refinements)); err != nil {
+		return nil, err
+	}
+	value, err := buildJSONSchema(s.value)
+	if err != nil {
+		return nil, err
+	}
+	document := map[string]any{"type": "object", "additionalProperties": value}
+	applyConstraints(document, s.constraints)
+	return document, nil
 }

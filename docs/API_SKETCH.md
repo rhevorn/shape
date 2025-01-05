@@ -1,6 +1,7 @@
-# v0.1 API Sketch
+# Initial API Sketch
 
-This file is a design target, not yet a compatibility promise.
+This file records the initial v0.1 design. The implemented API also includes
+the extended schemas and exporters documented in the README.
 
 ```go
 type Schema[T any] interface {

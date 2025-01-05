@@ -89,10 +89,9 @@ schema failures remain `*ValidationError`.
 
 ## Collections
 
-For v0.1, `Slice` consumes the natural untrusted representation `[]any`, and
-`Map` consumes `map[string]any`. Supporting arbitrary typed slices or maps would
-require reflection or a much wider API and is deferred until a concrete need is
-demonstrated.
+`Slice` and `Map` consume the natural untrusted representations `[]any` and
+`map[string]any`. They also accept their exact typed output representations,
+`[]T` and `map[string]T`, without reflection.
 
 Collection size rules evaluate after type checking and before child parsing.
 When size is valid, child errors are aggregated and prefixed with their index or
@@ -162,3 +161,15 @@ The confirmed canonical module path is `github.com/rhevorn/goshape`.
   errors; untrusted input never causes a construction panic.
 
 The repository is licensed under MIT.
+
+## Extended implementation status
+
+The self-contained v0.2 features are implemented: enum, literal, same-output
+unions, nullable values, explicit coercion, time/duration, URL/UUID/IP, and
+context-aware refinements. v0.3 metadata and JSON Schema Draft 2020-12 export
+are implemented. Standard-library v0.4 adapters cover OpenAPI 3.1 and
+`net/http` without adding dependencies.
+
+Framework-specific adapters remain separate future work because adding Gin,
+Echo, Fiber, or similar frameworks to the root module would violate the
+dependency-light core and requires choosing concrete external API versions.

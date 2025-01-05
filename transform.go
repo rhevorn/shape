@@ -33,12 +33,16 @@ func (s transformSchema[A, B]) ParseContext(ctx context.Context, value any) (B, 
 		var zero B
 		return zero, err
 	}
-	result, err := s.transform(parsed)
-	if err != nil {
+	result, transformErr := s.transform(parsed)
+	if contextErr := contextError(transformErr, ctx); contextErr != nil {
+		var zero B
+		return zero, contextErr
+	}
+	if transformErr != nil {
 		var zero B
 		return zero, validationError(Issue{
 			Code:    CodeTransformFailed,
-			Message: err.Error(),
+			Message: transformErr.Error(),
 		})
 	}
 	if err := checkContext(ctx); err != nil {
@@ -46,4 +50,8 @@ func (s transformSchema[A, B]) ParseContext(ctx context.Context, value any) (B, 
 		return zero, err
 	}
 	return result, nil
+}
+
+func (s transformSchema[A, B]) buildJSONSchema() (map[string]any, error) {
+	return nil, &UnsupportedSchemaError{Operation: "transform"}
 }

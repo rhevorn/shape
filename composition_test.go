@@ -34,7 +34,9 @@ func TestSlice(t *testing.T) {
 	if issues[0].Path.String() != "[0]" || issues[1].Path.String() != "[1]" {
 		t.Fatalf("slice paths = %q, %q", issues[0].Path, issues[1].Path)
 	}
-	requireIssueCodes(t, parseError(schema, []string{"ab"}), CodeInvalidType)
+	if _, err := schema.Parse([]string{"ab"}); err != nil {
+		t.Fatalf("typed slice rejected: %v", err)
+	}
 	requireIssueCodes(t, parseError(schema, []any{}), CodeTooSmall)
 	requireIssueCodes(t, parseError(Slice(String()).Refine(func([]string) error {
 		return NewIssue("slice_rule", "rejected")

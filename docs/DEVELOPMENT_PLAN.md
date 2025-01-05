@@ -1,6 +1,7 @@
 # GoShape v0.1 Development Plan
 
-Implementation status: complete in the working tree; release/tag pending.
+Implementation status: v0.1 complete and committed; self-contained v0.2–v0.4
+extensions implemented in the working tree; release/tag pending.
 
 ## Outcome
 
@@ -136,9 +137,11 @@ Work vertically in small reviewable changes:
 Each change should include tests and documentation for its public behavior. Avoid
 landing all schema types in one large change.
 
-## Explicitly deferred
+## Deferred from v0.1
 
-The following are not v0.1 work: unions, nullable values, enums, literals,
+The following were not v0.1 work: unions, nullable values, enums, literals,
 coercion constructors, time and duration schemas, URL/UUID/IP schemas, context
 refinements, JSON Schema, OpenAPI, struct tags, integrations, i18n, code
-generation, recursive schemas, and framework adapters.
+generation, recursive schemas, and framework adapters. The self-contained
+items in this list have since been implemented; see the README for the current
+feature surface.
