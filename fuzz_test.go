@@ -24,6 +24,16 @@ func FuzzIntJSON(f *testing.F) {
 	})
 }
 
+func FuzzGenericNumberJSON(f *testing.F) {
+	for _, seed := range []string{"0", "255", "256", "-1", "1e2", "1.5", "null"} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, input string) {
+		_, _ = ParseJSON(Number[uint8](), []byte(input))
+		_, _ = ParseJSON(Number[float32](), []byte(input))
+	})
+}
+
 func FuzzObject(f *testing.F) {
 	f.Add("Pong", "pong@example.com", int64(30))
 	f.Add("", "bad", int64(-1))

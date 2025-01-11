@@ -10,9 +10,16 @@ import (
 	"strings"
 )
 
-type number interface {
-	int | int64 | float64
+// Numeric is the set of integer and floating-point types supported by the
+// generic Number schema, including user-defined types with these underlying
+// representations.
+type Numeric interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr |
+		~float32 | ~float64
 }
+
+type number interface{ Numeric }
 
 type numberRule[N number] func(N) *Issue
 

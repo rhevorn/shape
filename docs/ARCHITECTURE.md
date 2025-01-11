@@ -145,9 +145,12 @@ state. Callers are responsible for making captured state concurrency-safe.
 
 ## Dependency and compatibility policy
 
-The v0.1 core uses only the Go standard library. The initial module declares Go
-1.22 to retain broad generics-era compatibility. Avoid APIs added after that
-version unless the minimum version is deliberately raised.
+The module targets Go 1.24 and newer and uses only the Go standard library.
+Generics are the preferred mechanism for preserving relationships between
+schema output, collection elements, object fields, refinements, and transforms.
+Concrete primitive fast paths remain appropriate when they avoid reflection or
+materially reduce allocations. Reflection is limited to adapter boundaries
+where Go generics cannot construct a named runtime type directly.
 
 The confirmed canonical module path is `github.com/rhevorn/goshape`.
 

@@ -1,3 +1,3 @@
 module github.com/rhevorn/goshape
 
-go 1.22
+go 1.24

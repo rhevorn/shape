@@ -5,6 +5,9 @@
 GoShape turns untrusted runtime data into validated, typed Go values without
 struct tags or validation DSLs.
 
+Requires Go 1.24 or newer. The module and bundled adapters use only the Go
+standard library.
+
 ```go
 schema := goshape.String().
 	Trim().
@@ -155,6 +158,8 @@ Dependency-free adapters are available at:
 
 - `String`: normalization, length, pattern, containment, and format rules
 - `Int`, `Int64`, `Float64`: bounds, sign, allowed-value, and custom rules
+- `Number[T]`: generic numbers, including named signed, unsigned, and floating
+  types
 - `Bool`, `Time`, `Duration`, `URL`, `UUID`, `IP`
 - `Enum`, `Literal`, `Union`/`OneOf`, `Nullable`
 - `Slice`: `Min`, `Max`, `NonEmpty`, `Unique`, `Refine`
@@ -171,6 +176,7 @@ Dependency-free adapters are available at:
 - Immutable schemas that are safe for concurrent reuse
 - No reflection on primitive parsing paths
 - A dependency-free core
+- Go 1.24+ with generics preferred for type relationships
 - No struct-tag DSL
 
 ## Development

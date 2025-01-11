@@ -9,15 +9,17 @@ import (
 )
 
 type Config struct {
-	Port    int
+	Port    Port
 	Debug   bool
 	Timeout time.Duration
 }
 
+type Port uint16
+
 var configSchema = goshape.Object[Config](
-	goshape.Field("port", goshape.CoerceInt().Min(1).Max(65535), func(config *Config, value int) {
+	goshape.Field("port", goshape.CoerceNumber[Port]().Min(1).Max(65535), func(config *Config, value Port) {
 		config.Port = value
-	}).Default(8080),
+	}).Default(Port(8080)),
 	goshape.Field("debug", goshape.CoerceBool(), func(config *Config, value bool) {
 		config.Debug = value
 	}).Default(false),

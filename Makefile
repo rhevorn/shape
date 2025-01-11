@@ -17,6 +17,7 @@ vet:
 fuzz-smoke:
 	go test -run '^$$' -fuzz FuzzStringSchema -fuzztime 2s
 	go test -run '^$$' -fuzz FuzzIntJSON -fuzztime 2s
+	go test -run '^$$' -fuzz FuzzGenericNumberJSON -fuzztime 2s
 	go test -run '^$$' -fuzz FuzzObject -fuzztime 2s
 	go test -run '^$$' -fuzz FuzzParseJSON -fuzztime 2s
 

@@ -22,6 +22,7 @@ Deliverables:
   refinements, transforms, and issue aggregation
 - Go module, README, contribution commands, and CI-ready checks
 - No runtime dependencies
+- Go 1.24+ and generic-first composition
 
 Exit criteria:
 

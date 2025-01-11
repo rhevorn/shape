@@ -25,3 +25,5 @@ Versioning after the first public release.
 - Schema metadata and JSON Schema Draft 2020-12 export
 - OpenAPI 3.1, net/http, and dedicated JSON Schema adapters
 - Reader- and context-aware JSON helpers
+- Go 1.24 minimum version and generic `Number[T]`/`CoerceNumber[T]` schemas for
+  named signed, unsigned, and floating-point types
