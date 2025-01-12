@@ -1,7 +1,7 @@
 # Architecture and Behavioral Decisions
 
-This document is the implementation contract for v0.1. It should change only
-with an intentional API or behavior decision.
+This document records the current pre-v1 implementation contract. It should
+change only with an intentional API or behavior decision.
 
 ## Public shape
 
@@ -153,6 +153,25 @@ materially reduce allocations. Reflection is limited to adapter boundaries
 where Go generics cannot construct a named runtime type directly.
 
 The confirmed canonical module path is `github.com/rhevorn/goshape`.
+
+## Recursive schemas
+
+`Lazy(name, provider)` is the explicit recursion boundary. Its provider is
+resolved at most once and the resolved schema is safely published to concurrent
+parsers. Construction remains explicit: recursion does not depend on reflection,
+global registries, or mutable package state.
+
+The name is used only as the JSON Schema `$defs` key. Names must be unique per
+exported document, and JSON Pointer escaping is applied when constructing a
+`$ref`. Recursive exports share one build context so direct and mutually
+recursive graphs terminate without dropping definitions.
+
+## Alternative schemas
+
+`Union` means that at least one alternative must parse successfully and returns
+the first successful result. `OneOf` evaluates every alternative and succeeds
+only when exactly one parses successfully. Their JSON Schema representations
+are `anyOf` and `oneOf`, respectively.
 
 ## Public compatibility decisions
 

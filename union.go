@@ -2,26 +2,37 @@ package goshape
 
 import "context"
 
-// UnionSchema accepts the first successful schema among alternatives sharing
-// the same output type.
-type UnionSchema[T any] struct{ alternatives []Schema[T] }
+// UnionSchema composes alternatives that share the same output type.
+type UnionSchema[T any] struct {
+	alternatives []Schema[T]
+	exact        bool
+}
 
-// OneOf creates a union of schemas with the same output type.
+// OneOf accepts a value only when exactly one alternative succeeds.
 func OneOf[T any](alternatives ...Schema[T]) UnionSchema[T] {
+	return newUnion(true, alternatives)
+}
+
+// Union accepts the first value that matches at least one alternative.
+func Union[T any](alternatives ...Schema[T]) UnionSchema[T] {
+	return newUnion(false, alternatives)
+}
+
+func newUnion[T any](exact bool, alternatives []Schema[T]) UnionSchema[T] {
 	if len(alternatives) == 0 {
-		panic("goshape: OneOf requires at least one schema")
+		panic("goshape: Union and OneOf require at least one schema")
 	}
-	result := UnionSchema[T]{alternatives: append([]Schema[T](nil), alternatives...)}
+	result := UnionSchema[T]{
+		alternatives: append([]Schema[T](nil), alternatives...),
+		exact:        exact,
+	}
 	for _, alternative := range result.alternatives {
 		if alternative == nil {
-			panic("goshape: OneOf alternative must not be nil")
+			panic("goshape: Union and OneOf alternatives must not be nil")
 		}
 	}
 	return result
 }
-
-// Union is an alias for OneOf.
-func Union[T any](alternatives ...Schema[T]) UnionSchema[T] { return OneOf(alternatives...) }
 
 // Parse implements Schema[T].
 func (s UnionSchema[T]) Parse(value any) (T, error) {
@@ -33,6 +44,30 @@ func (s UnionSchema[T]) ParseContext(ctx context.Context, value any) (T, error) 
 	var zero T
 	if err := checkContext(ctx); err != nil {
 		return zero, err
+	}
+	if s.exact {
+		var candidate T
+		matches := 0
+		for _, alternative := range s.alternatives {
+			parsed, err := alternative.ParseContext(ctx, value)
+			if err == nil {
+				candidate = parsed
+				matches++
+				continue
+			}
+			if contextErr := contextError(err, ctx); contextErr != nil {
+				return zero, contextErr
+			}
+		}
+		if matches == 1 {
+			return candidate, nil
+		}
+		return zero, validationError(Issue{
+			Code:     CodeInvalidUnion,
+			Message:  "must match exactly one schema",
+			Expected: 1,
+			Received: matches,
+		})
 	}
 	for _, alternative := range s.alternatives {
 		parsed, err := alternative.ParseContext(ctx, value)
@@ -46,19 +81,23 @@ func (s UnionSchema[T]) ParseContext(ctx context.Context, value any) (T, error) 
 	return zero, validationError(Issue{
 		Code:     CodeInvalidUnion,
 		Message:  "must match at least one schema",
-		Expected: len(s.alternatives),
+		Expected: "one or more matches",
 		Received: typeNameOf(value),
 	})
 }
 
-func (s UnionSchema[T]) buildJSONSchema() (map[string]any, error) {
+func (s UnionSchema[T]) buildJSONSchema(ctx *jsonSchemaBuildContext) (map[string]any, error) {
 	alternatives := make([]any, 0, len(s.alternatives))
 	for _, alternative := range s.alternatives {
-		document, err := buildJSONSchema(alternative)
+		document, err := buildJSONSchemaWithContext(alternative, ctx)
 		if err != nil {
 			return nil, err
 		}
 		alternatives = append(alternatives, document)
 	}
-	return map[string]any{"anyOf": alternatives}, nil
+	keyword := "anyOf"
+	if s.exact {
+		keyword = "oneOf"
+	}
+	return map[string]any{keyword: alternatives}, nil
 }

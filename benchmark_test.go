@@ -84,3 +84,21 @@ func BenchmarkInvalidObjectValidation(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkRecursiveValidation(b *testing.B) {
+	schema := treeSchema(nil)
+	input := map[string]any{
+		"value": "root",
+		"children": []any{
+			map[string]any{"value": "branch", "children": []any{
+				map[string]any{"value": "leaf"},
+			}},
+		},
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := schema.Parse(input); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

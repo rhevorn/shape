@@ -34,8 +34,8 @@ func (s NullableSchema[T]) ParseContext(ctx context.Context, value any) (*T, err
 	return &parsed, nil
 }
 
-func (s NullableSchema[T]) buildJSONSchema() (map[string]any, error) {
-	inner, err := buildJSONSchema(s.schema)
+func (s NullableSchema[T]) buildJSONSchema(ctx *jsonSchemaBuildContext) (map[string]any, error) {
+	inner, err := buildJSONSchemaWithContext(s.schema, ctx)
 	if err != nil {
 		return nil, err
 	}

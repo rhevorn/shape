@@ -112,11 +112,11 @@ func (s MapSchema[T]) ParseContext(ctx context.Context, value any) (map[string]T
 	return result, nil
 }
 
-func (s MapSchema[T]) buildJSONSchema() (map[string]any, error) {
+func (s MapSchema[T]) buildJSONSchema(ctx *jsonSchemaBuildContext) (map[string]any, error) {
 	if err := unsupportedIfRefined(len(s.refinements)); err != nil {
 		return nil, err
 	}
-	value, err := buildJSONSchema(s.value)
+	value, err := buildJSONSchemaWithContext(s.value, ctx)
 	if err != nil {
 		return nil, err
 	}

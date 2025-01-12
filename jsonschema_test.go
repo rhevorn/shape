@@ -96,6 +96,13 @@ func TestJSONSchemaUnionMapTemporalAndCoercion(t *testing.T) {
 	if alternatives := union["anyOf"].([]any); len(alternatives) != 2 {
 		t.Fatalf("union alternatives = %d", len(alternatives))
 	}
+	oneOf, err := JSONSchema(OneOf[string](String().Email(), UUID()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if alternatives := oneOf["oneOf"].([]any); len(alternatives) != 2 {
+		t.Fatalf("oneOf alternatives = %d", len(alternatives))
+	}
 	mapDocument, err := JSONSchema(Map(CoerceBool()))
 	if err != nil {
 		t.Fatal(err)

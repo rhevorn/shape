@@ -23,9 +23,10 @@ fmt.Println(value)
 // hello
 ```
 
-The initial API and the self-contained v0.2–v0.4 roadmap capabilities are
-implemented and preparing for release. The behavior contract is recorded in
-[the architecture notes](docs/ARCHITECTURE.md).
+GoShape is moving directly toward a stable v1.0 API. No public release is
+planned before the v1 compatibility, hardening, and documentation gates are
+complete. Progress and remaining gates are tracked in
+[the v1 roadmap](docs/V1_ROADMAP.md).
 
 ## Object schemas
 
@@ -80,10 +81,34 @@ port := goshape.Transform(
 Use `Refine` methods for rules that keep the same output type. Object-level
 refinements can validate relationships between fields.
 
-GoShape also provides `Enum`, `Literal`, same-output-type `Union`/`OneOf`, and
-`Nullable` schemas. `Nullable(schema)` returns `Schema[*T]`, preserving the
-difference between JSON `null` and a non-null value. Typed `[]T` and
-`map[string]T` inputs are supported in addition to decoded JSON values.
+GoShape also provides `Enum`, `Literal`, same-output-type `Union`/`OneOf`,
+`Nullable`, fixed-length heterogeneous `Tuple`, typed-key `Record`, and
+recursive `Lazy` schemas. `Nullable(schema)` returns `Schema[*T]`, preserving
+the difference between JSON `null` and a non-null value. Typed `[]T` and map
+inputs are supported where their input shape is unambiguous.
+
+`Union` accepts the first successful alternative. `OneOf` requires exactly one
+alternative to succeed, matching the distinction between JSON Schema `anyOf`
+and `oneOf`.
+
+Recursive schemas name their JSON Schema definition explicitly:
+
+```go
+type Node struct {
+	Value    string
+	Children []Node
+}
+
+var nodeSchema goshape.Schema[Node]
+nodeSchema = goshape.Lazy("Node", func() goshape.Schema[Node] {
+	return goshape.Object[Node](
+		goshape.Field("value", goshape.String().NonEmpty(),
+			func(node *Node, value string) { node.Value = value }),
+		goshape.Field("children", goshape.Slice(nodeSchema),
+			func(node *Node, children []Node) { node.Children = children }).Default(nil),
+	).Strict()
+})
+```
 
 ## Structured errors
 
@@ -135,8 +160,9 @@ document, err := goshape.JSONSchema(userSchema)
 requestBody, err := openapi.JSONRequestBody(userSchema, true)
 ```
 
-The first call produces JSON Schema Draft 2020-12. The second produces an
-OpenAPI 3.1 request body. Metadata can be attached to any schema:
+The first call produces JSON Schema Draft 2020-12, including `$defs`/`$ref`
+for named recursive schemas. The second produces an OpenAPI 3.1 request body.
+Metadata can be attached to any schema:
 
 ```go
 homepage := goshape.Annotate(goshape.URL()).
@@ -161,9 +187,11 @@ Dependency-free adapters are available at:
 - `Number[T]`: generic numbers, including named signed, unsigned, and floating
   types
 - `Bool`, `Time`, `Duration`, `URL`, `UUID`, `IP`
-- `Enum`, `Literal`, `Union`/`OneOf`, `Nullable`
+- `Enum`, `Literal`, `Union`/`OneOf`, `Nullable`, `Lazy`
 - `Slice`: `Min`, `Max`, `NonEmpty`, `Unique`, `Refine`
 - `Map`: `Min`, `Max`, `NonEmpty`, `Refine`
+- `Record`: typed key and value schemas, `Min`, `Max`, `NonEmpty`, `Refine`
+- `Tuple`: fixed-length heterogeneous positions with typed setters
 - `Object`: `Strict`, `Strip`, `Refine`
 - Composition: `Field`, `Optional`, `Default`, `Transform`, `Refine`,
   `RefineContext`
@@ -187,7 +215,9 @@ make test-race
 make fuzz-smoke
 ```
 
-See [the development plan](docs/DEVELOPMENT_PLAN.md) and
+See [the v1 roadmap](docs/V1_ROADMAP.md), [performance
+baseline](docs/BENCHMARKS.md), [the original development
+plan](docs/DEVELOPMENT_PLAN.md), and
 [contribution guide](CONTRIBUTING.md) for scope and release checks.
 
 ## License

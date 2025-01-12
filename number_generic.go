@@ -124,7 +124,7 @@ func (s NumberSchema[N]) ParseContext(ctx context.Context, value any) (N, error)
 	return parseNumber(ctx, parsed, s.rules, s.refinements)
 }
 
-func (s NumberSchema[N]) buildJSONSchema() (map[string]any, error) {
+func (s NumberSchema[N]) buildJSONSchema(_ *jsonSchemaBuildContext) (map[string]any, error) {
 	kind := "integer"
 	targetKind := reflect.TypeFor[N]().Kind()
 	if targetKind == reflect.Float32 || targetKind == reflect.Float64 {

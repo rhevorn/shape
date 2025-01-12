@@ -65,3 +65,45 @@ func FuzzParseJSON(f *testing.F) {
 		_, _ = ParseJSON(schema, input)
 	})
 }
+
+func FuzzTupleJSON(f *testing.F) {
+	for _, seed := range [][]byte{
+		[]byte(`[1,2,"point"]`),
+		[]byte(`[]`),
+		[]byte(`null`),
+	} {
+		f.Add(seed)
+	}
+	schema := coordinateSchema()
+	f.Fuzz(func(t *testing.T, input []byte) {
+		_, _ = ParseJSON(schema, input)
+	})
+}
+
+func FuzzRecordJSON(f *testing.F) {
+	for _, seed := range [][]byte{
+		[]byte(`{"ONE":1,"two":2}`),
+		[]byte(`{}`),
+		[]byte(`[]`),
+	} {
+		f.Add(seed)
+	}
+	schema := Record(String().ToLower().NonEmpty(), Int())
+	f.Fuzz(func(t *testing.T, input []byte) {
+		_, _ = ParseJSON(schema, input)
+	})
+}
+
+func FuzzLazyJSON(f *testing.F) {
+	for _, seed := range [][]byte{
+		[]byte(`{"value":"root","children":[{"value":"leaf"}]}`),
+		[]byte(`{"value":"root"}`),
+		[]byte(`null`),
+	} {
+		f.Add(seed)
+	}
+	schema := treeSchema(nil)
+	f.Fuzz(func(t *testing.T, input []byte) {
+		_, _ = ParseJSON(schema, input)
+	})
+}

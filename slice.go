@@ -46,11 +46,11 @@ func (s SliceSchema[T]) Unique() SliceSchema[T] {
 	return s
 }
 
-func (s SliceSchema[T]) buildJSONSchema() (map[string]any, error) {
+func (s SliceSchema[T]) buildJSONSchema(ctx *jsonSchemaBuildContext) (map[string]any, error) {
 	if err := unsupportedIfRefined(len(s.refinements)); err != nil {
 		return nil, err
 	}
-	items, err := buildJSONSchema(s.element)
+	items, err := buildJSONSchemaWithContext(s.element, ctx)
 	if err != nil {
 		return nil, err
 	}

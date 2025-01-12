@@ -60,3 +60,62 @@ func ExampleValidationError() {
 	// too_small
 	// $
 }
+
+func ExampleTuple() {
+	type Point struct {
+		X int
+		Y int
+	}
+	schema := goshape.Tuple[Point](
+		goshape.TupleItem(goshape.Int(), func(point *Point, value int) { point.X = value }),
+		goshape.TupleItem(goshape.Int(), func(point *Point, value int) { point.Y = value }),
+	)
+
+	point, err := schema.Parse([]any{10, 20})
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(point.X, point.Y)
+	// Output: 10 20
+}
+
+func ExampleRecord() {
+	schema := goshape.Record(goshape.String().ToLower(), goshape.Int().Positive())
+
+	values, err := schema.Parse(map[string]any{"ONE": 1})
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(values["one"])
+	// Output: 1
+}
+
+func ExampleLazy() {
+	type Node struct {
+		Value    string
+		Children []Node
+	}
+	var schema goshape.Schema[Node]
+	schema = goshape.Lazy("Node", func() goshape.Schema[Node] {
+		return goshape.Object[Node](
+			goshape.Field("value", goshape.String().NonEmpty(), func(node *Node, value string) {
+				node.Value = value
+			}),
+			goshape.Field("children", goshape.Slice(schema), func(node *Node, children []Node) {
+				node.Children = children
+			}).Default(nil),
+		).Strict()
+	})
+
+	node, err := schema.Parse(map[string]any{
+		"value": "root",
+		"children": []any{
+			map[string]any{"value": "leaf"},
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(node.Value, node.Children[0].Value)
+	// Output: root leaf
+}

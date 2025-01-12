@@ -134,7 +134,7 @@ func (s DurationSchema) ParseContext(ctx context.Context, value any) (time.Durat
 	return parsed, nil
 }
 
-func (s TimeSchema) buildJSONSchema() (map[string]any, error) {
+func (s TimeSchema) buildJSONSchema(_ *jsonSchemaBuildContext) (map[string]any, error) {
 	if err := unsupportedIfRefined(len(s.refinements)); err != nil {
 		return nil, err
 	}
@@ -151,7 +151,7 @@ func (s TimeSchema) buildJSONSchema() (map[string]any, error) {
 	return document, nil
 }
 
-func (s DurationSchema) buildJSONSchema() (map[string]any, error) {
+func (s DurationSchema) buildJSONSchema(_ *jsonSchemaBuildContext) (map[string]any, error) {
 	if err := unsupportedIfRefined(len(s.refinements)); err != nil {
 		return nil, err
 	}

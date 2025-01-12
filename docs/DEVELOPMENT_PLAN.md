@@ -1,7 +1,8 @@
-# GoShape v0.1 Development Plan
+# GoShape Initial Development Plan
 
-Implementation status: v0.1 complete and committed; self-contained v0.2–v0.4
-extensions implemented in the working tree; release/tag pending.
+Implementation status: the original v0.1 scope and the self-contained v0.2–v0.4
+extensions are complete. This is retained as historical design context; current
+work and release gates are tracked in [the v1 roadmap](V1_ROADMAP.md).
 
 ## Outcome
 

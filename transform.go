@@ -52,6 +52,6 @@ func (s transformSchema[A, B]) ParseContext(ctx context.Context, value any) (B, 
 	return result, nil
 }
 
-func (s transformSchema[A, B]) buildJSONSchema() (map[string]any, error) {
+func (s transformSchema[A, B]) buildJSONSchema(_ *jsonSchemaBuildContext) (map[string]any, error) {
 	return nil, &UnsupportedSchemaError{Operation: "transform"}
 }

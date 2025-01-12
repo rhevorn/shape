@@ -17,6 +17,12 @@ func Bool() BoolSchema
 
 func Slice[T any](element Schema[T]) SliceSchema[T]
 func Map[T any](value Schema[T]) MapSchema[T]
+func Record[K comparable, V any](key Schema[K], value Schema[V]) RecordSchema[K, V]
+
+func Tuple[T any](items ...TupleElement[T]) TupleSchema[T]
+func TupleItem[T, V any](schema Schema[V], setter func(*T, V)) TupleItemDef[T, V]
+
+func Lazy[T any](name string, provider func() Schema[T]) LazySchema[T]
 
 func Object[T any](fields ...ObjectField[T]) ObjectSchema[T]
 func Field[T, V any](

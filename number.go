@@ -131,7 +131,7 @@ func (s IntSchema) withConstraint(key string, value any) IntSchema {
 	s.constraints = appendCopy(s.constraints, map[string]any{key: value})
 	return s
 }
-func (s IntSchema) buildJSONSchema() (map[string]any, error) {
+func (s IntSchema) buildJSONSchema(_ *jsonSchemaBuildContext) (map[string]any, error) {
 	return buildNumberJSONSchema("integer", s.coerce, s.constraints, len(s.refinements))
 }
 
@@ -240,7 +240,7 @@ func (s Int64Schema) withConstraint(key string, value any) Int64Schema {
 	s.constraints = appendCopy(s.constraints, map[string]any{key: value})
 	return s
 }
-func (s Int64Schema) buildJSONSchema() (map[string]any, error) {
+func (s Int64Schema) buildJSONSchema(_ *jsonSchemaBuildContext) (map[string]any, error) {
 	return buildNumberJSONSchema("integer", s.coerce, s.constraints, len(s.refinements))
 }
 
@@ -362,7 +362,7 @@ func (s Float64Schema) withConstraint(key string, value any) Float64Schema {
 	s.constraints = appendCopy(s.constraints, map[string]any{key: value})
 	return s
 }
-func (s Float64Schema) buildJSONSchema() (map[string]any, error) {
+func (s Float64Schema) buildJSONSchema(_ *jsonSchemaBuildContext) (map[string]any, error) {
 	return buildNumberJSONSchema("number", s.coerce, s.constraints, len(s.refinements))
 }
 

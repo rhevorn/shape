@@ -23,7 +23,21 @@ func (e *UnsupportedSchemaError) Error() string {
 }
 
 type jsonSchemaNode interface {
-	buildJSONSchema() (map[string]any, error)
+	buildJSONSchema(*jsonSchemaBuildContext) (map[string]any, error)
+}
+
+type jsonSchemaBuildContext struct {
+	definitions map[string]any
+	owners      map[string]*lazyIdentity
+	building    map[string]bool
+}
+
+func newJSONSchemaBuildContext() *jsonSchemaBuildContext {
+	return &jsonSchemaBuildContext{
+		definitions: make(map[string]any),
+		owners:      make(map[string]*lazyIdentity),
+		building:    make(map[string]bool),
+	}
 }
 
 // JSONSchema exports schema as JSON Schema Draft 2020-12. Custom refinements
@@ -32,20 +46,24 @@ func JSONSchema[T any](schema Schema[T]) (JSONSchemaDocument, error) {
 	if schema == nil {
 		panic("goshape: JSON Schema source must not be nil")
 	}
-	document, err := buildJSONSchema(schema)
+	buildContext := newJSONSchemaBuildContext()
+	document, err := buildJSONSchemaWithContext(schema, buildContext)
 	if err != nil {
 		return nil, err
 	}
 	document["$schema"] = jsonSchemaDraft202012
+	if len(buildContext.definitions) != 0 {
+		document["$defs"] = buildContext.definitions
+	}
 	return JSONSchemaDocument(document), nil
 }
 
-func buildJSONSchema(schema any) (map[string]any, error) {
+func buildJSONSchemaWithContext(schema any, ctx *jsonSchemaBuildContext) (map[string]any, error) {
 	node, ok := schema.(jsonSchemaNode)
 	if !ok {
 		return nil, &UnsupportedSchemaError{Operation: fmt.Sprintf("custom schema type %T", schema)}
 	}
-	return node.buildJSONSchema()
+	return node.buildJSONSchema(ctx)
 }
 
 func unsupportedIfRefined(count int) error {

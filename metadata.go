@@ -127,8 +127,8 @@ func (s AnnotatedSchema[T]) DefaultValue(value T) AnnotatedSchema[T] {
 // Metadata returns a copy of the schema metadata.
 func (s AnnotatedSchema[T]) Metadata() SchemaMetadata { return copyMetadata(s.metadata) }
 
-func (s AnnotatedSchema[T]) buildJSONSchema() (map[string]any, error) {
-	document, err := buildJSONSchema(s.schema)
+func (s AnnotatedSchema[T]) buildJSONSchema(ctx *jsonSchemaBuildContext) (map[string]any, error) {
+	document, err := buildJSONSchemaWithContext(s.schema, ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -107,7 +107,7 @@ func isBoolCoercionCandidate(value any) bool {
 	}
 }
 
-func (s BoolSchema) buildJSONSchema() (map[string]any, error) {
+func (s BoolSchema) buildJSONSchema(_ *jsonSchemaBuildContext) (map[string]any, error) {
 	if err := unsupportedIfRefined(len(s.refinements)); err != nil {
 		return nil, err
 	}

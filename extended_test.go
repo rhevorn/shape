@@ -120,9 +120,14 @@ func TestEnumLiteralAndUnion(t *testing.T) {
 	if _, err := Union[string](String().Len(1), String().Len(2)).Parse("ab"); err != nil {
 		t.Fatal(err)
 	}
+	requireIssueCodes(t, parseError(
+		OneOf[string](String().Min(1), String().Max(10)),
+		"overlap",
+	), CodeInvalidUnion)
 
 	requirePanic(t, func() { Enum[int]() })
 	requirePanic(t, func() { OneOf[string]() })
+	requirePanic(t, func() { Union[string]() })
 
 	type status string
 	if got, err := ParseJSON(Enum(status("open"), status("closed")), []byte(`"open"`)); err != nil || got != status("open") {

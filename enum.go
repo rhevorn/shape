@@ -58,7 +58,7 @@ func (s EnumSchema[T]) ParseContext(ctx context.Context, value any) (T, error) {
 	return zero, validationError(Issue{Code: CodeInvalidEnum, Message: "must be one of the allowed values", Expected: s.values, Received: parsed})
 }
 
-func (s EnumSchema[T]) buildJSONSchema() (map[string]any, error) {
+func (s EnumSchema[T]) buildJSONSchema(_ *jsonSchemaBuildContext) (map[string]any, error) {
 	if err := unsupportedIfRefined(len(s.refinements)); err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ func (s LiteralSchema[T]) ParseContext(ctx context.Context, value any) (T, error
 	return parsed, nil
 }
 
-func (s LiteralSchema[T]) buildJSONSchema() (map[string]any, error) {
+func (s LiteralSchema[T]) buildJSONSchema(_ *jsonSchemaBuildContext) (map[string]any, error) {
 	return map[string]any{"const": s.value}, nil
 }
 

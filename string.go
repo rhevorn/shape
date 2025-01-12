@@ -380,7 +380,7 @@ func (s StringSchema) DefaultValue(value string) StringSchema {
 // Metadata returns a copy of the string schema metadata.
 func (s StringSchema) Metadata() SchemaMetadata { return copyMetadata(s.metadata) }
 
-func (s StringSchema) buildJSONSchema() (map[string]any, error) {
+func (s StringSchema) buildJSONSchema(_ *jsonSchemaBuildContext) (map[string]any, error) {
 	if err := unsupportedIfRefined(len(s.refinements)); err != nil {
 		return nil, err
 	}

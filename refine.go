@@ -45,6 +45,6 @@ func (s refineSchema[T]) ParseContext(ctx context.Context, value any) (T, error)
 	return parsed, nil
 }
 
-func (s refineSchema[T]) buildJSONSchema() (map[string]any, error) {
+func (s refineSchema[T]) buildJSONSchema(_ *jsonSchemaBuildContext) (map[string]any, error) {
 	return nil, &UnsupportedSchemaError{Operation: "custom refinement"}
 }

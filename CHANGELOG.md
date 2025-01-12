@@ -2,8 +2,8 @@
 
 All notable changes to GoShape will be documented in this file.
 
-The format follows Keep a Changelog, and the project intends to use Semantic
-Versioning after the first public release.
+The format follows Keep a Changelog. The first public release is planned as
+v1.0.0 and will use Semantic Versioning from that point onward.
 
 ## Unreleased
 
@@ -27,3 +27,9 @@ Versioning after the first public release.
 - Reader- and context-aware JSON helpers
 - Go 1.24 minimum version and generic `Number[T]`/`CoerceNumber[T]` schemas for
   named signed, unsigned, and floating-point types
+- Fixed-length heterogeneous `Tuple` schemas with typed position setters
+- Typed-key `Record[K, V]` schemas with deterministic key parsing
+- Named recursive `Lazy` schemas with concurrency-safe one-time resolution
+- JSON Schema `$defs`/`$ref` export for recursive schemas
+- Distinct `Union` (at least one) and `OneOf` (exactly one) runtime and JSON
+  Schema semantics
