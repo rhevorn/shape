@@ -1,6 +1,10 @@
 package openapi_test
 
 import (
+	"bytes"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/rhevorn/goshape"
@@ -19,6 +23,18 @@ func TestJSONRequestBody(t *testing.T) {
 	}
 	if schema["minLength"] != 1 {
 		t.Fatalf("schema = %#v", schema)
+	}
+	got, err := json.MarshalIndent(body, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got = append(got, '\n')
+	want, err := os.ReadFile(filepath.Join("testdata", "request-body.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("request body differs from golden\n--- got ---\n%s--- want ---\n%s", got, want)
 	}
 }
 

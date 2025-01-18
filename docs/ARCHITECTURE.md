@@ -87,6 +87,17 @@ coercion. User-defined schemas passed to `ParseJSON` also receive ordinary
 input. JSON syntax/decoding failures are returned as ordinary errors, while
 schema failures remain `*ValidationError`.
 
+Reader helpers decode directly from the stream rather than buffering the full
+input. `ParseJSONReaderLimit` and its context variant use an explicit maximum
+byte count and return `ErrJSONTooLarge` when exceeded. The `net/http` adapter
+applies a 1 MiB limit by default.
+
+There is no implicit global depth or issue budget. JSON receives the standard
+decoder's nesting protection, streams and HTTP bodies can be byte-limited,
+collections can declare `Max`, and recursive callers can propagate deadlines
+through `ParseContext`. This keeps limits explicit and avoids request-specific
+mutable counters inside reusable schemas.
+
 ## Collections
 
 `Slice` and `Map` consume the natural untrusted representations `[]any` and
@@ -181,6 +192,9 @@ are `anyOf` and `oneOf`, respectively.
   between minor releases and should not be parsed by applications.
 - Invalid schema construction parameters panic because they are programmer
   errors; untrusted input never causes a construction panic.
+- Concrete builders should be created with their constructor functions. A useful
+  zero value is not promised for composites that require child definitions.
+- `CoerceFloat` is an intentional convenience alias for `CoerceFloat64`.
 
 The repository is licensed under MIT.
 

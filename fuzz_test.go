@@ -1,6 +1,9 @@
 package goshape
 
 import (
+	"bytes"
+	"encoding/json"
+	"reflect"
 	"strconv"
 	"testing"
 )
@@ -106,4 +109,72 @@ func FuzzLazyJSON(f *testing.F) {
 	f.Fuzz(func(t *testing.T, input []byte) {
 		_, _ = ParseJSON(schema, input)
 	})
+}
+
+func FuzzJSONSchemaExport(f *testing.F) {
+	for _, seed := range [][3]byte{{0, 0, 0}, {1, 1, 10}, {4, 10, 1}, {7, 255, 255}} {
+		f.Add(seed[0], seed[1], seed[2])
+	}
+	f.Fuzz(func(t *testing.T, kind, first, second byte) {
+		minimum := int(first % 32)
+		maximum := minimum + int(second%32)
+		switch kind % 8 {
+		case 0:
+			assertJSONSchemaInvariant(t, String().Min(minimum).Max(maximum))
+		case 1:
+			assertJSONSchemaInvariant(t, Slice(Number[uint16]().Max(uint16(maximum))).Max(maximum))
+		case 2:
+			assertJSONSchemaInvariant(t, Record(String().Min(minimum), Bool()).Max(maximum))
+		case 3:
+			assertJSONSchemaInvariant(t, coordinateSchema())
+		case 4:
+			assertJSONSchemaInvariant(t, treeSchema(nil))
+		case 5:
+			assertJSONSchemaInvariant(t, OneOf[string](String().Email(), UUID()))
+		case 6:
+			assertJSONSchemaInvariant(t, testUserSchema().Strict())
+		case 7:
+			assertJSONSchemaInvariant(t, Map(String()).Min(minimum).Max(maximum))
+		}
+	})
+}
+
+func FuzzParseJSONReaderLimit(f *testing.F) {
+	for _, seed := range []struct {
+		data  []byte
+		limit uint16
+	}{
+		{[]byte(`{"name":"Pong","email":"pong@example.com","age":30}`), 1024},
+		{[]byte(`null`), 4},
+		{[]byte(`{`), 1},
+	} {
+		f.Add(seed.data, seed.limit)
+	}
+	schema := testUserSchema().Strict()
+	f.Fuzz(func(t *testing.T, input []byte, limit uint16) {
+		_, _ = ParseJSONReaderLimit(schema, bytes.NewReader(input), int64(limit))
+	})
+}
+
+func assertJSONSchemaInvariant[T any](t *testing.T, schema Schema[T]) {
+	t.Helper()
+	first, err := JSONSchema(schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(first)
+	if err != nil || !json.Valid(encoded) {
+		t.Fatalf("invalid JSON Schema: %s, %v", encoded, err)
+	}
+	second, err := JSONSchema(schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("export is nondeterministic: %#v != %#v", first, second)
+	}
+	first["x-mutated"] = true
+	if _, exists := second["x-mutated"]; exists {
+		t.Fatal("exported documents share root mutation state")
+	}
 }

@@ -27,12 +27,12 @@ untyped output plumbing.
 
 ## Gate 2 — API and compatibility freeze
 
-- [ ] Audit all exported names, signatures, zero values, panic conditions, and
+- [x] Audit all exported names, signatures, zero values, panic conditions, and
   error types
-- [ ] Publish a concise compatibility policy for schemas, issue codes, paths,
+- [x] Publish a concise compatibility policy for schemas, issue codes, paths,
   and generated documents
-- [ ] Add compile-time API examples and behavioral contract tests
-- [ ] Remove accidental aliases or ambiguous semantics before they become v1
+- [x] Add compile-time API assertions and behavioral contract tests
+- [x] Remove accidental aliases or ambiguous semantics before they become v1
   commitments
 
 Exit: the exported surface is intentionally supportable under semantic
@@ -41,9 +41,11 @@ versioning.
 ## Gate 3 — correctness and resilience
 
 - [x] Expand parser fuzz coverage across tuple, record, and recursive paths
-- [ ] Add mutation or invariant coverage for exporter paths
-- [ ] Add parser resource limits where untrusted depth or size needs a bound
-- [ ] Add golden tests for JSON Schema and OpenAPI documents
+- [x] Add mutation and determinism invariant fuzz coverage for exporter paths
+- [x] Add explicit byte limits for untrusted JSON readers and HTTP bodies
+- [x] Keep depth and issue budgets explicit through byte limits, collection
+  bounds, and contexts; defer a global hidden budget
+- [x] Add golden tests for JSON Schema and OpenAPI documents
 - [ ] Complete cancellation, deterministic-error-order, immutability, and race
   coverage for every composite schema
 - [ ] Run a repository security and denial-of-service review

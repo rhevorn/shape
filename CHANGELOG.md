@@ -33,3 +33,5 @@ v1.0.0 and will use Semantic Versioning from that point onward.
 - JSON Schema `$defs`/`$ref` export for recursive schemas
 - Distinct `Union` (at least one) and `OneOf` (exactly one) runtime and JSON
   Schema semantics
+- Streaming JSON reader decoding with explicit byte-limited variants and
+  `ErrJSONTooLarge`

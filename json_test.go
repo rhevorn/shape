@@ -41,6 +41,24 @@ func TestParseJSONReader(t *testing.T) {
 	}
 }
 
+func TestParseJSONReaderLimit(t *testing.T) {
+	t.Parallel()
+
+	got, err := ParseJSONReaderLimit(String(), strings.NewReader(`"ok"`), 4)
+	if err != nil || got != "ok" {
+		t.Fatalf("exact limit = %q, %v", got, err)
+	}
+	if _, err := ParseJSONReaderLimit(String(), strings.NewReader(`"too large"`), 4); !errors.Is(err, ErrJSONTooLarge) {
+		t.Fatalf("oversized error = %v", err)
+	}
+	if _, err := ParseJSONReaderLimit(String(), strings.NewReader(`null`), -1); err == nil {
+		t.Fatal("negative limit was accepted")
+	}
+	if _, err := ParseJSONReaderLimit(String(), nil, 4); err == nil {
+		t.Fatal("nil limited reader was accepted")
+	}
+}
+
 func TestParseJSONErrors(t *testing.T) {
 	t.Parallel()
 

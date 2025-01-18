@@ -37,6 +37,7 @@ func Transform[A, B any](
 ) Schema[B]
 
 func ParseJSON[T any](schema Schema[T], data []byte) (T, error)
+func ParseJSONReaderLimit[T any](schema Schema[T], reader io.Reader, maxBytes int64) (T, error)
 ```
 
 Representative chaining surface:

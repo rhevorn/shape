@@ -137,7 +137,8 @@ user, err := goshape.ParseJSON(userSchema, requestBody)
 JSON is an adapter, not GoShape's core representation. `ParseJSON` accepts
 exactly one JSON value and retains numeric precision with `encoding/json.Number`.
 Context and reader variants are available as `ParseJSONContext`,
-`ParseJSONReader`, and `ParseJSONReaderContext`.
+`ParseJSONReader`, and `ParseJSONReaderContext`. For an untrusted stream, use
+`ParseJSONReaderLimit` or `ParseJSONReaderLimitContext` to enforce a byte limit.
 
 ## Explicit coercion
 
@@ -215,8 +216,9 @@ make test-race
 make fuzz-smoke
 ```
 
-See [the v1 roadmap](docs/V1_ROADMAP.md), [performance
-baseline](docs/BENCHMARKS.md), [the original development
+See [the v1 roadmap](docs/V1_ROADMAP.md), [compatibility
+policy](docs/COMPATIBILITY.md), [performance baseline](docs/BENCHMARKS.md),
+[pre-v1 migration notes](docs/PRE_V1_MIGRATION.md), [the original development
 plan](docs/DEVELOPMENT_PLAN.md), and
 [contribution guide](CONTRIBUTING.md) for scope and release checks.
 
