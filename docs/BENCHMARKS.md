@@ -22,3 +22,16 @@ go test -run '^$' -bench . -benchmem ./...
 Results vary by CPU, Go release, and toolchain settings. Future comparisons
 should use the same environment and report statistically significant changes;
 the project will not distort APIs to optimize synthetic benchmarks.
+
+## Regression policy
+
+Strict string validation, integer bounds, and generic named-number parsing are
+stable hot paths and should remain at zero allocations per operation. Latency
+is tracked against repeated same-machine samples, but no absolute `ns/op`
+threshold is enforced across CPUs or Go releases. Collection and object
+allocation counts remain observational until the v1 implementation settles.
+
+The strict primitive entry paths perform direct type assertions. Reflection is
+not used by `String`, `Int`, `Int64`, `Float64`, or `Bool`; generic numbers use
+reflection only after the strict `N` assertion fails, at JSON/coercion adapter
+boundaries needed to construct named numeric values.

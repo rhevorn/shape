@@ -1,8 +1,11 @@
 package goshape_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/rhevorn/goshape"
 )
@@ -118,4 +121,103 @@ func ExampleLazy() {
 	}
 	fmt.Println(node.Value, node.Children[0].Value)
 	// Output: root leaf
+}
+
+func ExampleNumber() {
+	type Score int16
+	score, err := goshape.Number[Score]().Min(0).Max(100).Parse(Score(95))
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(score)
+	// Output: 95
+}
+
+func ExampleSlice() {
+	values, err := goshape.Slice(goshape.String().Trim().NonEmpty()).Parse([]any{" one ", "two"})
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(values)
+	// Output: [one two]
+}
+
+func ExampleUnion() {
+	contact := goshape.Union[string](goshape.String().Email(), goshape.UUID())
+	value, err := contact.Parse("pong@example.com")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(value)
+	// Output: pong@example.com
+}
+
+func ExampleOneOf() {
+	schema := goshape.OneOf[string](goshape.String().Min(1), goshape.String().Max(10))
+	_, err := schema.Parse("overlap")
+	var validation *goshape.ValidationError
+	if errors.As(err, &validation) {
+		fmt.Println(validation.Issues[0].Code)
+	}
+	// Output: invalid_union
+}
+
+func ExampleNullable() {
+	schema := goshape.Nullable(goshape.String())
+	missing, _ := schema.Parse(nil)
+	value, _ := schema.Parse("present")
+	fmt.Println(missing == nil, *value)
+	// Output: true present
+}
+
+func ExampleTransform() {
+	schema := goshape.Transform(goshape.String().Trim(), strconv.Atoi)
+	value, err := schema.Parse(" 8080 ")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(value)
+	// Output: 8080
+}
+
+func ExampleRefineContext() {
+	schema := goshape.RefineContext(goshape.String(), func(ctx context.Context, value string) error {
+		return ctx.Err()
+	})
+	value, err := schema.ParseContext(context.Background(), "available")
+	fmt.Println(value, err)
+	// Output: available <nil>
+}
+
+func ExampleParseJSON() {
+	values, err := goshape.ParseJSON(goshape.Slice(goshape.Int()), []byte(`[1,2,3]`))
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(values)
+	// Output: [1 2 3]
+}
+
+func ExampleParseJSONReaderLimit() {
+	value, err := goshape.ParseJSONReaderLimit(goshape.String(), strings.NewReader(`"value"`), 64)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(value)
+	// Output: value
+}
+
+func ExampleJSONSchema() {
+	document, err := goshape.JSONSchema(goshape.String().Min(2).Email())
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(document["type"], document["format"], document["minLength"])
+	// Output: string email 2
+}
+
+func ExampleAnnotate() {
+	schema := goshape.Annotate(goshape.String()).Title("Display name").Example("Pong")
+	fmt.Println(schema.Metadata().Title, schema.Metadata().Examples[0])
+	// Output: Display name Pong
 }

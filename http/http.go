@@ -29,14 +29,22 @@ func DecodeJSONLimit[T any](request *http.Request, schema goshape.Schema[T], max
 	if request == nil {
 		return zero, errors.New("goshapehttp: request must not be nil")
 	}
+	if request.Body == nil {
+		return zero, errors.New("goshapehttp: request body must not be nil")
+	}
 	if maxBytes < 0 {
 		return zero, errors.New("goshapehttp: max body bytes must not be negative")
 	}
-	data, err := io.ReadAll(io.LimitReader(request.Body, maxBytes+1))
+	const maxInt64 = int64(1<<63 - 1)
+	reader := io.Reader(request.Body)
+	if maxBytes != maxInt64 {
+		reader = io.LimitReader(request.Body, maxBytes+1)
+	}
+	data, err := io.ReadAll(reader)
 	if err != nil {
 		return zero, fmt.Errorf("goshapehttp: read request body: %w", err)
 	}
-	if int64(len(data)) > maxBytes {
+	if maxBytes != maxInt64 && int64(len(data)) > maxBytes {
 		return zero, ErrBodyTooLarge
 	}
 	return goshape.ParseJSONContext(request.Context(), schema, data)

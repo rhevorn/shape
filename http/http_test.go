@@ -2,6 +2,8 @@ package goshapehttp_test
 
 import (
 	"errors"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -42,5 +44,12 @@ func TestBodyLimitAndValidationResponse(t *testing.T) {
 	}
 	if _, err := goshapehttp.DecodeJSON[string](nil, goshape.String()); err == nil {
 		t.Fatal("nil request was accepted")
+	}
+	if _, err := goshapehttp.DecodeJSON[string](&http.Request{}, goshape.String()); err == nil {
+		t.Fatal("nil request body was accepted")
+	}
+	request = &http.Request{Body: io.NopCloser(strings.NewReader(`"ok"`))}
+	if got, err := goshapehttp.DecodeJSONLimit(request, goshape.String(), int64(1<<63-1)); err != nil || got != "ok" {
+		t.Fatalf("maximum limit = %q, %v", got, err)
 	}
 }

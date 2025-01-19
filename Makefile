@@ -1,4 +1,4 @@
-.PHONY: bench check fmt fuzz-smoke test test-race vet
+.PHONY: bench check fmt fuzz-smoke release-check test test-race vet
 
 check: fmt vet test
 
@@ -28,3 +28,5 @@ fuzz-smoke:
 
 bench:
 	go test -run '^$$' -bench . -benchmem ./...
+
+release-check: check test-race fuzz-smoke bench

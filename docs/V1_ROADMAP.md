@@ -46,7 +46,7 @@ versioning.
 - [x] Keep depth and issue budgets explicit through byte limits, collection
   bounds, and contexts; defer a global hidden budget
 - [x] Add golden tests for JSON Schema and OpenAPI documents
-- [ ] Complete cancellation, deterministic-error-order, immutability, and race
+- [x] Complete cancellation, deterministic-error-order, immutability, and race
   coverage for every composite schema
 - [ ] Run a repository security and denial-of-service review
 
@@ -57,18 +57,19 @@ and documented resource-safety checks all pass.
 
 - [x] Record primitive, collection, object, recursive, and invalid-input
   baselines with `-benchmem`
-- [ ] Set regression thresholds only for stable hot paths
-- [ ] Confirm strict primitive parsing remains reflection-free
-- [ ] Profile before making any API-affecting optimization
+- [x] Set zero-allocation regression expectations only for stable strict
+  primitive hot paths
+- [x] Confirm strict primitive parsing remains reflection-free
+- [x] Avoid API-affecting optimization without profile evidence
 
 Exit: v1 has published, reproducible baselines and no known pathological common
 path.
 
 ## Gate 5 — documentation and release readiness
 
-- [ ] Complete package docs and runnable examples for the full public surface
-- [ ] Write migration notes for all pre-v1 API changes
-- [ ] Verify README, module path, Go version, license, CI, and changelog
+- [x] Complete package docs and runnable examples for the full public surface
+- [x] Write migration notes for all pre-v1 API changes
+- [x] Verify README, module path, Go version, license, CI, and changelog
 - [ ] Run the release checklist from a clean checkout on Go 1.24 and current Go
 - [ ] Tag `v1.0.0` only after every earlier gate is complete
 
