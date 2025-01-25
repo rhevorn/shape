@@ -22,7 +22,7 @@ func Record[K comparable, V any](key Schema[K], value Schema[V]) RecordSchema[K,
 func Tuple[T any](items ...TupleElement[T]) TupleSchema[T]
 func TupleItem[T, V any](schema Schema[V], setter func(*T, V)) TupleItemDef[T, V]
 
-func Lazy[T any](name string, provider func() Schema[T]) LazySchema[T]
+func Lazy[T any](name string, provider func() Schema[T]) LazySchema[T] // .MaxDepth(n)
 
 func Object[T any](fields ...ObjectField[T]) ObjectSchema[T]
 func Field[T, V any](
@@ -47,12 +47,14 @@ String().Trim().Min(1).Max(100).Len(8).Pattern(re).Email().Refine(fn)
 Int().Min(0).Max(10).Gt(0).Gte(1).Lt(10).Lte(9).Refine(fn)
 Slice(String()).Min(1).Max(10).Refine(fn)
 Field("name", String(), setter).Optional().Default("anonymous")
+Field("labels", Map(String()), setter).DefaultFunc(factory)
 Object[User](fields...).Strict().Strip().Refine(fn)
 ```
 
 `Strict` and `Strip` are mutually overriding copy methods; the last call wins.
 `Default` alone is sufficient for a missing field. Calling `Optional` before or
-after `Default` is permitted and does not erase the default.
+after `Default` is permitted and does not erase the default. Mutable defaults
+use `DefaultFunc` instead of `Default`.
 
 The initial exported error-code constants should cover:
 

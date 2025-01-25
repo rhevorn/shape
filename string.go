@@ -253,14 +253,14 @@ func (s StringSchema) ParseContext(ctx context.Context, value any) (string, erro
 	issues := make([]Issue, 0)
 	for _, rule := range s.rules {
 		if issue := rule(parsed); issue != nil {
-			issues = append(issues, *issue)
+			issues, _ = appendIssuesBounded(issues, *issue)
 		}
 	}
 	refinementIssues, err := runRefinements(ctx, parsed, s.refinements)
 	if err != nil {
 		return "", err
 	}
-	issues = append(issues, refinementIssues...)
+	issues, _ = appendIssuesBounded(issues, refinementIssues...)
 	if len(issues) != 0 {
 		return "", &ValidationError{Issues: issues}
 	}

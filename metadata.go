@@ -1,6 +1,11 @@
 package goshape
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"reflect"
+)
 
 // SchemaMetadata documents a schema for generated specifications and tooling.
 // It does not change parse behavior.
@@ -31,7 +36,7 @@ func (m schemaMetadata) description(value string) schemaMetadata {
 }
 
 func (m schemaMetadata) example(value any) schemaMetadata {
-	m.value.Examples = appendCopy(m.value.Examples, value)
+	m.value.Examples = appendCopy(m.value.Examples, cloneMetadataValue(value))
 	return m
 }
 
@@ -41,7 +46,7 @@ func (m schemaMetadata) deprecated() schemaMetadata {
 }
 
 func (m schemaMetadata) defaultValue(value any) schemaMetadata {
-	m.value.Default = value
+	m.value.Default = cloneMetadataValue(value)
 	m.value.HasDefault = true
 	return m
 }
@@ -55,20 +60,48 @@ func applyMetadata(document map[string]any, metadata schemaMetadata) {
 		document["description"] = value.Description
 	}
 	if len(value.Examples) != 0 {
-		document["examples"] = append([]any(nil), value.Examples...)
+		examples := make([]any, len(value.Examples))
+		for index, example := range value.Examples {
+			examples[index] = cloneMetadataValue(example)
+		}
+		document["examples"] = examples
 	}
 	if value.Deprecated {
 		document["deprecated"] = true
 	}
 	if value.HasDefault {
-		document["default"] = value.Default
+		document["default"] = cloneMetadataValue(value.Default)
 	}
 }
 
 func copyMetadata(metadata schemaMetadata) SchemaMetadata {
 	result := metadata.value
-	result.Examples = append([]any(nil), result.Examples...)
+	result.Examples = make([]any, len(metadata.value.Examples))
+	for index, example := range metadata.value.Examples {
+		result.Examples[index] = cloneMetadataValue(example)
+	}
+	if result.HasDefault {
+		result.Default = cloneMetadataValue(result.Default)
+	}
 	return result
+}
+
+// cloneMetadataValue round-trips through JSON into the same dynamic type. In
+// addition to detaching maps, slices, and pointers, this verifies at schema
+// construction time that descriptive metadata can actually be exported.
+func cloneMetadataValue(value any) any {
+	if value == nil {
+		return nil
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		panic(fmt.Sprintf("goshape: schema metadata must be JSON-encodable: %v", err))
+	}
+	copyValue := reflect.New(reflect.TypeOf(value))
+	if err := json.Unmarshal(encoded, copyValue.Interface()); err != nil {
+		panic(fmt.Sprintf("goshape: schema metadata must be JSON-decodable: %v", err))
+	}
+	return copyValue.Elem().Interface()
 }
 
 // AnnotatedSchema adds metadata to any schema while preserving its parse

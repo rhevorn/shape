@@ -14,6 +14,10 @@ import (
 // DefaultMaxBodyBytes is the default request-body limit used by DecodeJSON.
 const DefaultMaxBodyBytes int64 = 1 << 20
 
+// DefaultMaxResponseIssues is the maximum issue count emitted by
+// WriteValidationError.
+const DefaultMaxResponseIssues = goshape.DefaultMaxIssues
+
 // ErrBodyTooLarge is returned when a request exceeds the configured limit.
 var ErrBodyTooLarge = errors.New("goshapehttp: request body too large")
 
@@ -53,12 +57,29 @@ func DecodeJSONLimit[T any](request *http.Request, schema goshape.Schema[T], max
 // WriteValidationError writes err as a JSON issue response and returns true
 // when err is a GoShape ValidationError. Other errors are left to the caller.
 func WriteValidationError(response http.ResponseWriter, status int, err error) bool {
+	return WriteValidationErrorLimit(response, status, err, DefaultMaxResponseIssues)
+}
+
+// WriteValidationErrorLimit writes at most maxIssues issues. When validation
+// produced more, the final emitted issue reports truncation.
+func WriteValidationErrorLimit(response http.ResponseWriter, status int, err error, maxIssues int) bool {
+	if maxIssues <= 0 {
+		panic("goshapehttp: maximum response issues must be positive")
+	}
 	var validation *goshape.ValidationError
-	if !errors.As(err, &validation) {
+	if !errors.As(err, &validation) || validation == nil {
 		return false
+	}
+	issues := validation.Issues
+	if len(issues) > maxIssues {
+		issues = append([]goshape.Issue(nil), issues[:maxIssues]...)
+		issues[maxIssues-1] = goshape.Issue{
+			Code:    goshape.CodeTooManyIssues,
+			Message: "additional validation issues were omitted",
+		}
 	}
 	response.Header().Set("Content-Type", "application/json")
 	response.WriteHeader(status)
-	_ = json.NewEncoder(response).Encode(map[string]any{"issues": validation.Issues})
+	_ = json.NewEncoder(response).Encode(map[string]any{"issues": issues})
 	return true
 }

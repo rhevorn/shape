@@ -28,7 +28,20 @@ remain optimized convenience APIs.
 ## Recursive schemas
 
 Define recursion with `Lazy(name, provider)`. The name becomes a JSON Schema
-`$defs` key and therefore must be unique within one exported document.
+`$defs` key and therefore must be unique within one exported document. Parsing
+now stops after 64 active calls to the same Lazy schema; use `MaxDepth(n)` for a
+trusted model that needs a different bound.
+
+## Defaults and issue bounds
+
+`Field.Default` now accepts only deeply immutable values. Replace mutable
+defaults such as maps, non-nil slices, or pointers with `DefaultFunc`, which is
+invoked for every missing field. Dynamic defaults intentionally make JSON
+Schema export fail with `UnsupportedSchemaError`.
+
+Composite parsers retain at most 100 issues. If more sibling failures exist,
+the last issue has code `too_many_issues`. The HTTP adapter applies the same
+default and exposes `WriteValidationErrorLimit` for a smaller response cap.
 
 ## JSON readers
 

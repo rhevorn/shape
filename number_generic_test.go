@@ -1,6 +1,7 @@
 package goshape
 
 import (
+	"encoding/json"
 	"math"
 	"testing"
 )
@@ -39,6 +40,10 @@ func TestGenericNumberUnsignedAndFloatBoundaries(t *testing.T) {
 	requireIssueCodes(t, parseJSONError(Number[uint64](), `18446744073709551616`), CodeInvalidNumber)
 	requireIssueCodes(t, parseJSONError(Number[uint64](), `-1`), CodeInvalidNumber)
 	requireIssueCodes(t, parseJSONError(Number[float32](), `1e100`), CodeInvalidNumber)
+	if got, err := ParseJSON(Number[uint64](), []byte(`184467440737095516150e-1`)); err != nil || got != math.MaxUint64 {
+		t.Fatalf("scaled uint64 maximum = %v, %v", got, err)
+	}
+	requireIssueCodes(t, parseError(Number[uint64](), json.Number("1e600000000")), CodeInvalidNumber)
 }
 
 func TestGenericNumberJSONSchema(t *testing.T) {

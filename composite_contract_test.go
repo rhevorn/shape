@@ -8,6 +8,27 @@ import (
 	"testing"
 )
 
+type cancellationCounterContext struct {
+	context.Context
+	calls  int
+	cancel int
+}
+
+func (c *cancellationCounterContext) Err() error {
+	c.calls++
+	if c.calls >= c.cancel {
+		return context.Canceled
+	}
+	return nil
+}
+
+type uncheckedSliceSchema struct{}
+
+func (uncheckedSliceSchema) Parse(value any) ([]int, error) { return value.([]int), nil }
+func (uncheckedSliceSchema) ParseContext(_ context.Context, value any) ([]int, error) {
+	return value.([]int), nil
+}
+
 func TestCompositeSchemasPropagateCancellation(t *testing.T) {
 	t.Parallel()
 
@@ -46,6 +67,47 @@ func TestCompositeSchemasPropagateCancellation(t *testing.T) {
 				t.Fatalf("error = %v, want context.Canceled", err)
 			}
 		})
+	}
+}
+
+func TestUniqueChecksCancellationDuringFallback(t *testing.T) {
+	t.Parallel()
+
+	input := make([]any, 100)
+	for index := range input {
+		input[index] = []int{index}
+	}
+	ctx := &cancellationCounterContext{Context: context.Background(), cancel: len(input) + 2}
+	if _, err := Slice[[]int](uncheckedSliceSchema{}).Unique().ParseContext(ctx, input); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Unique error = %v, want context.Canceled", err)
+	}
+	requireIssueCodes(t, parseError(
+		Slice[[]int](uncheckedSliceSchema{}).Unique(),
+		[][]int{{1, 2}, {1, 2}},
+	), CodeInvalidValue)
+	tooMany := make([][]int, DefaultMaxDeepUniqueItems+1)
+	for index := range tooMany {
+		tooMany[index] = []int{index}
+	}
+	requireIssueCodes(t, parseError(
+		Slice[[]int](uncheckedSliceSchema{}).Unique(),
+		tooMany,
+	), CodeTooBig)
+}
+
+func TestCompositeIssueAggregationIsBounded(t *testing.T) {
+	t.Parallel()
+
+	input := make([]any, DefaultMaxIssues+50)
+	for index := range input {
+		input[index] = index
+	}
+	issues := requireIssues(t, parseError(Slice(String()), input))
+	if len(issues) != DefaultMaxIssues {
+		t.Fatalf("issue count = %d, want %d", len(issues), DefaultMaxIssues)
+	}
+	if got := issues[len(issues)-1].Code; got != CodeTooManyIssues {
+		t.Fatalf("last issue = %q, want %q", got, CodeTooManyIssues)
 	}
 }
 

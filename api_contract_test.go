@@ -14,6 +14,10 @@ type apiContractTuple struct {
 	Age  int
 }
 
+type apiContractDefaults struct {
+	Labels map[string]string
+}
+
 var (
 	_ Schema[string]            = String()
 	_ Schema[int]               = Int()
@@ -46,5 +50,10 @@ var (
 		return Object[apiContractObject](
 			Field("name", String(), func(value *apiContractObject, name string) { value.Name = name }),
 		)
-	})
+	}).MaxDepth(DefaultMaxRecursiveDepth)
+	_ Schema[apiContractDefaults] = Object[apiContractDefaults](
+		Field("labels", Map(String()), func(value *apiContractDefaults, labels map[string]string) {
+			value.Labels = labels
+		}).DefaultFunc(func() map[string]string { return make(map[string]string) }),
+	)
 )

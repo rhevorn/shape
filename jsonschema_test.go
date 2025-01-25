@@ -86,6 +86,27 @@ func TestJSONSchemaMetadataWrapperAndFormats(t *testing.T) {
 	}
 }
 
+func TestMetadataValuesAreDetached(t *testing.T) {
+	t.Parallel()
+
+	example := []int{1, 2}
+	schema := Annotate(Slice(Int())).Example(example).DefaultValue(example)
+	example[0] = 99
+	metadata := schema.Metadata()
+	if got := metadata.Examples[0].([]int)[0]; got != 1 {
+		t.Fatalf("stored example changed to %d", got)
+	}
+	metadata.Examples[0].([]int)[0] = 88
+	metadata.Default.([]int)[0] = 77
+	again := schema.Metadata()
+	if got := again.Examples[0].([]int)[0]; got != 1 {
+		t.Fatalf("returned example aliases schema metadata: %d", got)
+	}
+	if got := again.Default.([]int)[0]; got != 1 {
+		t.Fatalf("returned default aliases schema metadata: %d", got)
+	}
+}
+
 func TestJSONSchemaUnionMapTemporalAndCoercion(t *testing.T) {
 	t.Parallel()
 

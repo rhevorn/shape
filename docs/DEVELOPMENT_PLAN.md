@@ -9,6 +9,8 @@ work and release gates are tracked in [the v1 roadmap](V1_ROADMAP.md).
 v0.1 is complete when an object schema can parse untrusted input into a typed
 Go struct, normalize fields, validate field and object rules, reject unknown
 fields in strict mode, and return all relevant issues with structured paths.
+The v1 hardening pass later bounded retained sibling issues and marks truncation
+explicitly with `too_many_issues`.
 
 The scope in the product brief's “MVP Scope” section is authoritative when an
 earlier section conflicts with it. In particular, `Time`, `Duration`, and the

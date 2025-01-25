@@ -5,6 +5,10 @@ import (
 	"reflect"
 )
 
+// DefaultMaxDeepUniqueItems bounds the quadratic fallback used when Go
+// equality cannot preserve reflect.DeepEqual semantics.
+const DefaultMaxDeepUniqueItems = 128
+
 // SliceSchema parses []any by applying a typed element schema to every item.
 type SliceSchema[T any] struct {
 	element     Schema[T]
@@ -92,7 +96,7 @@ func (s SliceSchema[T]) ParseContext(ctx context.Context, value any) ([]T, error
 	var issues []Issue
 	for _, rule := range s.rules {
 		if issue := rule(len(input)); issue != nil {
-			issues = append(issues, *issue)
+			issues, _ = appendIssuesBounded(issues, *issue)
 		}
 	}
 	if len(issues) != 0 {
@@ -109,7 +113,11 @@ func (s SliceSchema[T]) ParseContext(ctx context.Context, value any) ([]T, error
 			if contextErr := contextError(err, ctx); contextErr != nil {
 				return nil, contextErr
 			}
-			issues = append(issues, prefixIssues(issuesFromError(err), IndexPath(index))...)
+			var capped bool
+			issues, capped = appendIssuesBounded(issues, prefixIssues(issuesFromError(err), IndexPath(index))...)
+			if capped {
+				break
+			}
 			continue
 		}
 		result[index] = parsed
@@ -118,16 +126,51 @@ func (s SliceSchema[T]) ParseContext(ctx context.Context, value any) ([]T, error
 		return nil, &ValidationError{Issues: issues}
 	}
 	if s.unique {
+		deepItems := 0
+		for index, value := range result {
+			if index%256 == 0 {
+				if err := checkContext(ctx); err != nil {
+					return nil, err
+				}
+			}
+			valueType := reflect.TypeOf(any(value))
+			if valueType != nil && !deepEqualUsesEquality(valueType) {
+				deepItems++
+			}
+		}
+		if deepItems > DefaultMaxDeepUniqueItems {
+			return nil, validationError(Issue{
+				Code:     CodeTooBig,
+				Message:  "too many items require deep uniqueness comparison",
+				Expected: DefaultMaxDeepUniqueItems,
+				Received: deepItems,
+			})
+		}
+		var seen map[any]struct{}
 		for i := 0; i < len(result); i++ {
+			if err := checkContext(ctx); err != nil {
+				return nil, err
+			}
+			item := any(result[i])
+			itemType := reflect.TypeOf(item)
+			if itemType == nil || deepEqualUsesEquality(itemType) {
+				if seen == nil {
+					seen = make(map[any]struct{}, len(result)-deepItems)
+				}
+				if _, duplicate := seen[item]; duplicate {
+					return nil, duplicateItemError(i, result[i])
+				}
+				seen[item] = struct{}{}
+				continue
+			}
 			for j := 0; j < i; j++ {
-				if reflect.DeepEqual(result[i], result[j]) {
-					return nil, validationError(Issue{
-						Code:     CodeInvalidValue,
-						Path:     Path{IndexPath(i)},
-						Message:  "must contain unique items",
-						Expected: "unique item",
-						Received: result[i],
-					})
+				if j%64 == 0 {
+					if err := checkContext(ctx); err != nil {
+						return nil, err
+					}
+				}
+				if reflect.TypeOf(any(result[j])) == itemType && reflect.DeepEqual(result[i], result[j]) {
+					return nil, duplicateItemError(i, result[i])
 				}
 			}
 		}
@@ -141,4 +184,40 @@ func (s SliceSchema[T]) ParseContext(ctx context.Context, value any) ([]T, error
 		return nil, &ValidationError{Issues: refinementIssues}
 	}
 	return result, nil
+}
+
+func duplicateItemError[T any](index int, value T) *ValidationError {
+	return validationError(Issue{
+		Code:     CodeInvalidValue,
+		Path:     Path{IndexPath(index)},
+		Message:  "must contain unique items",
+		Expected: "unique item",
+		Received: value,
+	})
+}
+
+// deepEqualUsesEquality reports types for which reflect.DeepEqual has the same
+// semantics as Go equality. Pointer-bearing types deliberately use the
+// fallback because DeepEqual also follows pointers.
+func deepEqualUsesEquality(value reflect.Type) bool {
+	switch value.Kind() {
+	case reflect.Bool,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64,
+		reflect.Complex64, reflect.Complex128,
+		reflect.String, reflect.Chan, reflect.UnsafePointer:
+		return true
+	case reflect.Array:
+		return deepEqualUsesEquality(value.Elem())
+	case reflect.Struct:
+		for index := 0; index < value.NumField(); index++ {
+			if !deepEqualUsesEquality(value.Field(index).Type) {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
 }

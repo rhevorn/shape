@@ -19,7 +19,7 @@ func FuzzStringSchema(f *testing.F) {
 }
 
 func FuzzIntJSON(f *testing.F) {
-	for _, seed := range []string{"0", "-1", "1.0", "1e3", "9223372036854775808", "NaN"} {
+	for _, seed := range []string{"0", "-1", "1.0", "1e3", "1000e-2", "1e600000000", "1e-600000000", "9223372036854775808", "NaN"} {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, input string) {
@@ -28,7 +28,7 @@ func FuzzIntJSON(f *testing.F) {
 }
 
 func FuzzGenericNumberJSON(f *testing.F) {
-	for _, seed := range []string{"0", "255", "256", "-1", "1e2", "1.5", "null"} {
+	for _, seed := range []string{"0", "255", "256", "-1", "1e2", "1e600000000", "1e-600000000", "1.5", "null"} {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, input string) {

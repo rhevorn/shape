@@ -123,6 +123,37 @@ func ExampleLazy() {
 	// Output: root leaf
 }
 
+func ExampleLazySchema_MaxDepth() {
+	type Node struct{ Next *Node }
+	var schema goshape.LazySchema[Node]
+	schema = goshape.Lazy("Node", func() goshape.Schema[Node] {
+		return goshape.Object[Node](
+			goshape.Field("next", goshape.Nullable[Node](schema), func(node *Node, next *Node) {
+				node.Next = next
+			}).Optional(),
+		)
+	}).MaxDepth(8)
+
+	_, err := schema.Parse(map[string]any{})
+	fmt.Println(err)
+	// Output: <nil>
+}
+
+func ExampleFieldDef_DefaultFunc() {
+	type Config struct{ Labels map[string]string }
+	schema := goshape.Object[Config](
+		goshape.Field("labels", goshape.Map(goshape.String()), func(config *Config, labels map[string]string) {
+			config.Labels = labels
+		}).DefaultFunc(func() map[string]string { return make(map[string]string) }),
+	)
+
+	first, _ := schema.Parse(map[string]any{})
+	second, _ := schema.Parse(map[string]any{})
+	first.Labels["request"] = "first"
+	fmt.Println(len(first.Labels), len(second.Labels))
+	// Output: 1 0
+}
+
 func ExampleNumber() {
 	type Score int16
 	score, err := goshape.Number[Score]().Min(0).Max(100).Parse(Score(95))

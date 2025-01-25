@@ -53,3 +53,20 @@ func TestBodyLimitAndValidationResponse(t *testing.T) {
 		t.Fatalf("maximum limit = %q, %v", got, err)
 	}
 }
+
+func TestValidationResponseIssueLimit(t *testing.T) {
+	issues := make([]goshape.Issue, 5)
+	for index := range issues {
+		issues[index] = goshape.Issue{Code: goshape.CodeInvalidValue, Message: "invalid"}
+	}
+	response := httptest.NewRecorder()
+	if !goshapehttp.WriteValidationErrorLimit(response, 400, &goshape.ValidationError{Issues: issues}, 3) {
+		t.Fatal("validation error was not handled")
+	}
+	if got := strings.Count(response.Body.String(), `"code"`); got != 3 {
+		t.Fatalf("encoded issue count = %d, want 3: %s", got, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), goshape.CodeTooManyIssues) {
+		t.Fatalf("response lacks truncation issue: %s", response.Body.String())
+	}
+}

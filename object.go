@@ -15,12 +15,13 @@ type ObjectField[T any] interface {
 
 // FieldDef connects an input field schema to a strongly typed setter.
 type FieldDef[T, V any] struct {
-	name         string
-	schema       Schema[V]
-	setter       func(*T, V)
-	optional     bool
-	hasDefault   bool
-	defaultValue V
+	name           string
+	schema         Schema[V]
+	setter         func(*T, V)
+	optional       bool
+	hasDefault     bool
+	defaultValue   V
+	defaultFactory func() V
 }
 
 // Field creates a required object field.
@@ -43,12 +44,28 @@ func (f FieldDef[T, V]) Optional() FieldDef[T, V] {
 	return f
 }
 
-// Default assigns value when the input field is absent. Default implies
+// Default assigns a deeply immutable value when the input field is absent.
+// Reference-bearing values use DefaultFunc. Default implies
 // optional-on-missing behavior.
 func (f FieldDef[T, V]) Default(value V) FieldDef[T, V] {
+	requireImmutableDefault(value)
 	f.optional = true
 	f.hasDefault = true
 	f.defaultValue = value
+	f.defaultFactory = nil
+	return f
+}
+
+// DefaultFunc constructs a fresh default each time the field is absent. Use it
+// for maps, slices, pointers, and other reference-bearing values. Dynamic
+// defaults cannot be represented faithfully by JSON Schema export.
+func (f FieldDef[T, V]) DefaultFunc(factory func() V) FieldDef[T, V] {
+	if factory == nil {
+		panic("goshape: field default function must not be nil")
+	}
+	f.optional = true
+	f.hasDefault = true
+	f.defaultFactory = factory
 	return f
 }
 
@@ -60,7 +77,11 @@ func (f FieldDef[T, V]) parseAndSet(ctx context.Context, target *T, input any, p
 	}
 	if !present {
 		if f.hasDefault {
-			f.setter(target, f.defaultValue)
+			value := f.defaultValue
+			if f.defaultFactory != nil {
+				value = f.defaultFactory()
+			}
+			f.setter(target, value)
 			return nil, nil
 		}
 		if f.optional {
@@ -92,6 +113,9 @@ func (f FieldDef[T, V]) buildJSONField(ctx *jsonSchemaBuildContext) (map[string]
 		return nil, false, err
 	}
 	if f.hasDefault {
+		if f.defaultFactory != nil {
+			return nil, false, &UnsupportedSchemaError{Operation: "dynamic field default"}
+		}
 		document["default"] = f.defaultValue
 	}
 	return document, !f.optional, nil
@@ -167,10 +191,14 @@ func (s ObjectSchema[T]) ParseContext(ctx context.Context, value any) (T, error)
 		if err != nil {
 			return zero, err
 		}
-		issues = append(issues, fieldIssues...)
+		var capped bool
+		issues, capped = appendIssuesBounded(issues, fieldIssues...)
+		if capped {
+			break
+		}
 	}
 
-	if s.strict {
+	if s.strict && (len(issues) == 0 || issues[len(issues)-1].Code != CodeTooManyIssues) {
 		unknown := make([]string, 0)
 		for key := range input {
 			if _, exists := s.fieldNames[key]; !exists {
@@ -179,13 +207,17 @@ func (s ObjectSchema[T]) ParseContext(ctx context.Context, value any) (T, error)
 		}
 		sort.Strings(unknown)
 		for _, key := range unknown {
-			issues = append(issues, Issue{
+			var capped bool
+			issues, capped = appendIssuesBounded(issues, Issue{
 				Code:     CodeUnknownField,
 				Path:     Path{FieldPath(key)},
 				Message:  "field is not allowed",
 				Expected: "declared field",
 				Received: key,
 			})
+			if capped {
+				break
+			}
 		}
 	}
 

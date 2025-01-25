@@ -43,12 +43,13 @@ versioning.
 - [x] Expand parser fuzz coverage across tuple, record, and recursive paths
 - [x] Add mutation and determinism invariant fuzz coverage for exporter paths
 - [x] Add explicit byte limits for untrusted JSON readers and HTTP bodies
-- [x] Keep depth and issue budgets explicit through byte limits, collection
-  bounds, and contexts; defer a global hidden budget
+- [x] Bound recursive depth and composite issue aggregation while retaining
+  explicit collection, byte, response, and context controls
 - [x] Add golden tests for JSON Schema and OpenAPI documents
 - [x] Complete cancellation, deterministic-error-order, immutability, and race
   coverage for every composite schema
-- [ ] Run a repository security and denial-of-service review
+- [x] Run a repository security and denial-of-service review and remediate the
+  validated pre-v1 findings
 
 Exit: `go test ./...`, `go test -race ./...`, `go vet ./...`, fuzz smoke tests,
 and documented resource-safety checks all pass.
@@ -70,7 +71,8 @@ path.
 - [x] Complete package docs and runnable examples for the full public surface
 - [x] Write migration notes for all pre-v1 API changes
 - [x] Verify README, module path, Go version, license, CI, and changelog
-- [ ] Run the release checklist from a clean checkout on Go 1.24 and current Go
+- [x] Run the release checklist on Go 1.24 and current Go with a clean tracked
+  tree
 - [ ] Tag `v1.0.0` only after every earlier gate is complete
 
 ## Deliberate non-goals for v1

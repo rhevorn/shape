@@ -1,6 +1,8 @@
 package goshape
 
 import (
+	"context"
+	"errors"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -129,5 +131,29 @@ func TestLazyRejectsInvalidProviders(t *testing.T) {
 	schema := Lazy("Name", func() Schema[string] { return nilSchema })
 	if _, err := schema.Parse("value"); err == nil {
 		t.Fatal("nil lazy provider result was accepted")
+	}
+	requirePanic(t, func() { Lazy("Name", func() Schema[string] { return String() }).MaxDepth(0) })
+}
+
+func TestLazyBoundsRecursiveDepthAndCycles(t *testing.T) {
+	t.Parallel()
+
+	type link struct{ Next *link }
+	var schema LazySchema[link]
+	schema = Lazy("BoundedLink", func() Schema[link] {
+		return Object[link](
+			Field("next", Nullable[link](schema), func(value *link, next *link) { value.Next = next }).Optional(),
+		)
+	}).MaxDepth(3)
+
+	cycle := map[string]any{}
+	cycle["next"] = cycle
+	_, err := schema.Parse(cycle)
+	issues := requireIssueCodes(t, err, CodeTooDeep)
+	if got := issues[0].Path.String(); got != "next.next.next" {
+		t.Fatalf("depth issue path = %q", got)
+	}
+	if errors.Is(err, context.Canceled) {
+		t.Fatalf("depth error unexpectedly reported cancellation: %v", err)
 	}
 }

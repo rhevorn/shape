@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"math"
-	"math/big"
 	"reflect"
 	"strconv"
 	"strings"
@@ -162,15 +161,15 @@ func parseGenericJSONNumber[N Numeric](value string) (N, bool) {
 }
 
 func parseJSONUnsigned(value string, bits int) (uint64, bool) {
-	parsed, ok := new(big.Rat).SetString(value)
-	if !ok || !parsed.IsInt() || parsed.Sign() < 0 || !parsed.Num().IsUint64() {
+	limit := uint64(math.MaxUint64)
+	if bits > 0 && bits < 64 {
+		limit = uint64(1)<<bits - 1
+	}
+	parsed, negative, ok := parseDecimalInteger(value, limit, limit)
+	if !ok || negative {
 		return 0, false
 	}
-	result := parsed.Num().Uint64()
-	if bits > 0 && bits < 64 && result > uint64(1)<<bits-1 {
-		return 0, false
-	}
-	return result, true
+	return parsed, true
 }
 
 func coerceGenericNumber[N Numeric](value any) (N, bool) {

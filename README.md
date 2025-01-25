@@ -63,8 +63,10 @@ user, err := userSchema.Parse(map[string]any{
 ```
 
 Fields are required by default. Use `Optional()` to permit a missing field or
-`Default(value)` to assign a typed default. Objects strip unknown input keys by
-default; `Strict()` reports them as `unknown_field` issues.
+`Default(value)` to assign a deeply immutable typed default. Reference-bearing
+defaults use `DefaultFunc(func() T)` so every parse gets fresh state. Objects
+strip unknown input keys by default; `Strict()` reports them as
+`unknown_field` issues.
 
 ## Collections and composition
 
@@ -91,6 +93,10 @@ inputs are supported where their input shape is unambiguous.
 alternative to succeed, matching the distinction between JSON Schema `anyOf`
 and `oneOf`.
 
+`Slice.Unique` uses a linear equality path for scalar/comparable values. Types
+that require deep comparison are capped at 128 items; add a smaller `Max` for
+attacker-facing composite collections when appropriate.
+
 Recursive schemas name their JSON Schema definition explicitly:
 
 ```go
@@ -110,6 +116,9 @@ nodeSchema = goshape.Lazy("Node", func() goshape.Schema[Node] {
 })
 ```
 
+`Lazy` limits recursive parsing to 64 active levels by default; use
+`MaxDepth(n)` when a trusted data model needs a different positive bound.
+
 ## Structured errors
 
 ```go
@@ -126,7 +135,8 @@ if err != nil {
 
 Paths retain typed field and index segments internally and format values such
 as `users[3].address.zip` for display. Error codes are stable and do not require
-parsing human-readable messages.
+parsing human-readable messages. Composite validation retains at most 100
+issues by default and ends a truncated result with `too_many_issues`.
 
 ## JSON
 
@@ -195,7 +205,7 @@ Dependency-free adapters are available at:
 - `Tuple`: fixed-length heterogeneous positions with typed setters
 - `Object`: `Strict`, `Strip`, `Refine`
 - Composition: `Field`, `Optional`, `Default`, `Transform`, `Refine`,
-  `RefineContext`
+  `DefaultFunc`, `RefineContext`
 
 ## Design goals
 
@@ -219,7 +229,7 @@ make fuzz-smoke
 See [the v1 roadmap](docs/V1_ROADMAP.md), [compatibility
 policy](docs/COMPATIBILITY.md), [performance baseline](docs/BENCHMARKS.md),
 [pre-v1 migration notes](docs/PRE_V1_MIGRATION.md), [the original development
-plan](docs/DEVELOPMENT_PLAN.md), and
+plan](docs/DEVELOPMENT_PLAN.md), [security policy](SECURITY.md), and
 [contribution guide](CONTRIBUTING.md) for scope and release checks.
 
 ## License

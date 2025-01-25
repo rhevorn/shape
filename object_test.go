@@ -103,6 +103,41 @@ func TestObjectMissingOptionalDefaultAndNil(t *testing.T) {
 	}
 }
 
+func TestObjectMutableDefaultsRequireFactory(t *testing.T) {
+	t.Parallel()
+
+	type settings struct{ Labels map[string]string }
+	requirePanic(t, func() {
+		_ = Field("labels", Map(String()), func(value *settings, labels map[string]string) {
+			value.Labels = labels
+		}).Default(map[string]string{"origin": "shared"})
+	})
+
+	schema := Object[settings](
+		Field("labels", Map(String()), func(value *settings, labels map[string]string) {
+			value.Labels = labels
+		}).DefaultFunc(func() map[string]string {
+			return map[string]string{"origin": "fresh"}
+		}),
+	)
+	first, err := schema.Parse(map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.Labels["request"] = "one"
+	second, err := schema.Parse(map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, shared := second.Labels["request"]; shared {
+		t.Fatal("DefaultFunc reused mutable state")
+	}
+	var unsupported *UnsupportedSchemaError
+	if _, err := JSONSchema(schema); !errors.As(err, &unsupported) {
+		t.Fatalf("dynamic default export error = %T, %v", err, err)
+	}
+}
+
 func TestObjectStripStrictAndImmutability(t *testing.T) {
 	t.Parallel()
 

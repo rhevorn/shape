@@ -54,6 +54,42 @@ func genericTypeName[T any]() string {
 	return reflect.TypeOf((*T)(nil)).Elem().String()
 }
 
+func requireImmutableDefault[T any](value T) {
+	if !deeplyImmutableValue(reflect.ValueOf(value)) {
+		panic("goshape: reference-bearing field defaults require DefaultFunc")
+	}
+}
+
+func deeplyImmutableValue(value reflect.Value) bool {
+	if !value.IsValid() {
+		return true
+	}
+	switch value.Kind() {
+	case reflect.Interface:
+		return value.IsNil() || deeplyImmutableValue(value.Elem())
+	case reflect.Pointer, reflect.Map, reflect.Slice, reflect.Func, reflect.Chan:
+		return value.IsNil()
+	case reflect.UnsafePointer:
+		return value.IsNil()
+	case reflect.Array:
+		for index := 0; index < value.Len(); index++ {
+			if !deeplyImmutableValue(value.Index(index)) {
+				return false
+			}
+		}
+		return true
+	case reflect.Struct:
+		for index := 0; index < value.NumField(); index++ {
+			if !deeplyImmutableValue(value.Field(index)) {
+				return false
+			}
+		}
+		return true
+	default:
+		return true
+	}
+}
+
 func runRefinements[T any](ctx context.Context, value T, refinements []refinement[T]) ([]Issue, error) {
 	var issues []Issue
 	for _, refine := range refinements {
@@ -65,7 +101,11 @@ func runRefinements[T any](ctx context.Context, value T, refinements []refinemen
 			return nil, contextErr
 		}
 		if refinementErr != nil {
-			issues = append(issues, issuesFromError(refinementErr)...)
+			var capped bool
+			issues, capped = appendIssuesBounded(issues, issuesFromError(refinementErr)...)
+			if capped {
+				break
+			}
 		}
 	}
 	if err := checkContext(ctx); err != nil {

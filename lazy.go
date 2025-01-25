@@ -20,12 +20,47 @@ type lazyState[T any] struct {
 	id       *lazyIdentity
 }
 
+// DefaultMaxRecursiveDepth bounds recursive Lazy parsing when MaxDepth is not
+// specified. It is intentionally lower than encoding/json's nesting ceiling
+// so validation paths cannot amplify a compact input into excessive work.
+const DefaultMaxRecursiveDepth = 64
+
+type lazyDepthKey struct{}
+
+type lazyDepthState struct {
+	mu     sync.Mutex
+	depths map[*lazyIdentity]int
+}
+
+func (s *lazyDepthState) enter(identity *lazyIdentity, limit int) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	depth := s.depths[identity] + 1
+	if depth > limit {
+		return false
+	}
+	s.depths[identity] = depth
+	return true
+}
+
+func (s *lazyDepthState) leave(identity *lazyIdentity) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	depth := s.depths[identity] - 1
+	if depth == 0 {
+		delete(s.depths, identity)
+		return
+	}
+	s.depths[identity] = depth
+}
+
 // LazySchema defers construction of a named schema until its first use. The
 // provider is evaluated at most once, which permits schemas to refer to
 // themselves while remaining safe for concurrent reuse.
 type LazySchema[T any] struct {
-	name  string
-	state *lazyState[T]
+	name     string
+	state    *lazyState[T]
+	maxDepth int
 }
 
 // Lazy creates a named, lazily resolved schema. Names identify definitions
@@ -39,12 +74,24 @@ func Lazy[T any](name string, provider func() Schema[T]) LazySchema[T] {
 		panic("goshape: lazy schema provider must not be nil")
 	}
 	return LazySchema[T]{
-		name: name,
+		name:     name,
+		maxDepth: DefaultMaxRecursiveDepth,
 		state: &lazyState[T]{
 			provider: provider,
 			id:       &lazyIdentity{},
 		},
 	}
+}
+
+// MaxDepth sets the maximum active recursion depth for this named Lazy schema.
+// The limit must be positive and is enforced independently for each Lazy
+// identity in a mutually recursive graph.
+func (s LazySchema[T]) MaxDepth(limit int) LazySchema[T] {
+	if limit <= 0 {
+		panic("goshape: lazy schema maximum depth must be positive")
+	}
+	s.maxDepth = limit
+	return s
 }
 
 func (s LazySchema[T]) resolve() (Schema[T], error) {
@@ -75,6 +122,27 @@ func (s LazySchema[T]) ParseContext(ctx context.Context, value any) (T, error) {
 	if err := checkContext(ctx); err != nil {
 		return zero, err
 	}
+	if s.state == nil {
+		return zero, errors.New("goshape: uninitialized lazy schema")
+	}
+	limit := s.maxDepth
+	if limit == 0 {
+		limit = DefaultMaxRecursiveDepth
+	}
+	depthState, _ := ctx.Value(lazyDepthKey{}).(*lazyDepthState)
+	if depthState == nil {
+		depthState = &lazyDepthState{depths: make(map[*lazyIdentity]int)}
+		ctx = context.WithValue(ctx, lazyDepthKey{}, depthState)
+	}
+	if !depthState.enter(s.state.id, limit) {
+		return zero, validationError(Issue{
+			Code:     CodeTooDeep,
+			Message:  "maximum recursive schema depth exceeded",
+			Expected: limit,
+			Received: limit + 1,
+		})
+	}
+	defer depthState.leave(s.state.id)
 	resolved, err := s.resolve()
 	if err != nil {
 		return zero, err

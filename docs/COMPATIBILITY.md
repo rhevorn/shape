@@ -21,6 +21,9 @@ Within v1.x, semantic versioning covers:
 - Required, optional, default, strict, and strip object behavior
 - Stable validation issue codes and the JSON shape of `Issue`, `Path`, and
   `ValidationError`
+- The default 100-issue aggregation cap and terminal `too_many_issues` issue
+- The default 64-level `Lazy` recursion cap and `MaxDepth` override
+- The 128-item deep-comparison fallback cap for `Slice.Unique`
 - `ErrJSONTooLarge` for explicitly size-limited JSON reader parsing
 - `Union` as at-least-one matching and `OneOf` as exactly-one matching
 - JSON Schema Draft 2020-12 and OpenAPI 3.1 target dialects
@@ -54,12 +57,18 @@ Custom refinements and transforms are runtime behavior and are rejected by the
 JSON Schema exporter when they cannot be represented faithfully. Exporters do
 not silently discard those operations.
 
-GoShape v1 does not apply an implicit global parse-depth or issue-count limit.
-JSON inputs inherit `encoding/json` nesting protection; untrusted streams and
-HTTP bodies have explicit byte-limit APIs; collection builders provide `Max`;
-and context-aware parsing supports cancellation. A global limit would change
-valid-data semantics and add hidden mutable accounting to every parse, so it is
-deferred unless real workloads demonstrate the need.
+GoShape bounds each composite validation result to 100 retained issues and each
+named `Lazy` schema to 64 active recursive calls by default. The final retained
+issue is `too_many_issues` when sibling failures were omitted. `MaxDepth`
+provides an explicit positive override for trusted recursive models. JSON
+reader and HTTP byte limits, collection `Max`, and context cancellation remain
+independent resource controls.
+
+`Field.Default` accepts only deeply immutable values. Maps, non-nil slices,
+pointers, channels, functions, and structs containing such values must use
+`DefaultFunc`, which creates a fresh value for every missing-field parse.
+Because a dynamic default cannot be represented faithfully, exporting an
+object containing `DefaultFunc` returns `UnsupportedSchemaError`.
 
 ## Deprecation and removal
 

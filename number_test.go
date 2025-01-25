@@ -50,6 +50,30 @@ func TestNumericJSONNumber(t *testing.T) {
 	requireIssueCodes(t, parseError(Float64(), json.Number("1e9999")), CodeInvalidNumber)
 }
 
+func TestIntegerExponentParsingIsBoundedAndExact(t *testing.T) {
+	t.Parallel()
+
+	accepted := map[string]int64{
+		"1e3":       1000,
+		"1000e-2":   10,
+		"1.2300e2":  123,
+		"-0e999999": 0,
+		"-9.22e2":   -922,
+	}
+	for input, want := range accepted {
+		got, err := Int64().Parse(json.Number(input))
+		if err != nil || got != want {
+			t.Fatalf("Int64(%q) = %d, %v; want %d", input, got, err, want)
+		}
+	}
+	for _, input := range []string{"1e600000000", "1e-600000000", "1.2e0", "9223372036854775808", "--1"} {
+		requireIssueCodes(t, parseError(Int64(), json.Number(input)), CodeInvalidNumber)
+	}
+	if got, err := CoerceInt64().Parse("+42"); err != nil || got != 42 {
+		t.Fatalf("CoerceInt64(+42) = %d, %v", got, err)
+	}
+}
+
 func TestNumberRefine(t *testing.T) {
 	t.Parallel()
 

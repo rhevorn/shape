@@ -95,7 +95,11 @@ func (s TupleSchema[T]) ParseContext(ctx context.Context, value any) (T, error) 
 		if err != nil {
 			return zero, err
 		}
-		issues = append(issues, itemIssues...)
+		var capped bool
+		issues, capped = appendIssuesBounded(issues, itemIssues...)
+		if capped {
+			break
+		}
 	}
 	if len(issues) != 0 {
 		return zero, &ValidationError{Issues: issues}

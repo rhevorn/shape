@@ -35,3 +35,10 @@ v1.0.0 and will use Semantic Versioning from that point onward.
   Schema semantics
 - Streaming JSON reader decoding with explicit byte-limited variants and
   `ErrJSONTooLarge`
+- Bounded decimal integer parsing without arbitrary-precision allocation
+- Linear uniqueness checks for scalar/comparable values with cancellable deep
+  comparison fallback
+- A 64-level default recursive parse bound with `Lazy.MaxDepth`
+- A 100-issue composite aggregation bound and bounded HTTP error writer
+- `DefaultFunc` for fresh mutable field defaults and detached metadata values
+- Private vulnerability reporting guidance and a documented security scope

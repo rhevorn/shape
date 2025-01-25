@@ -68,20 +68,20 @@ func (s MapSchema[T]) ParseContext(ctx context.Context, value any) (map[string]T
 		return nil, validationError(invalidType("map[string]any", value))
 	}
 
-	keys := make([]string, 0, len(input))
-	for key := range input {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
 	var issues []Issue
 	for _, rule := range s.rules {
 		if issue := rule(len(input)); issue != nil {
-			issues = append(issues, *issue)
+			issues, _ = appendIssuesBounded(issues, *issue)
 		}
 	}
 	if len(issues) != 0 {
 		return nil, &ValidationError{Issues: issues}
 	}
+	keys := make([]string, 0, len(input))
+	for key := range input {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
 
 	result := make(map[string]T, len(input))
 	for _, key := range keys {
@@ -93,7 +93,11 @@ func (s MapSchema[T]) ParseContext(ctx context.Context, value any) (map[string]T
 			if contextErr := contextError(err, ctx); contextErr != nil {
 				return nil, contextErr
 			}
-			issues = append(issues, prefixIssues(issuesFromError(err), FieldPath(key))...)
+			var capped bool
+			issues, capped = appendIssuesBounded(issues, prefixIssues(issuesFromError(err), FieldPath(key))...)
+			if capped {
+				break
+			}
 			continue
 		}
 		result[key] = parsed

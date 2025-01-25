@@ -72,7 +72,7 @@ func (s RecordSchema[K, V]) ParseContext(ctx context.Context, value any) (map[K]
 	var issues []Issue
 	for _, rule := range s.rules {
 		if issue := rule(len(input)); issue != nil {
-			issues = append(issues, *issue)
+			issues, _ = appendIssuesBounded(issues, *issue)
 		}
 	}
 	if len(issues) != 0 {
@@ -91,7 +91,11 @@ func (s RecordSchema[K, V]) ParseContext(ctx context.Context, value any) (map[K]
 			if contextErr := contextError(keyErr, ctx); contextErr != nil {
 				return nil, contextErr
 			}
-			issues = append(issues, prefixIssues(issuesFromError(keyErr), FieldPath(rawKey))...)
+			var capped bool
+			issues, capped = appendIssuesBounded(issues, prefixIssues(issuesFromError(keyErr), FieldPath(rawKey))...)
+			if capped {
+				break
+			}
 			continue
 		}
 		parsedValue, valueErr := s.value.ParseContext(ctx, input[rawKey])
@@ -99,11 +103,19 @@ func (s RecordSchema[K, V]) ParseContext(ctx context.Context, value any) (map[K]
 			if contextErr := contextError(valueErr, ctx); contextErr != nil {
 				return nil, contextErr
 			}
-			issues = append(issues, prefixIssues(issuesFromError(valueErr), FieldPath(rawKey))...)
+			var capped bool
+			issues, capped = appendIssuesBounded(issues, prefixIssues(issuesFromError(valueErr), FieldPath(rawKey))...)
+			if capped {
+				break
+			}
 			continue
 		}
 		if _, duplicate := result[parsedKey]; duplicate {
-			issues = append(issues, Issue{Code: CodeInvalidValue, Path: Path{FieldPath(rawKey)}, Message: "key duplicates another parsed key", Expected: "unique parsed key", Received: parsedKey})
+			var capped bool
+			issues, capped = appendIssuesBounded(issues, Issue{Code: CodeInvalidValue, Path: Path{FieldPath(rawKey)}, Message: "key duplicates another parsed key", Expected: "unique parsed key", Received: parsedKey})
+			if capped {
+				break
+			}
 			continue
 		}
 		result[parsedKey] = parsedValue

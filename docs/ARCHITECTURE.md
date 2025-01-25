@@ -49,9 +49,11 @@ Composite schemas prefix child issues by copying the path; they never mutate an
 error returned by a reusable child schema.
 
 Primitive schemas generally emit one issue. Slices, maps, and objects collect
-issues from all independently parseable children in deterministic input/schema
-order. An object does not run its object-level refinement if any field failed,
-because the partially populated value is not a valid refinement input.
+issues from independently parseable children in deterministic input/schema
+order, up to `DefaultMaxIssues`. When more failures exist, the last retained
+issue has code `too_many_issues` and sibling traversal stops. An object does not
+run its object-level refinement if any field failed, because the partially
+populated value is not a valid refinement input.
 
 An arbitrary error returned by a value or object refinement becomes a `custom`
 issue. An `Issue` or `ValidationError` returned by a refinement preserves its
@@ -92,11 +94,11 @@ input. `ParseJSONReaderLimit` and its context variant use an explicit maximum
 byte count and return `ErrJSONTooLarge` when exceeded. The `net/http` adapter
 applies a 1 MiB limit by default.
 
-There is no implicit global depth or issue budget. JSON receives the standard
-decoder's nesting protection, streams and HTTP bodies can be byte-limited,
-collections can declare `Max`, and recursive callers can propagate deadlines
-through `ParseContext`. This keeps limits explicit and avoids request-specific
-mutable counters inside reusable schemas.
+Composite results retain at most 100 issues, and each named `Lazy` schema has a
+64-level default recursion limit. These local immutable limits require no
+request-specific mutable state. JSON decoder nesting protection, byte-limited
+reader/HTTP adapters, collection `Max`, and context cancellation provide
+additional independent controls.
 
 ## Collections
 
@@ -107,6 +109,9 @@ mutable counters inside reusable schemas.
 Collection size rules evaluate after type checking and before child parsing.
 When size is valid, child errors are aggregated and prefixed with their index or
 key. Map issue order must be deterministic; keys are sorted before parsing.
+`Slice.Unique` uses hash-map equality for types where it is equivalent to
+`reflect.DeepEqual`. The cancellable deep-comparison fallback is limited to 128
+items so non-comparable inputs cannot restore unbounded quadratic work.
 
 ## Objects and fields
 
@@ -128,8 +133,11 @@ Fields are required by default. Semantics:
 | Present `nil` | parsed normally and usually `invalid_type` | same | same |
 
 `Default(v)` implies optional-on-missing behavior; requiring an additional
-`Optional()` call would add ceremony without changing meaning. Defaults are
-already typed and are assigned directly; they are not re-parsed.
+`Optional()` call would add ceremony without changing meaning. It accepts only
+deeply immutable values. `DefaultFunc(func() V)` supports reference-bearing
+defaults by creating a fresh value per parse. Dynamic defaults are not
+exportable to JSON Schema because invoking a factory during documentation
+generation would not faithfully describe runtime behavior.
 
 Objects default to strip mode. Strip means unknown keys are ignored while the
 typed output naturally contains only declared fields. `Strict` emits one
@@ -171,6 +179,12 @@ The confirmed canonical module path is `github.com/rhevorn/goshape`.
 resolved at most once and the resolved schema is safely published to concurrent
 parsers. Construction remains explicit: recursion does not depend on reflection,
 global registries, or mutable package state.
+
+Parsing tracks active calls to each Lazy identity in parse-local context state.
+The state is synchronized for safe context propagation and is never stored on
+the reusable schema. The default limit is 64 and `MaxDepth` returns a configured
+schema copy. This terminates cyclic in-memory graphs and bounds error-path
+amplification without changing recursive JSON Schema export.
 
 The name is used only as the JSON Schema `$defs` key. Names must be unique per
 exported document, and JSON Pointer escaping is applied when constructing a

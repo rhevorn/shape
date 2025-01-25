@@ -11,6 +11,7 @@ const (
 	CodeRequired        = "required"
 	CodeTooSmall        = "too_small"
 	CodeTooBig          = "too_big"
+	CodeTooDeep         = "too_deep"
 	CodeInvalidFormat   = "invalid_format"
 	CodeInvalidValue    = "invalid_value"
 	CodeInvalidEnum     = "invalid_enum"
@@ -22,9 +23,15 @@ const (
 	CodeInvalidUUID     = "invalid_uuid"
 	CodeInvalidIP       = "invalid_ip"
 	CodeUnknownField    = "unknown_field"
+	CodeTooManyIssues   = "too_many_issues"
 	CodeCustom          = "custom"
 	CodeTransformFailed = "transform_failed"
 )
+
+// DefaultMaxIssues is the maximum number of issues retained by one composite
+// validation result. The final issue reports truncation when more failures are
+// found.
+const DefaultMaxIssues = 100
 
 // Issue describes one validation failure.
 type Issue struct {
@@ -82,8 +89,7 @@ func issuesFromError(err error) []Issue {
 		if validation == nil {
 			return []Issue{{Code: CodeCustom, Message: "validation failed"}}
 		}
-		result := make([]Issue, len(validation.Issues))
-		copy(result, validation.Issues)
+		result, _ := appendIssuesBounded(nil, validation.Issues...)
 		return result
 	}
 
@@ -96,6 +102,36 @@ func issuesFromError(err error) []Issue {
 	}
 
 	return []Issue{{Code: CodeCustom, Message: err.Error()}}
+}
+
+func tooManyIssues() Issue {
+	return Issue{
+		Code:     CodeTooManyIssues,
+		Message:  "additional validation issues were omitted",
+		Expected: fmt.Sprintf("at most %d reported issues", DefaultMaxIssues),
+	}
+}
+
+// appendIssuesBounded preserves issue order while limiting retained work. The
+// boolean result tells callers that no further siblings need to be visited.
+func appendIssuesBounded(current []Issue, additions ...Issue) ([]Issue, bool) {
+	if len(additions) == 0 {
+		return current, len(current) > 0 && current[len(current)-1].Code == CodeTooManyIssues
+	}
+	if len(current) >= DefaultMaxIssues {
+		current = current[:DefaultMaxIssues]
+		current[DefaultMaxIssues-1] = tooManyIssues()
+		return current, true
+	}
+	remaining := DefaultMaxIssues - len(current)
+	if len(additions) <= remaining {
+		return append(current, additions...), false
+	}
+	if remaining > 1 {
+		current = append(current, additions[:remaining-1]...)
+	}
+	current = append(current, tooManyIssues())
+	return current, true
 }
 
 func prefixIssues(issues []Issue, segment PathSegment) []Issue {

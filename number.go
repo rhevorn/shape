@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"math/big"
 	"strconv"
 	"strings"
 )
@@ -434,7 +433,7 @@ func parseNumber[N number](ctx context.Context, value N, rules []numberRule[N], 
 	issues := make([]Issue, 0)
 	for _, rule := range rules {
 		if issue := rule(value); issue != nil {
-			issues = append(issues, *issue)
+			issues, _ = appendIssuesBounded(issues, *issue)
 		}
 	}
 	refinementIssues, err := runRefinements(ctx, value, refinements)
@@ -442,7 +441,7 @@ func parseNumber[N number](ctx context.Context, value N, rules []numberRule[N], 
 		var zero N
 		return zero, err
 	}
-	issues = append(issues, refinementIssues...)
+	issues, _ = appendIssuesBounded(issues, refinementIssues...)
 	if len(issues) != 0 {
 		var zero N
 		return zero, &ValidationError{Issues: issues}
@@ -451,17 +450,152 @@ func parseNumber[N number](ctx context.Context, value N, rules []numberRule[N], 
 }
 
 func parseJSONInteger(value string, bits int) (int64, bool) {
-	precision := uint(len(value)*4 + 64)
-	parsed, _, err := big.ParseFloat(value, 10, precision, big.ToNearestEven)
-	if err != nil {
+	positiveLimit := uint64(math.MaxInt64)
+	negativeLimit := positiveLimit + 1
+	if bits > 0 && bits < 64 {
+		positiveLimit = uint64(1)<<(bits-1) - 1
+		negativeLimit = positiveLimit + 1
+	}
+	magnitude, negative, ok := parseDecimalInteger(value, positiveLimit, negativeLimit)
+	if !ok {
 		return 0, false
 	}
-	integer, accuracy := parsed.Int(nil)
-	if accuracy != big.Exact || !integer.IsInt64() {
-		return 0, false
+	if negative {
+		if magnitude == uint64(math.MaxInt64)+1 {
+			return math.MinInt64, true
+		}
+		return -int64(magnitude), true
 	}
-	result := integer.Int64()
-	return boundedInteger(result, bits)
+	return int64(magnitude), true
+}
+
+// parseDecimalInteger validates base-10 integer syntax, decimal fractions, and
+// exponents without materializing an arbitrary-precision value. Its work and
+// allocation are bounded by the encoded input length and the target width.
+func parseDecimalInteger(value string, positiveLimit, negativeLimit uint64) (uint64, bool, bool) {
+	if value == "" {
+		return 0, false, false
+	}
+	index := 0
+	negative := false
+	if value[index] == '+' || value[index] == '-' {
+		negative = value[index] == '-'
+		index++
+		if index == len(value) {
+			return 0, false, false
+		}
+	}
+
+	digits := make([]byte, 0, len(value))
+	integerDigits := 0
+	for index < len(value) && value[index] >= '0' && value[index] <= '9' {
+		digits = append(digits, value[index])
+		integerDigits++
+		index++
+	}
+	if integerDigits == 0 {
+		return 0, false, false
+	}
+	fractionDigits := 0
+	if index < len(value) && value[index] == '.' {
+		index++
+		for index < len(value) && value[index] >= '0' && value[index] <= '9' {
+			digits = append(digits, value[index])
+			fractionDigits++
+			index++
+		}
+		if fractionDigits == 0 {
+			return 0, false, false
+		}
+	}
+
+	exponent := 0
+	if index < len(value) && (value[index] == 'e' || value[index] == 'E') {
+		index++
+		exponentNegative := false
+		if index < len(value) && (value[index] == '+' || value[index] == '-') {
+			exponentNegative = value[index] == '-'
+			index++
+		}
+		if index == len(value) || value[index] < '0' || value[index] > '9' {
+			return 0, false, false
+		}
+		// Any exponent beyond the input length plus the target's 20 decimal
+		// digits has the same fit outcome. Saturating prevents int overflow.
+		exponentLimit := len(value)
+		if exponentLimit <= int(^uint(0)>>1)-20 {
+			exponentLimit += 20
+		}
+		for index < len(value) && value[index] >= '0' && value[index] <= '9' {
+			digit := int(value[index] - '0')
+			if exponent <= exponentLimit {
+				if exponent > (exponentLimit-digit)/10 {
+					exponent = exponentLimit
+				} else {
+					exponent = exponent*10 + digit
+				}
+			}
+			index++
+		}
+		if exponentNegative {
+			exponent = -exponent
+		}
+	}
+	if index != len(value) {
+		return 0, false, false
+	}
+
+	firstNonZero := 0
+	for firstNonZero < len(digits) && digits[firstNonZero] == '0' {
+		firstNonZero++
+	}
+	if firstNonZero == len(digits) {
+		return 0, false, true
+	}
+	digits = digits[firstNonZero:]
+	shift := exponent - fractionDigits
+	if shift < 0 {
+		trim := -shift
+		if trim > len(digits) {
+			return 0, false, false
+		}
+		for _, digit := range digits[len(digits)-trim:] {
+			if digit != '0' {
+				return 0, false, false
+			}
+		}
+		digits = digits[:len(digits)-trim]
+		shift = 0
+		for len(digits) > 0 && digits[0] == '0' {
+			digits = digits[1:]
+		}
+		if len(digits) == 0 {
+			return 0, false, true
+		}
+	}
+	if shift > 20 || len(digits) > 20-shift {
+		return 0, false, false
+	}
+
+	limit := positiveLimit
+	if negative {
+		limit = negativeLimit
+	}
+	var magnitude uint64
+	for _, digit := range digits {
+		value := uint64(digit - '0')
+		if magnitude > (limit-value)/10 {
+			return 0, false, false
+		}
+		magnitude = magnitude*10 + value
+	}
+	for range shift {
+		if magnitude > limit/10 {
+			return 0, false, false
+		}
+		magnitude *= 10
+	}
+	return magnitude, negative && magnitude != 0, true
 }
 
 func parseJSONFloat(value string) (float64, bool) {

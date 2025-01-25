@@ -1,6 +1,9 @@
 package goshape
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func BenchmarkStringValidation(b *testing.B) {
 	schema := String().Trim().Min(3).Max(50)
@@ -99,6 +102,31 @@ func BenchmarkRecursiveValidation(b *testing.B) {
 	for b.Loop() {
 		if _, err := schema.Parse(input); err != nil {
 			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkUniqueComparableValidation(b *testing.B) {
+	input := make([]any, 1000)
+	for index := range input {
+		input[index] = index
+	}
+	schema := Slice(Int()).Unique()
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := schema.Parse(input); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkRejectHugeIntegerExponent(b *testing.B) {
+	schema := Int64()
+	input := json.Number("1e600000000")
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := schema.Parse(input); err == nil {
+			b.Fatal("expected validation error")
 		}
 	}
 }
