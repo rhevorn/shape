@@ -1,13 +1,13 @@
 // Package openapi adapts GoShape schemas for OpenAPI 3.1 documents.
 package openapi
 
-import "github.com/rhevorn/goshape"
+import "github.com/rhevorn/shape"
 
 // Schema exports an OpenAPI 3.1-compatible Schema Object. OpenAPI 3.1 aligns
 // its Schema Object with JSON Schema Draft 2020-12, so only the root dialect
 // declaration is removed.
-func Schema[T any](schema goshape.Schema[T]) (map[string]any, error) {
-	document, err := goshape.JSONSchema(schema)
+func Schema[T any](schema shape.Schema[T]) (map[string]any, error) {
+	document, err := shape.JSONSchema(schema)
 	if err != nil {
 		return nil, err
 	}
@@ -16,7 +16,7 @@ func Schema[T any](schema goshape.Schema[T]) (map[string]any, error) {
 }
 
 // JSONRequestBody builds an OpenAPI requestBody object for JSON input.
-func JSONRequestBody[T any](schema goshape.Schema[T], required bool) (map[string]any, error) {
+func JSONRequestBody[T any](schema shape.Schema[T], required bool) (map[string]any, error) {
 	document, err := Schema(schema)
 	if err != nil {
 		return nil, err
@@ -30,7 +30,7 @@ func JSONRequestBody[T any](schema goshape.Schema[T], required bool) (map[string
 }
 
 // JSONResponse builds an OpenAPI response object for a JSON response body.
-func JSONResponse[T any](description string, schema goshape.Schema[T]) (map[string]any, error) {
+func JSONResponse[T any](description string, schema shape.Schema[T]) (map[string]any, error) {
 	document, err := Schema(schema)
 	if err != nil {
 		return nil, err

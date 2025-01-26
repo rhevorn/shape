@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/rhevorn/goshape"
-	goshapehttp "github.com/rhevorn/goshape/http"
+	"github.com/rhevorn/shape"
+	shapehttp "github.com/rhevorn/shape/http"
 )
 
 type CreateUserRequest struct {
@@ -13,19 +13,19 @@ type CreateUserRequest struct {
 	Email string
 }
 
-var createUserSchema = goshape.Object[CreateUserRequest](
-	goshape.Field("name", goshape.String().Trim().Min(2), func(request *CreateUserRequest, value string) {
+var createUserSchema = shape.Object[CreateUserRequest](
+	shape.Field("name", shape.String().Trim().Min(2), func(request *CreateUserRequest, value string) {
 		request.Name = value
 	}),
-	goshape.Field("email", goshape.String().Trim().Email(), func(request *CreateUserRequest, value string) {
+	shape.Field("email", shape.String().Trim().Email(), func(request *CreateUserRequest, value string) {
 		request.Email = value
 	}),
 ).Strict()
 
 func createUser(response http.ResponseWriter, request *http.Request) {
-	input, err := goshapehttp.DecodeJSON(request, createUserSchema)
+	input, err := shapehttp.DecodeJSON(request, createUserSchema)
 	if err != nil {
-		if goshapehttp.WriteValidationError(response, http.StatusUnprocessableEntity, err) {
+		if shapehttp.WriteValidationError(response, http.StatusUnprocessableEntity, err) {
 			return
 		}
 		http.Error(response, err.Error(), http.StatusBadRequest)

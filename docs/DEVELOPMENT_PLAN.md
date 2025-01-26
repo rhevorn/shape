@@ -123,7 +123,7 @@ Release checks:
 - Benchmarks recorded as an initial baseline
 - README examples compile
 - MIT license present
-- Canonical module path confirmed as `github.com/rhevorn/goshape`
+- Canonical module path confirmed as `github.com/rhevorn/shape`
 
 ## Suggested implementation order
 

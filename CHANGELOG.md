@@ -7,6 +7,13 @@ v1.0.0 and will use Semantic Versioning from that point onward.
 
 ## Unreleased
 
+### Changed
+
+- Renamed the root package and module path from `goshape` /
+  `github.com/rhevorn/goshape` to `shape` / `github.com/rhevorn/shape`
+- Renamed the HTTP adapter package from `goshapehttp` to `shapehttp`
+- Renamed JSON Schema vendor extensions from `x-goshape-*` to `x-shape-*`
+
 ### Added
 
 - Generic `Schema[T]` contract with context-aware parsing

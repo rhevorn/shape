@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/rhevorn/goshape"
+	"github.com/rhevorn/shape"
 )
 
 type Config struct {
@@ -16,14 +16,14 @@ type Config struct {
 
 type Port uint16
 
-var configSchema = goshape.Object[Config](
-	goshape.Field("port", goshape.CoerceNumber[Port]().Min(1).Max(65535), func(config *Config, value Port) {
+var configSchema = shape.Object[Config](
+	shape.Field("port", shape.CoerceNumber[Port]().Min(1).Max(65535), func(config *Config, value Port) {
 		config.Port = value
 	}).Default(Port(8080)),
-	goshape.Field("debug", goshape.CoerceBool(), func(config *Config, value bool) {
+	shape.Field("debug", shape.CoerceBool(), func(config *Config, value bool) {
 		config.Debug = value
 	}).Default(false),
-	goshape.Field("timeout", goshape.CoerceDuration(), func(config *Config, value time.Duration) {
+	shape.Field("timeout", shape.CoerceDuration(), func(config *Config, value time.Duration) {
 		config.Timeout = value
 	}).Default(5*time.Second),
 ).Strict()

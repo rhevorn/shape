@@ -4,7 +4,7 @@ GoShape has no public release yet. The first supported release will be v1.0.0;
 after that, the latest v1.x release receives security fixes.
 
 Please report suspected vulnerabilities privately through
-[GitHub Security Advisories](https://github.com/rhevorn/goshape/security/advisories/new).
+[GitHub Security Advisories](https://github.com/rhevorn/shape/security/advisories/new).
 Include the affected API, required schema configuration, impact, and a minimal
 reproduction when it is safe to share. Do not open a public issue before a fix
 or coordinated disclosure is ready.

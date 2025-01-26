@@ -1,4 +1,4 @@
-package goshape
+package shape
 
 import (
 	"context"
@@ -129,7 +129,7 @@ func TestJSONSchemaUnionMapTemporalAndCoercion(t *testing.T) {
 		t.Fatal(err)
 	}
 	additional := mapDocument["additionalProperties"].(map[string]any)
-	if additional["type"] != "boolean" || additional["x-goshape-coerce"] != true {
+	if additional["type"] != "boolean" || additional["x-shape-coerce"] != true {
 		t.Fatalf("map value schema = %#v", additional)
 	}
 	sizedMap, err := JSONSchema(Map(String()).Min(1).Max(3))

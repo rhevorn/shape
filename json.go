@@ -1,4 +1,4 @@
-package goshape
+package shape
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 )
 
 // ErrJSONTooLarge is returned when a reader exceeds an explicit byte limit.
-var ErrJSONTooLarge = errors.New("goshape: JSON input too large")
+var ErrJSONTooLarge = errors.New("shape: JSON input too large")
 
 // ParseJSON decodes exactly one JSON value and parses it with schema. JSON
 // numbers retain their lexical representation until a numeric schema handles
@@ -22,7 +22,7 @@ func ParseJSON[T any](schema Schema[T], data []byte) (T, error) {
 // ParseJSONContext is ParseJSON with context propagation.
 func ParseJSONContext[T any](ctx context.Context, schema Schema[T], data []byte) (T, error) {
 	if schema == nil {
-		panic("goshape: JSON schema must not be nil")
+		panic("shape: JSON schema must not be nil")
 	}
 	return parseJSONReader(ctx, schema, bytes.NewReader(data))
 }
@@ -33,14 +33,14 @@ func parseJSONReader[T any](ctx context.Context, schema Schema[T], reader io.Rea
 	decoder.UseNumber()
 	var input any
 	if err := decoder.Decode(&input); err != nil {
-		return zero, fmt.Errorf("goshape: decode JSON: %w", err)
+		return zero, fmt.Errorf("shape: decode JSON: %w", err)
 	}
 	var trailing any
 	if err := decoder.Decode(&trailing); err != io.EOF {
 		if err == nil {
-			return zero, fmt.Errorf("goshape: decode JSON: expected exactly one value")
+			return zero, fmt.Errorf("shape: decode JSON: expected exactly one value")
 		}
-		return zero, fmt.Errorf("goshape: decode trailing JSON: %w", err)
+		return zero, fmt.Errorf("shape: decode trailing JSON: %w", err)
 	}
 
 	return schema.ParseContext(ctx, input)
@@ -55,10 +55,10 @@ func ParseJSONReader[T any](schema Schema[T], reader io.Reader) (T, error) {
 func ParseJSONReaderContext[T any](ctx context.Context, schema Schema[T], reader io.Reader) (T, error) {
 	var zero T
 	if reader == nil {
-		return zero, errors.New("goshape: JSON reader must not be nil")
+		return zero, errors.New("shape: JSON reader must not be nil")
 	}
 	if schema == nil {
-		panic("goshape: JSON schema must not be nil")
+		panic("shape: JSON schema must not be nil")
 	}
 	return parseJSONReader(ctx, schema, reader)
 }
@@ -73,13 +73,13 @@ func ParseJSONReaderLimit[T any](schema Schema[T], reader io.Reader, maxBytes in
 func ParseJSONReaderLimitContext[T any](ctx context.Context, schema Schema[T], reader io.Reader, maxBytes int64) (T, error) {
 	var zero T
 	if reader == nil {
-		return zero, errors.New("goshape: JSON reader must not be nil")
+		return zero, errors.New("shape: JSON reader must not be nil")
 	}
 	if maxBytes < 0 {
-		return zero, errors.New("goshape: max JSON bytes must not be negative")
+		return zero, errors.New("shape: max JSON bytes must not be negative")
 	}
 	if schema == nil {
-		panic("goshape: JSON schema must not be nil")
+		panic("shape: JSON schema must not be nil")
 	}
 	const maxInt64 = int64(1<<63 - 1)
 	if maxBytes == maxInt64 {

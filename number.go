@@ -1,4 +1,4 @@
-package goshape
+package shape
 
 import (
 	"context"
@@ -76,7 +76,7 @@ func (s IntSchema) NonNegative() IntSchema { return s.Gte(0) }
 // OneOf restricts values to the provided set.
 func (s IntSchema) OneOf(values ...int) IntSchema {
 	if len(values) == 0 {
-		panic("goshape: Int.OneOf requires at least one value")
+		panic("shape: Int.OneOf requires at least one value")
 	}
 	s = s.withRule(numberOneOfRule(values))
 	return s.withConstraint("enum", append([]int(nil), values...))
@@ -189,7 +189,7 @@ func (s Int64Schema) NonNegative() Int64Schema { return s.Gte(0) }
 // OneOf restricts values to the provided set.
 func (s Int64Schema) OneOf(values ...int64) Int64Schema {
 	if len(values) == 0 {
-		panic("goshape: Int64.OneOf requires at least one value")
+		panic("shape: Int64.OneOf requires at least one value")
 	}
 	s = s.withRule(numberOneOfRule(values))
 	return s.withConstraint("enum", append([]int64(nil), values...))
@@ -298,7 +298,7 @@ func (s Float64Schema) NonNegative() Float64Schema { return s.Gte(0) }
 // OneOf restricts values to the provided set.
 func (s Float64Schema) OneOf(values ...float64) Float64Schema {
 	if len(values) == 0 {
-		panic("goshape: Float64.OneOf requires at least one value")
+		panic("shape: Float64.OneOf requires at least one value")
 	}
 	s = s.withRule(numberOneOfRule(values))
 	return s.withConstraint("enum", append([]float64(nil), values...))
@@ -424,7 +424,7 @@ func buildNumberJSONSchema(kind string, coerce bool, constraints []map[string]an
 	document := map[string]any{"type": kind}
 	applyConstraints(document, constraints)
 	if coerce {
-		document["x-goshape-coerce"] = true
+		document["x-shape-coerce"] = true
 	}
 	return document, nil
 }

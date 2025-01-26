@@ -1,4 +1,4 @@
-package goshape
+package shape
 
 import (
 	"errors"

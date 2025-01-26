@@ -1,4 +1,4 @@
-package goshape
+package shape
 
 import (
 	"context"
@@ -68,10 +68,10 @@ type LazySchema[T any] struct {
 // document.
 func Lazy[T any](name string, provider func() Schema[T]) LazySchema[T] {
 	if name == "" {
-		panic("goshape: lazy schema name must not be empty")
+		panic("shape: lazy schema name must not be empty")
 	}
 	if provider == nil {
-		panic("goshape: lazy schema provider must not be nil")
+		panic("shape: lazy schema provider must not be nil")
 	}
 	return LazySchema[T]{
 		name:     name,
@@ -88,7 +88,7 @@ func Lazy[T any](name string, provider func() Schema[T]) LazySchema[T] {
 // identity in a mutually recursive graph.
 func (s LazySchema[T]) MaxDepth(limit int) LazySchema[T] {
 	if limit <= 0 {
-		panic("goshape: lazy schema maximum depth must be positive")
+		panic("shape: lazy schema maximum depth must be positive")
 	}
 	s.maxDepth = limit
 	return s
@@ -96,13 +96,13 @@ func (s LazySchema[T]) MaxDepth(limit int) LazySchema[T] {
 
 func (s LazySchema[T]) resolve() (Schema[T], error) {
 	if s.state == nil {
-		return nil, errors.New("goshape: uninitialized lazy schema")
+		return nil, errors.New("shape: uninitialized lazy schema")
 	}
 	s.state.once.Do(func() {
-		s.state.err = errors.New("goshape: lazy schema provider did not complete")
+		s.state.err = errors.New("shape: lazy schema provider did not complete")
 		s.state.schema = s.state.provider()
 		if s.state.schema == nil {
-			s.state.err = errors.New("goshape: lazy schema provider returned nil")
+			s.state.err = errors.New("shape: lazy schema provider returned nil")
 			return
 		}
 		s.state.err = nil
@@ -123,7 +123,7 @@ func (s LazySchema[T]) ParseContext(ctx context.Context, value any) (T, error) {
 		return zero, err
 	}
 	if s.state == nil {
-		return zero, errors.New("goshape: uninitialized lazy schema")
+		return zero, errors.New("shape: uninitialized lazy schema")
 	}
 	limit := s.maxDepth
 	if limit == 0 {
@@ -152,10 +152,10 @@ func (s LazySchema[T]) ParseContext(ctx context.Context, value any) (T, error) {
 
 func (s LazySchema[T]) buildJSONSchema(ctx *jsonSchemaBuildContext) (map[string]any, error) {
 	if s.state == nil {
-		return nil, errors.New("goshape: uninitialized lazy schema")
+		return nil, errors.New("shape: uninitialized lazy schema")
 	}
 	if owner, exists := ctx.owners[s.name]; exists && owner != s.state.id {
-		return nil, fmt.Errorf("goshape: duplicate lazy schema name %q", s.name)
+		return nil, fmt.Errorf("shape: duplicate lazy schema name %q", s.name)
 	}
 	ctx.owners[s.name] = s.state.id
 

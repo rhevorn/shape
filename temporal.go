@@ -1,4 +1,4 @@
-package goshape
+package shape
 
 import (
 	"context"
@@ -141,13 +141,13 @@ func (s TimeSchema) buildJSONSchema(_ *jsonSchemaBuildContext) (map[string]any, 
 	if !s.coerce {
 		return nil, &UnsupportedSchemaError{Operation: "strict time.Time without a JSON representation; use CoerceTime"}
 	}
-	document := map[string]any{"type": "string", "x-goshape-native-type": "time.Time"}
+	document := map[string]any{"type": "string", "x-shape-native-type": "time.Time"}
 	if len(s.layouts) == 1 && (s.layouts[0] == time.RFC3339 || s.layouts[0] == time.RFC3339Nano) {
 		document["format"] = "date-time"
 	} else {
-		document["x-goshape-time-layouts"] = append([]string(nil), s.layouts...)
+		document["x-shape-time-layouts"] = append([]string(nil), s.layouts...)
 	}
-	document["x-goshape-coerce"] = true
+	document["x-shape-coerce"] = true
 	return document, nil
 }
 
@@ -156,7 +156,7 @@ func (s DurationSchema) buildJSONSchema(_ *jsonSchemaBuildContext) (map[string]a
 		return nil, err
 	}
 	if s.coerce {
-		return map[string]any{"type": "string", "x-goshape-format": "go-duration", "x-goshape-coerce": true}, nil
+		return map[string]any{"type": "string", "x-shape-format": "go-duration", "x-shape-coerce": true}, nil
 	}
-	return map[string]any{"type": "integer", "description": "duration in nanoseconds", "x-goshape-native-type": "time.Duration"}, nil
+	return map[string]any{"type": "integer", "description": "duration in nanoseconds", "x-shape-native-type": "time.Duration"}, nil
 }

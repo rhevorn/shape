@@ -1,4 +1,4 @@
-package goshape
+package shape
 
 import "context"
 
@@ -6,7 +6,7 @@ import "context"
 // type. Concrete schema builders also expose a Refine method for fluent use.
 func Refine[T any](schema Schema[T], fn func(T) error) Schema[T] {
 	if schema == nil {
-		panic("goshape: refined schema must not be nil")
+		panic("shape: refined schema must not be nil")
 	}
 	return refineSchema[T]{schema: schema, refine: requireRefinement(fn)}
 }

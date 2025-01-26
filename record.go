@@ -1,4 +1,4 @@
-package goshape
+package shape
 
 import (
 	"context"
@@ -18,7 +18,7 @@ type RecordSchema[K comparable, V any] struct {
 // Record creates a schema with independently typed key and value parsers.
 func Record[K comparable, V any](key Schema[K], value Schema[V]) RecordSchema[K, V] {
 	if key == nil || value == nil {
-		panic("goshape: record key and value schemas must not be nil")
+		panic("shape: record key and value schemas must not be nil")
 	}
 	return RecordSchema[K, V]{key: key, value: value}
 }

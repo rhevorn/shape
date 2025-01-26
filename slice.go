@@ -1,4 +1,4 @@
-package goshape
+package shape
 
 import (
 	"context"
@@ -21,7 +21,7 @@ type SliceSchema[T any] struct {
 // Slice returns a schema for a slice of element values.
 func Slice[T any](element Schema[T]) SliceSchema[T] {
 	if element == nil {
-		panic("goshape: slice element schema must not be nil")
+		panic("shape: slice element schema must not be nil")
 	}
 	return SliceSchema[T]{element: element}
 }

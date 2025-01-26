@@ -1,4 +1,4 @@
-package goshape
+package shape
 
 import (
 	"context"
@@ -117,7 +117,7 @@ func (s StringSchema) Len(n int) StringSchema {
 // Pattern requires a regular-expression match.
 func (s StringSchema) Pattern(pattern *regexp.Regexp) StringSchema {
 	if pattern == nil {
-		panic("goshape: String.Pattern regexp must not be nil")
+		panic("shape: String.Pattern regexp must not be nil")
 	}
 	s = s.withRule(func(value string) *Issue {
 		if pattern.MatchString(value) {
@@ -397,16 +397,16 @@ func (s StringSchema) buildJSONSchema(_ *jsonSchemaBuildContext) (map[string]any
 		} else if s.caseMode > 0 {
 			normalization = append(normalization, "uppercase")
 		}
-		document["x-goshape-normalize"] = normalization
+		document["x-shape-normalize"] = normalization
 	}
 	if s.coerce {
-		document["x-goshape-coerce"] = true
+		document["x-shape-coerce"] = true
 	}
 	return document, nil
 }
 
 func requireNonNegative(method string, value int) {
 	if value < 0 {
-		panic(fmt.Sprintf("goshape: %s requires a non-negative value", method))
+		panic(fmt.Sprintf("shape: %s requires a non-negative value", method))
 	}
 }

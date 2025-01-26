@@ -3,12 +3,12 @@ package jsonschema_test
 import (
 	"testing"
 
-	"github.com/rhevorn/goshape"
-	"github.com/rhevorn/goshape/jsonschema"
+	"github.com/rhevorn/shape"
+	"github.com/rhevorn/shape/jsonschema"
 )
 
 func TestExport(t *testing.T) {
-	document, err := jsonschema.Export(goshape.String().Email())
+	document, err := jsonschema.Export(shape.String().Email())
 	if err != nil {
 		t.Fatal(err)
 	}

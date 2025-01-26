@@ -1,4 +1,4 @@
-package goshape
+package shape
 
 import (
 	"encoding/json"
@@ -19,7 +19,7 @@ func (d JSONSchemaDocument) Bytes() ([]byte, error) { return json.Marshal(d) }
 type UnsupportedSchemaError struct{ Operation string }
 
 func (e *UnsupportedSchemaError) Error() string {
-	return "goshape: JSON Schema does not support " + e.Operation
+	return "shape: JSON Schema does not support " + e.Operation
 }
 
 type jsonSchemaNode interface {
@@ -44,7 +44,7 @@ func newJSONSchemaBuildContext() *jsonSchemaBuildContext {
 // and transforms return UnsupportedSchemaError instead of being silently lost.
 func JSONSchema[T any](schema Schema[T]) (JSONSchemaDocument, error) {
 	if schema == nil {
-		panic("goshape: JSON Schema source must not be nil")
+		panic("shape: JSON Schema source must not be nil")
 	}
 	buildContext := newJSONSchemaBuildContext()
 	document, err := buildJSONSchemaWithContext(schema, buildContext)

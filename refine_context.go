@@ -1,14 +1,14 @@
-package goshape
+package shape
 
 import "context"
 
 // RefineContext adds context-aware validation to any schema.
 func RefineContext[T any](schema Schema[T], fn func(context.Context, T) error) Schema[T] {
 	if schema == nil {
-		panic("goshape: refined schema must not be nil")
+		panic("shape: refined schema must not be nil")
 	}
 	if fn == nil {
-		panic("goshape: context refinement function must not be nil")
+		panic("shape: context refinement function must not be nil")
 	}
 	return contextRefineSchema[T]{schema: schema, refine: fn}
 }

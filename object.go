@@ -1,4 +1,4 @@
-package goshape
+package shape
 
 import (
 	"context"
@@ -27,13 +27,13 @@ type FieldDef[T, V any] struct {
 // Field creates a required object field.
 func Field[T, V any](name string, schema Schema[V], setter func(*T, V)) FieldDef[T, V] {
 	if name == "" {
-		panic("goshape: field name must not be empty")
+		panic("shape: field name must not be empty")
 	}
 	if schema == nil {
-		panic("goshape: field schema must not be nil")
+		panic("shape: field schema must not be nil")
 	}
 	if setter == nil {
-		panic("goshape: field setter must not be nil")
+		panic("shape: field setter must not be nil")
 	}
 	return FieldDef[T, V]{name: name, schema: schema, setter: setter}
 }
@@ -61,7 +61,7 @@ func (f FieldDef[T, V]) Default(value V) FieldDef[T, V] {
 // defaults cannot be represented faithfully by JSON Schema export.
 func (f FieldDef[T, V]) DefaultFunc(factory func() V) FieldDef[T, V] {
 	if factory == nil {
-		panic("goshape: field default function must not be nil")
+		panic("shape: field default function must not be nil")
 	}
 	f.optional = true
 	f.hasDefault = true
@@ -138,11 +138,11 @@ func Object[T any](fields ...ObjectField[T]) ObjectSchema[T] {
 	copy(result.fields, fields)
 	for _, field := range result.fields {
 		if field == nil {
-			panic("goshape: object field must not be nil")
+			panic("shape: object field must not be nil")
 		}
 		name := field.fieldName()
 		if _, exists := result.fieldNames[name]; exists {
-			panic("goshape: duplicate object field: " + name)
+			panic("shape: duplicate object field: " + name)
 		}
 		result.fieldNames[name] = struct{}{}
 	}

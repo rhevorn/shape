@@ -9,7 +9,7 @@ Requires Go 1.24 or newer. The module and bundled adapters use only the Go
 standard library.
 
 ```go
-schema := goshape.String().
+schema := shape.String().
 	Trim().
 	Min(3).
 	Max(50)
@@ -37,20 +37,20 @@ type User struct {
 	Age   int
 }
 
-userSchema := goshape.Object[User](
-	goshape.Field(
+userSchema := shape.Object[User](
+	shape.Field(
 		"name",
-		goshape.String().Trim().Min(2).Max(50),
+		shape.String().Trim().Min(2).Max(50),
 		func(user *User, value string) { user.Name = value },
 	),
-	goshape.Field(
+	shape.Field(
 		"email",
-		goshape.String().Trim().Email(),
+		shape.String().Trim().Email(),
 		func(user *User, value string) { user.Email = value },
 	),
-	goshape.Field(
+	shape.Field(
 		"age",
-		goshape.Int().Min(18).Max(120),
+		shape.Int().Min(18).Max(120),
 		func(user *User, value int) { user.Age = value },
 	),
 ).Strict()
@@ -71,11 +71,11 @@ strip unknown input keys by default; `Strict()` reports them as
 ## Collections and composition
 
 ```go
-names := goshape.Slice(goshape.String().Trim().Min(1)).Min(1).Max(10)
-labels := goshape.Map(goshape.String())
+names := shape.Slice(shape.String().Trim().Min(1)).Min(1).Max(10)
+labels := shape.Map(shape.String())
 
-port := goshape.Transform(
-	goshape.String().Trim(),
+port := shape.Transform(
+	shape.String().Trim(),
 	func(value string) (int, error) { return strconv.Atoi(value) },
 )
 ```
@@ -105,12 +105,12 @@ type Node struct {
 	Children []Node
 }
 
-var nodeSchema goshape.Schema[Node]
-nodeSchema = goshape.Lazy("Node", func() goshape.Schema[Node] {
-	return goshape.Object[Node](
-		goshape.Field("value", goshape.String().NonEmpty(),
+var nodeSchema shape.Schema[Node]
+nodeSchema = shape.Lazy("Node", func() shape.Schema[Node] {
+	return shape.Object[Node](
+		shape.Field("value", shape.String().NonEmpty(),
 			func(node *Node, value string) { node.Value = value }),
-		goshape.Field("children", goshape.Slice(nodeSchema),
+		shape.Field("children", shape.Slice(nodeSchema),
 			func(node *Node, children []Node) { node.Children = children }).Default(nil),
 	).Strict()
 })
@@ -124,7 +124,7 @@ nodeSchema = goshape.Lazy("Node", func() goshape.Schema[Node] {
 ```go
 value, err := schema.Parse(input)
 if err != nil {
-	var validation *goshape.ValidationError
+	var validation *shape.ValidationError
 	if errors.As(err, &validation) {
 		for _, issue := range validation.Issues {
 			fmt.Println(issue.Code, issue.Path.String(), issue.Message)
@@ -141,7 +141,7 @@ issues by default and ends a truncated result with `too_many_issues`.
 ## JSON
 
 ```go
-user, err := goshape.ParseJSON(userSchema, requestBody)
+user, err := shape.ParseJSON(userSchema, requestBody)
 ```
 
 JSON is an adapter, not GoShape's core representation. `ParseJSON` accepts
@@ -156,10 +156,10 @@ Strict constructors do not convert strings or unrelated Go scalar types. Use
 the explicit constructors when conversion is intended:
 
 ```go
-port := goshape.CoerceInt().Min(1).Max(65535)
-enabled := goshape.CoerceBool()
-timeout := goshape.CoerceDuration()
-createdAt := goshape.CoerceTime()
+port := shape.CoerceInt().Min(1).Max(65535)
+enabled := shape.CoerceBool()
+timeout := shape.CoerceDuration()
+createdAt := shape.CoerceTime()
 ```
 
 Additional schemas include `Time`, `Duration`, `URL`, `UUID`, and `IP`.
@@ -167,7 +167,7 @@ Additional schemas include `Time`, `Duration`, `URL`, `UUID`, and `IP`.
 ## JSON Schema and OpenAPI
 
 ```go
-document, err := goshape.JSONSchema(userSchema)
+document, err := shape.JSONSchema(userSchema)
 requestBody, err := openapi.JSONRequestBody(userSchema, true)
 ```
 
@@ -176,7 +176,7 @@ for named recursive schemas. The second produces an OpenAPI 3.1 request body.
 Metadata can be attached to any schema:
 
 ```go
-homepage := goshape.Annotate(goshape.URL()).
+homepage := shape.Annotate(shape.URL()).
 	Title("Homepage").
 	Description("Absolute homepage URL").
 	Example("https://example.com")
@@ -187,9 +187,9 @@ export returns `UnsupportedSchemaError` instead of silently losing behavior.
 
 Dependency-free adapters are available at:
 
-- `github.com/rhevorn/goshape/jsonschema`
-- `github.com/rhevorn/goshape/openapi`
-- `github.com/rhevorn/goshape/http` (package name `goshapehttp`)
+- `github.com/rhevorn/shape/jsonschema`
+- `github.com/rhevorn/shape/openapi`
+- `github.com/rhevorn/shape/http` (package name `shapehttp`)
 
 ## Schemas and rules
 

@@ -1,4 +1,4 @@
-package goshape
+package shape
 
 import "context"
 
@@ -6,10 +6,10 @@ import "context"
 // output type.
 func Transform[A, B any](schema Schema[A], fn func(A) (B, error)) Schema[B] {
 	if schema == nil {
-		panic("goshape: transformed schema must not be nil")
+		panic("shape: transformed schema must not be nil")
 	}
 	if fn == nil {
-		panic("goshape: transform function must not be nil")
+		panic("shape: transform function must not be nil")
 	}
 	return transformSchema[A, B]{schema: schema, transform: fn}
 }

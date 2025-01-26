@@ -1,4 +1,4 @@
-package goshape
+package shape
 
 import (
 	"context"
@@ -17,7 +17,7 @@ type EnumSchema[T comparable] struct {
 // Enum creates a schema that accepts one of values.
 func Enum[T comparable](values ...T) EnumSchema[T] {
 	if len(values) == 0 {
-		panic("goshape: Enum requires at least one value")
+		panic("shape: Enum requires at least one value")
 	}
 	return EnumSchema[T]{values: append([]T(nil), values...)}
 }

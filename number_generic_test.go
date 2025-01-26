@@ -1,4 +1,4 @@
-package goshape
+package shape
 
 import (
 	"encoding/json"
@@ -54,7 +54,7 @@ func TestGenericNumberJSONSchema(t *testing.T) {
 		t.Fatalf("integer JSON Schema = %#v, %v", integer, err)
 	}
 	floating, err := JSONSchema(CoerceNumber[temperature]())
-	if err != nil || floating["type"] != "number" || floating["x-goshape-coerce"] != true {
+	if err != nil || floating["type"] != "number" || floating["x-shape-coerce"] != true {
 		t.Fatalf("float JSON Schema = %#v, %v", floating, err)
 	}
 }

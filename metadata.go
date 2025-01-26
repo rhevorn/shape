@@ -1,4 +1,4 @@
-package goshape
+package shape
 
 import (
 	"context"
@@ -95,11 +95,11 @@ func cloneMetadataValue(value any) any {
 	}
 	encoded, err := json.Marshal(value)
 	if err != nil {
-		panic(fmt.Sprintf("goshape: schema metadata must be JSON-encodable: %v", err))
+		panic(fmt.Sprintf("shape: schema metadata must be JSON-encodable: %v", err))
 	}
 	copyValue := reflect.New(reflect.TypeOf(value))
 	if err := json.Unmarshal(encoded, copyValue.Interface()); err != nil {
-		panic(fmt.Sprintf("goshape: schema metadata must be JSON-decodable: %v", err))
+		panic(fmt.Sprintf("shape: schema metadata must be JSON-decodable: %v", err))
 	}
 	return copyValue.Elem().Interface()
 }
@@ -114,7 +114,7 @@ type AnnotatedSchema[T any] struct {
 // Annotate wraps schema with fluent metadata methods.
 func Annotate[T any](schema Schema[T]) AnnotatedSchema[T] {
 	if schema == nil {
-		panic("goshape: annotated schema must not be nil")
+		panic("shape: annotated schema must not be nil")
 	}
 	return AnnotatedSchema[T]{schema: schema}
 }

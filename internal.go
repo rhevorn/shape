@@ -1,4 +1,4 @@
-package goshape
+package shape
 
 import (
 	"context"
@@ -56,7 +56,7 @@ func genericTypeName[T any]() string {
 
 func requireImmutableDefault[T any](value T) {
 	if !deeplyImmutableValue(reflect.ValueOf(value)) {
-		panic("goshape: reference-bearing field defaults require DefaultFunc")
+		panic("shape: reference-bearing field defaults require DefaultFunc")
 	}
 }
 
@@ -116,7 +116,7 @@ func runRefinements[T any](ctx context.Context, value T, refinements []refinemen
 
 func requireRefinement[T any](fn func(T) error) refinement[T] {
 	if fn == nil {
-		panic("goshape: refinement function must not be nil")
+		panic("shape: refinement function must not be nil")
 	}
 	return fn
 }

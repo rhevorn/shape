@@ -171,7 +171,7 @@ Concrete primitive fast paths remain appropriate when they avoid reflection or
 materially reduce allocations. Reflection is limited to adapter boundaries
 where Go generics cannot construct a named runtime type directly.
 
-The confirmed canonical module path is `github.com/rhevorn/goshape`.
+The confirmed canonical module path is `github.com/rhevorn/shape`.
 
 ## Recursive schemas
 

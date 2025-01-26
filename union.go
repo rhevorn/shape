@@ -1,4 +1,4 @@
-package goshape
+package shape
 
 import "context"
 
@@ -20,7 +20,7 @@ func Union[T any](alternatives ...Schema[T]) UnionSchema[T] {
 
 func newUnion[T any](exact bool, alternatives []Schema[T]) UnionSchema[T] {
 	if len(alternatives) == 0 {
-		panic("goshape: Union and OneOf require at least one schema")
+		panic("shape: Union and OneOf require at least one schema")
 	}
 	result := UnionSchema[T]{
 		alternatives: append([]Schema[T](nil), alternatives...),
@@ -28,7 +28,7 @@ func newUnion[T any](exact bool, alternatives []Schema[T]) UnionSchema[T] {
 	}
 	for _, alternative := range result.alternatives {
 		if alternative == nil {
-			panic("goshape: Union and OneOf alternatives must not be nil")
+			panic("shape: Union and OneOf alternatives must not be nil")
 		}
 	}
 	return result

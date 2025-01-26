@@ -1,4 +1,4 @@
-package goshape
+package shape
 
 import (
 	"context"
@@ -74,7 +74,7 @@ func (s NumberSchema[N]) NonNegative() NumberSchema[N] { return s.Gte(0) }
 // OneOf restricts values to the provided set.
 func (s NumberSchema[N]) OneOf(values ...N) NumberSchema[N] {
 	if len(values) == 0 {
-		panic("goshape: Number.OneOf requires at least one value")
+		panic("shape: Number.OneOf requires at least one value")
 	}
 	s.rules = appendCopy(s.rules, numberOneOfRule(values))
 	s.constraints = appendCopy(s.constraints, map[string]any{"enum": append([]N(nil), values...)})

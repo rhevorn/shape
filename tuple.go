@@ -1,4 +1,4 @@
-package goshape
+package shape
 
 import "context"
 
@@ -18,10 +18,10 @@ type TupleItemDef[T, V any] struct {
 // TupleItem creates one heterogeneous tuple position.
 func TupleItem[T, V any](schema Schema[V], setter func(*T, V)) TupleItemDef[T, V] {
 	if schema == nil {
-		panic("goshape: tuple item schema must not be nil")
+		panic("shape: tuple item schema must not be nil")
 	}
 	if setter == nil {
-		panic("goshape: tuple item setter must not be nil")
+		panic("shape: tuple item setter must not be nil")
 	}
 	return TupleItemDef[T, V]{schema: schema, setter: setter}
 }
@@ -53,7 +53,7 @@ func Tuple[T any](items ...TupleElement[T]) TupleSchema[T] {
 	result := TupleSchema[T]{items: append([]TupleElement[T](nil), items...)}
 	for _, item := range result.items {
 		if item == nil {
-			panic("goshape: tuple item must not be nil")
+			panic("shape: tuple item must not be nil")
 		}
 	}
 	return result

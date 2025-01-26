@@ -1,4 +1,4 @@
-package goshape
+package shape
 
 import "context"
 
@@ -9,7 +9,7 @@ type NullableSchema[T any] struct{ schema Schema[T] }
 // Nullable creates a nil-aware schema.
 func Nullable[T any](schema Schema[T]) NullableSchema[T] {
 	if schema == nil {
-		panic("goshape: nullable schema must not be nil")
+		panic("shape: nullable schema must not be nil")
 	}
 	return NullableSchema[T]{schema: schema}
 }

@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/rhevorn/goshape"
-	"github.com/rhevorn/goshape/openapi"
+	"github.com/rhevorn/shape"
+	"github.com/rhevorn/shape/openapi"
 )
 
 func TestJSONRequestBody(t *testing.T) {
-	body, err := openapi.JSONRequestBody(goshape.String().Min(1), true)
+	body, err := openapi.JSONRequestBody(shape.String().Min(1), true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestJSONRequestBody(t *testing.T) {
 }
 
 func TestJSONResponse(t *testing.T) {
-	response, err := openapi.JSONResponse("ok", goshape.Bool())
+	response, err := openapi.JSONResponse("ok", shape.Bool())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-package goshape
+package shape
 
 import (
 	"context"
@@ -113,7 +113,7 @@ func (s BoolSchema) buildJSONSchema(_ *jsonSchemaBuildContext) (map[string]any, 
 	}
 	document := map[string]any{"type": "boolean"}
 	if s.coerce {
-		document["x-goshape-coerce"] = true
+		document["x-shape-coerce"] = true
 	}
 	return document, nil
 }

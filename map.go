@@ -1,4 +1,4 @@
-package goshape
+package shape
 
 import (
 	"context"
@@ -33,7 +33,7 @@ func (s MapSchema[T]) NonEmpty() MapSchema[T] { return s.Min(1) }
 // Map returns a schema for a string-keyed map.
 func Map[T any](value Schema[T]) MapSchema[T] {
 	if value == nil {
-		panic("goshape: map value schema must not be nil")
+		panic("shape: map value schema must not be nil")
 	}
 	return MapSchema[T]{value: value}
 }
