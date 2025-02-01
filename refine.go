@@ -36,7 +36,7 @@ func (s refineSchema[T]) ParseContext(ctx context.Context, value any) (T, error)
 	}
 	if refinementErr != nil {
 		var zero T
-		return zero, &ValidationError{Issues: issuesFromError(refinementErr)}
+		return zero, validationIssues(ctx, issuesFromError(refinementErr))
 	}
 	if err := checkContext(ctx); err != nil {
 		var zero T

@@ -67,7 +67,7 @@ func (s RecordSchema[K, V]) ParseContext(ctx context.Context, value any) (map[K]
 		}
 	}
 	if !ok {
-		return nil, validationError(invalidType("map[string]any", value))
+		return nil, validationError(ctx, invalidType("map[string]any", value))
 	}
 	var issues []Issue
 	for _, rule := range s.rules {
@@ -76,7 +76,7 @@ func (s RecordSchema[K, V]) ParseContext(ctx context.Context, value any) (map[K]
 		}
 	}
 	if len(issues) != 0 {
-		return nil, &ValidationError{Issues: issues}
+		return nil, validationIssues(ctx, issues)
 	}
 
 	keys := make([]string, 0, len(input))
@@ -112,7 +112,9 @@ func (s RecordSchema[K, V]) ParseContext(ctx context.Context, value any) (map[K]
 		}
 		if _, duplicate := result[parsedKey]; duplicate {
 			var capped bool
-			issues, capped = appendIssuesBounded(issues, Issue{Code: CodeInvalidValue, Path: Path{FieldPath(rawKey)}, Message: "key duplicates another parsed key", Expected: "unique parsed key", Received: parsedKey})
+			dup := keyedIssue(CodeInvalidValue, "invalid_value.duplicate_key", "unique parsed key", parsedKey)
+			dup.Path = Path{FieldPath(rawKey)}
+			issues, capped = appendIssuesBounded(issues, dup)
 			if capped {
 				break
 			}
@@ -121,14 +123,14 @@ func (s RecordSchema[K, V]) ParseContext(ctx context.Context, value any) (map[K]
 		result[parsedKey] = parsedValue
 	}
 	if len(issues) != 0 {
-		return nil, &ValidationError{Issues: issues}
+		return nil, validationIssues(ctx, issues)
 	}
 	refinementIssues, err := runRefinements(ctx, result, s.refinements)
 	if err != nil {
 		return nil, err
 	}
 	if len(refinementIssues) != 0 {
-		return nil, &ValidationError{Issues: refinementIssues}
+		return nil, validationIssues(ctx, refinementIssues)
 	}
 	return result, nil
 }

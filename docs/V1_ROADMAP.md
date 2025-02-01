@@ -8,7 +8,8 @@ behavioral guarantees are ready to remain compatible.
 
 The dependency-free Go 1.24+ core already covers primitives, generic numbers,
 collections, typed objects, transformations, refinements, explicit coercion,
-metadata, JSON parsing, JSON Schema Draft 2020-12, OpenAPI 3.1, and `net/http`.
+metadata, JSON parsing, JSON Schema Draft 2020-12, and OpenAPI 3.1.
+HTTP handlers use the root `shape` JSON APIs directly.
 Tuple, record, and named recursive schemas close the main composition gaps.
 
 ## Gate 1 — composition completeness
@@ -69,7 +70,7 @@ path.
 ## Gate 5 — documentation and release readiness
 
 - [x] Complete package docs and runnable examples for the full public surface
-- [x] Write migration notes for all pre-v1 API changes
+- [x] Keep architecture / API sketch / public-contract docs aligned with code
 - [x] Verify README, module path, Go version, license, CI, and changelog
 - [x] Run the release checklist on Go 1.24 and current Go with a clean tracked
   tree

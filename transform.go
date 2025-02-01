@@ -40,7 +40,7 @@ func (s transformSchema[A, B]) ParseContext(ctx context.Context, value any) (B, 
 	}
 	if transformErr != nil {
 		var zero B
-		return zero, validationError(Issue{
+		return zero, validationError(ctx, Issue{
 			Code:    CodeTransformFailed,
 			Message: transformErr.Error(),
 		})

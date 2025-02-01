@@ -7,24 +7,44 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 )
 
 // ErrJSONTooLarge is returned when a reader exceeds an explicit byte limit.
 var ErrJSONTooLarge = errors.New("shape: JSON input too large")
 
-// ParseJSON decodes exactly one JSON value and parses it with schema. JSON
-// numbers retain their lexical representation until a numeric schema handles
-// them, avoiding float64 precision loss.
-func ParseJSON[T any](schema Schema[T], data []byte) (T, error) {
-	return ParseJSONContext(context.Background(), schema, data)
+// jsonText is JSON input as either UTF-8 text or raw bytes.
+type jsonText interface {
+	~string | ~[]byte
 }
 
-// ParseJSONContext is ParseJSON with context propagation.
-func ParseJSONContext[T any](ctx context.Context, schema Schema[T], data []byte) (T, error) {
+// Parse decodes exactly one JSON value and validates it with schema.
+// data may be a string or []byte. For already-decoded Go values, call
+// schema.Parse instead.
+//
+// JSON numbers retain their lexical representation until a numeric schema
+// handles them, avoiding float64 precision loss.
+func Parse[T any, B jsonText](schema Schema[T], data B) (T, error) {
+	return ParseContext(context.Background(), schema, data)
+}
+
+// ParseContext is Parse with context propagation.
+func ParseContext[T any, B jsonText](ctx context.Context, schema Schema[T], data B) (T, error) {
 	if schema == nil {
 		panic("shape: JSON schema must not be nil")
 	}
-	return parseJSONReader(ctx, schema, bytes.NewReader(data))
+	return parseJSONReader(ctx, schema, openJSONText(data))
+}
+
+func openJSONText[B jsonText](data B) io.Reader {
+	switch value := any(data).(type) {
+	case string:
+		return strings.NewReader(value)
+	case []byte:
+		return bytes.NewReader(value)
+	default:
+		return bytes.NewReader([]byte(data))
+	}
 }
 
 func parseJSONReader[T any](ctx context.Context, schema Schema[T], reader io.Reader) (T, error) {
@@ -46,13 +66,13 @@ func parseJSONReader[T any](ctx context.Context, schema Schema[T], reader io.Rea
 	return schema.ParseContext(ctx, input)
 }
 
-// ParseJSONReader reads, decodes, and parses exactly one JSON value.
-func ParseJSONReader[T any](schema Schema[T], reader io.Reader) (T, error) {
-	return ParseJSONReaderContext(context.Background(), schema, reader)
+// ParseReader reads, decodes, and parses exactly one JSON value.
+func ParseReader[T any](schema Schema[T], reader io.Reader) (T, error) {
+	return ParseReaderContext(context.Background(), schema, reader)
 }
 
-// ParseJSONReaderContext is ParseJSONReader with context propagation.
-func ParseJSONReaderContext[T any](ctx context.Context, schema Schema[T], reader io.Reader) (T, error) {
+// ParseReaderContext is ParseReader with context propagation.
+func ParseReaderContext[T any](ctx context.Context, schema Schema[T], reader io.Reader) (T, error) {
 	var zero T
 	if reader == nil {
 		return zero, errors.New("shape: JSON reader must not be nil")
@@ -63,14 +83,14 @@ func ParseJSONReaderContext[T any](ctx context.Context, schema Schema[T], reader
 	return parseJSONReader(ctx, schema, reader)
 }
 
-// ParseJSONReaderLimit reads, decodes, and parses exactly one JSON value while
+// ParseReaderLimit reads, decodes, and parses exactly one JSON value while
 // rejecting input streams larger than maxBytes.
-func ParseJSONReaderLimit[T any](schema Schema[T], reader io.Reader, maxBytes int64) (T, error) {
-	return ParseJSONReaderLimitContext(context.Background(), schema, reader, maxBytes)
+func ParseReaderLimit[T any](schema Schema[T], reader io.Reader, maxBytes int64) (T, error) {
+	return ParseReaderLimitContext(context.Background(), schema, reader, maxBytes)
 }
 
-// ParseJSONReaderLimitContext is ParseJSONReaderLimit with context propagation.
-func ParseJSONReaderLimitContext[T any](ctx context.Context, schema Schema[T], reader io.Reader, maxBytes int64) (T, error) {
+// ParseReaderLimitContext is ParseReaderLimit with context propagation.
+func ParseReaderLimitContext[T any](ctx context.Context, schema Schema[T], reader io.Reader, maxBytes int64) (T, error) {
 	var zero T
 	if reader == nil {
 		return zero, errors.New("shape: JSON reader must not be nil")

@@ -39,16 +39,16 @@ func (s BoolSchema) ParseContext(ctx context.Context, value any) (bool, error) {
 	}
 	if !ok {
 		if s.coerce && isBoolCoercionCandidate(value) {
-			return false, validationError(Issue{Code: CodeInvalidValue, Message: "cannot be converted to bool", Expected: "true, false, 1, or 0", Received: value})
+			return false, validationError(ctx, keyedIssue(CodeInvalidValue, "invalid_value.bool_coerce", "true, false, 1, or 0", value))
 		}
-		return false, validationError(invalidType("bool", value))
+		return false, validationError(ctx, invalidType("bool", value))
 	}
 	issues, err := runRefinements(ctx, parsed, s.refinements)
 	if err != nil {
 		return false, err
 	}
 	if len(issues) != 0 {
-		return false, &ValidationError{Issues: issues}
+		return false, validationIssues(ctx, issues)
 	}
 	return parsed, nil
 }

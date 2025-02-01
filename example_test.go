@@ -64,6 +64,16 @@ func ExampleValidationError() {
 	// $
 }
 
+func ExampleWithLocale() {
+	ctx := shape.WithLocale(context.Background(), "zh-CN")
+	_, err := shape.String().Min(3).ParseContext(ctx, "x")
+	var validation *shape.ValidationError
+	if errors.As(err, &validation) {
+		fmt.Println(validation.Issues[0].Message)
+	}
+	// Output: 至少需要 3 个字符
+}
+
 func ExampleTuple() {
 	type Point struct {
 		X int
@@ -220,17 +230,31 @@ func ExampleRefineContext() {
 	// Output: available <nil>
 }
 
-func ExampleParseJSON() {
-	values, err := shape.ParseJSON(shape.Slice(shape.Int()), []byte(`[1,2,3]`))
+func ExampleParse() {
+	type User struct {
+		Name string
+		Age  int
+	}
+	f := shape.Fields[User]()
+	schema := shape.Object(
+		f.Str("name").Trim().Min(1).Set(func(user *User, value string) {
+			user.Name = value
+		}),
+		f.Int("age").Min(1).Set(func(user *User, value int) {
+			user.Age = value
+		}),
+	)
+
+	user, err := shape.Parse(schema, `{"name":" Pong ","age":30}`)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(values)
-	// Output: [1 2 3]
+	fmt.Println(user.Name, user.Age)
+	// Output: Pong 30
 }
 
-func ExampleParseJSONReaderLimit() {
-	value, err := shape.ParseJSONReaderLimit(shape.String(), strings.NewReader(`"value"`), 64)
+func ExampleParseReaderLimit() {
+	value, err := shape.ParseReaderLimit(shape.String(), strings.NewReader(`"value"`), 64)
 	if err != nil {
 		panic(err)
 	}

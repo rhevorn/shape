@@ -78,14 +78,14 @@ func (s TupleSchema[T]) ParseContext(ctx context.Context, value any) (T, error) 
 	}
 	input, ok := value.([]any)
 	if !ok {
-		return zero, validationError(invalidType("[]any", value))
+		return zero, validationError(ctx, invalidType("[]any", value))
 	}
 	if len(input) != len(s.items) {
 		code := CodeTooSmall
 		if len(input) > len(s.items) {
 			code = CodeTooBig
 		}
-		return zero, validationError(Issue{Code: code, Message: "must contain exactly the tuple length", Expected: len(s.items), Received: len(input)})
+		return zero, validationError(ctx, keyedIssue(code, "tuple.length", len(s.items), len(input)))
 	}
 
 	var candidate T
@@ -102,14 +102,14 @@ func (s TupleSchema[T]) ParseContext(ctx context.Context, value any) (T, error) 
 		}
 	}
 	if len(issues) != 0 {
-		return zero, &ValidationError{Issues: issues}
+		return zero, validationIssues(ctx, issues)
 	}
 	refinementIssues, err := runRefinements(ctx, candidate, s.refinements)
 	if err != nil {
 		return zero, err
 	}
 	if len(refinementIssues) != 0 {
-		return zero, &ValidationError{Issues: refinementIssues}
+		return zero, validationIssues(ctx, refinementIssues)
 	}
 	return candidate, nil
 }

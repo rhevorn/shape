@@ -32,7 +32,7 @@ func (s contextRefineSchema[T]) ParseContext(ctx context.Context, value any) (T,
 		if contextErr := contextError(err, ctx); contextErr != nil {
 			return zero, contextErr
 		}
-		return zero, &ValidationError{Issues: issuesFromError(err)}
+		return zero, validationIssues(ctx, issuesFromError(err))
 	}
 	if err := checkContext(ctx); err != nil {
 		return zero, err

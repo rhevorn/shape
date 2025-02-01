@@ -108,7 +108,7 @@ Exit criteria:
 
 Implement:
 
-- `ParseJSON` using `json.Decoder.UseNumber`
+- `Parse` using `json.Decoder.UseNumber`
 - Rejection of trailing JSON values
 - Package examples and API documentation
 - Benchmarks for primitives, slices, and valid/invalid nested objects

@@ -1,7 +1,7 @@
 # Architecture and Behavioral Decisions
 
-This document records the current pre-v1 implementation contract. It should
-change only with an intentional API or behavior decision.
+This document records the current implementation contract. Update it whenever
+the public API or parse behavior changes intentionally.
 
 ## Public shape
 
@@ -19,9 +19,9 @@ they never mutate a previously constructed schema. Any internal slices must be
 copied before append so two derived schemas cannot share writable backing
 storage.
 
-Primitive parsing uses type assertions, not reflection. Limited reflection may
-be considered later for convenience input shapes, but it is not part of v0.1's
-primitive core.
+Primitive parsing uses type assertions, not reflection. Reflection is allowed
+only at explicit adapter boundaries when Go cannot construct a named runtime
+type directly.
 
 ## Parse pipeline
 
@@ -43,6 +43,19 @@ validation issue.
 Validation failures return `*ValidationError`, containing one or more `Issue`
 values. Error codes are exported constants so callers do not depend on message
 text. `errors.As` must work for `*ValidationError`.
+
+Built-in issue messages come only from JSON catalogs under `messages/`
+(for example `en.json`, `zh-CN.json`). Templates may use `{{.Label}}`,
+`{{.Expected}}`, and similar placeholders. Custom `NewIssue` text and plain
+errors keep the caller-supplied message.
+
+`SetLanguage` sets the process-default catalog (the one intentional process
+default). `WithLocale(ctx, lang)` overrides it for a parse. `Localize` /
+`LocalizeContext` rewrite an existing `*ValidationError` for display.
+
+`Issue.Label` holds an optional display name. Attach it with
+`Field(...).Label("姓名")`, `shape.Label("年龄", schema)`, or the optional
+label argument on `Fields[T]().Str` / `Email` / `Int` / `Bool`.
 
 Paths are stored as typed field/index segments and formatted only for display.
 Composite schemas prefix child issues by copying the path; they never mutate an
@@ -78,27 +91,28 @@ Direct primitive constructors are strict:
 - `Float64` accepts `float64`
 - `Bool` accepts `bool`
 
-`ParseJSON` decodes using `json.Decoder.UseNumber`. Numeric schemas accept the
-standard library's `json.Number` representation and reject overflow,
-non-integral values for integers, and malformed numbers. This is explicit
-support for a numeric type used by the JSON adapter, not general string
-coercion. User-defined schemas passed to `ParseJSON` also receive ordinary
-`json.Number` values rather than a private adapter type.
+Package-level `Parse` / `ParseContext` accept JSON as `string` or `[]byte` and
+decode with `json.Decoder.UseNumber`. Numeric schemas accept `json.Number` and
+reject overflow, non-integral values for integers, and malformed numbers. This
+is support for the JSON adapter's number type, not general string coercion.
+Already-decoded Go values use `schema.Parse` / `schema.ParseContext` instead;
+those entry points do not auto-decode JSON text (a string schema must keep
+seeing strings).
 
-`ParseJSON` must consume exactly one JSON value and reject trailing non-space
+`Parse` must consume exactly one JSON value and reject trailing non-space
 input. JSON syntax/decoding failures are returned as ordinary errors, while
 schema failures remain `*ValidationError`.
 
 Reader helpers decode directly from the stream rather than buffering the full
-input. `ParseJSONReaderLimit` and its context variant use an explicit maximum
-byte count and return `ErrJSONTooLarge` when exceeded. The `net/http` adapter
-applies a 1 MiB limit by default.
+input. `ParseReaderLimit` and its context variant use an explicit maximum
+byte count and return `ErrJSONTooLarge` when exceeded. HTTP handlers typically
+pass `1 << 20` (1 MiB) or another app-specific limit.
 
 Composite results retain at most 100 issues, and each named `Lazy` schema has a
 64-level default recursion limit. These local immutable limits require no
 request-specific mutable state. JSON decoder nesting protection, byte-limited
-reader/HTTP adapters, collection `Max`, and context cancellation provide
-additional independent controls.
+readers, collection `Max`, and context cancellation provide additional
+independent controls.
 
 ## Collections
 
@@ -115,9 +129,20 @@ items so non-comparable inputs cannot restore unbounded quadratic work.
 
 ## Objects and fields
 
-`Field` returns a concrete generic field builder that satisfies an object-field
-interface. The setter's signature allows Go to infer both the object type and
-field value type:
+Preferred object construction for common scalars uses `Fields[T]()`:
+
+```go
+f := Fields[User]()
+Object(
+	f.Str("name", "姓名").Trim().Min(2).Set(func(user *User, value string) {
+		user.Name = value
+	}),
+	f.Int("age").Min(18).Set(func(user *User, age int) { user.Age = age }),
+)
+```
+
+`Field` remains for arbitrary nested schemas. The setter's signature allows Go
+to infer both the object type and field value type:
 
 ```go
 Field("age", Int(), func(user *User, age int) { user.Age = age })
@@ -162,7 +187,7 @@ generic parameters are not used because Go methods cannot introduce them.
 Refinement and transform callbacks are treated as immutable schema definition
 state. Callers are responsible for making captured state concurrency-safe.
 
-## Dependency and compatibility policy
+## Dependency policy
 
 The module targets Go 1.24 and newer and uses only the Go standard library.
 Generics are the preferred mechanism for preserving relationships between
@@ -198,28 +223,29 @@ the first successful result. `OneOf` evaluates every alternative and succeeds
 only when exactly one parses successfully. Their JSON Schema representations
 are `anyOf` and `oneOf`, respectively.
 
-## Public compatibility decisions
+## Intentional decisions
 
 - Email validation accepts plain mailbox addresses parsed by `net/mail`; display
-  names are rejected, and deliverability is explicitly out of scope.
-- Error codes and structured fields are API. Human-readable messages may improve
-  between minor releases and should not be parsed by applications.
+  names are rejected, and deliverability is out of scope.
+- Error codes, paths, and structured `Issue` fields are the machine API.
+  Catalog message text is for humans and may change; prefer codes and paths.
 - Invalid schema construction parameters panic because they are programmer
   errors; untrusted input never causes a construction panic.
 - Concrete builders should be created with their constructor functions. A useful
   zero value is not promised for composites that require child definitions.
 - `CoerceFloat` is an intentional convenience alias for `CoerceFloat64`.
+- There is no dedicated `net/http` adapter; handlers call root JSON helpers.
 
 The repository is licensed under MIT.
 
-## Extended implementation status
+## Current surface
 
-The self-contained v0.2 features are implemented: enum, literal, same-output
-unions, nullable values, explicit coercion, time/duration, URL/UUID/IP, and
-context-aware refinements. v0.3 metadata and JSON Schema Draft 2020-12 export
-are implemented. Standard-library v0.4 adapters cover OpenAPI 3.1 and
-`net/http` without adding dependencies.
+Implemented in the root module: primitives, generic numbers, collections,
+typed objects (`Field` and `Fields`), transforms, refinements, explicit
+coercion, time/duration, URL/UUID/IP, enum/literal/union/oneOf/nullable,
+lazy recursion, JSON parse helpers, metadata/`Annotate`, locale catalogs, and
+labels. Stdlib-only adapters cover JSON Schema Draft 2020-12 and OpenAPI 3.1
+export (`jsonschema`, `openapi` packages).
 
-Framework-specific adapters remain separate future work because adding Gin,
-Echo, Fiber, or similar frameworks to the root module would violate the
-dependency-light core and requires choosing concrete external API versions.
+Framework-specific integrations (Gin, Echo, Fiber, and similar) stay out of
+the root module so ordinary users do not inherit third-party dependency graphs.

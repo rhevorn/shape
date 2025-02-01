@@ -35,12 +35,7 @@ func contextError(err error, ctx context.Context) error {
 
 func invalidType(expected string, received any) Issue {
 	actual := typeNameOf(received)
-	return Issue{
-		Code:     CodeInvalidType,
-		Message:  fmt.Sprintf("expected %s, received %s", expected, actual),
-		Expected: expected,
-		Received: actual,
-	}
+	return keyedIssue(CodeInvalidType, "invalid_type", expected, actual)
 }
 
 func typeNameOf(value any) string {

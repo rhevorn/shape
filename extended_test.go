@@ -104,10 +104,10 @@ func TestEnumLiteralAndUnion(t *testing.T) {
 		t.Fatalf("Enum = %q, %v", got, err)
 	}
 	requireIssueCodes(t, parseError(colors, "yellow"), CodeInvalidEnum)
-	if got, err := ParseJSON(Enum(1, 2, 3), []byte(`2`)); err != nil || got != 2 {
+	if got, err := Parse(Enum(1, 2, 3), []byte(`2`)); err != nil || got != 2 {
 		t.Fatalf("numeric JSON enum = %d, %v", got, err)
 	}
-	if got, err := ParseJSON(Literal(42), []byte(`42`)); err != nil || got != 42 {
+	if got, err := Parse(Literal(42), []byte(`42`)); err != nil || got != 42 {
 		t.Fatalf("numeric JSON literal = %d, %v", got, err)
 	}
 	requireIssueCodes(t, parseError(Literal("fixed"), "other"), CodeInvalidValue)
@@ -130,7 +130,7 @@ func TestEnumLiteralAndUnion(t *testing.T) {
 	requirePanic(t, func() { Union[string]() })
 
 	type status string
-	if got, err := ParseJSON(Enum(status("open"), status("closed")), []byte(`"open"`)); err != nil || got != status("open") {
+	if got, err := Parse(Enum(status("open"), status("closed")), []byte(`"open"`)); err != nil || got != status("open") {
 		t.Fatalf("named string enum = %q, %v", got, err)
 	}
 }

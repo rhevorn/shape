@@ -1,6 +1,6 @@
 # Performance Baseline
 
-This is an informational pre-v1 baseline, not a compatibility guarantee.
+Informational baseline until `v1.0.0` is tagged; not a stability promise.
 Measurements were recorded on 2026-09-03 with Go 1.27.0 on Darwin/arm64,
 Apple M5 Pro, using:
 

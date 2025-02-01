@@ -1,6 +1,7 @@
 package shape
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -16,7 +17,7 @@ func TestIssueAndValidationError(t *testing.T) {
 		Expected: 18,
 		Received: 16,
 	}
-	err := validationError(issue)
+	err := validationError(context.Background(), issue)
 
 	var validation *ValidationError
 	if !errors.As(err, &validation) {

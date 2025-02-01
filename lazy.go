@@ -135,12 +135,7 @@ func (s LazySchema[T]) ParseContext(ctx context.Context, value any) (T, error) {
 		ctx = context.WithValue(ctx, lazyDepthKey{}, depthState)
 	}
 	if !depthState.enter(s.state.id, limit) {
-		return zero, validationError(Issue{
-			Code:     CodeTooDeep,
-			Message:  "maximum recursive schema depth exceeded",
-			Expected: limit,
-			Received: limit + 1,
-		})
+		return zero, validationError(ctx, keyedIssue(CodeTooDeep, "too_deep", limit, limit+1))
 	}
 	defer depthState.leave(s.state.id)
 	resolved, err := s.resolve()

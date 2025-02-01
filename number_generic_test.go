@@ -17,7 +17,7 @@ func TestGenericNumberNamedTypes(t *testing.T) {
 	if got, err := percent.Parse(percentage(75)); err != nil || got != 75 {
 		t.Fatalf("named strict number = %v, %v", got, err)
 	}
-	if got, err := ParseJSON(percent, []byte(`75`)); err != nil || got != 75 {
+	if got, err := Parse(percent, []byte(`75`)); err != nil || got != 75 {
 		t.Fatalf("named JSON number = %v, %v", got, err)
 	}
 	requireIssueCodes(t, parseJSONError(percent, `256`), CodeInvalidNumber)
@@ -34,13 +34,13 @@ func TestGenericNumberNamedTypes(t *testing.T) {
 func TestGenericNumberUnsignedAndFloatBoundaries(t *testing.T) {
 	t.Parallel()
 
-	if got, err := ParseJSON(Number[uint64](), []byte(`18446744073709551615`)); err != nil || got != math.MaxUint64 {
+	if got, err := Parse(Number[uint64](), []byte(`18446744073709551615`)); err != nil || got != math.MaxUint64 {
 		t.Fatalf("uint64 maximum = %v, %v", got, err)
 	}
 	requireIssueCodes(t, parseJSONError(Number[uint64](), `18446744073709551616`), CodeInvalidNumber)
 	requireIssueCodes(t, parseJSONError(Number[uint64](), `-1`), CodeInvalidNumber)
 	requireIssueCodes(t, parseJSONError(Number[float32](), `1e100`), CodeInvalidNumber)
-	if got, err := ParseJSON(Number[uint64](), []byte(`184467440737095516150e-1`)); err != nil || got != math.MaxUint64 {
+	if got, err := Parse(Number[uint64](), []byte(`184467440737095516150e-1`)); err != nil || got != math.MaxUint64 {
 		t.Fatalf("scaled uint64 maximum = %v, %v", got, err)
 	}
 	requireIssueCodes(t, parseError(Number[uint64](), json.Number("1e600000000")), CodeInvalidNumber)

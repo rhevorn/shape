@@ -23,10 +23,9 @@ fmt.Println(value)
 // hello
 ```
 
-GoShape is moving directly toward a stable v1.0 API. No public release is
-planned before the v1 compatibility, hardening, and documentation gates are
-complete. Progress and remaining gates are tracked in
-[the v1 roadmap](docs/V1_ROADMAP.md).
+GoShape is moving toward a stable v1.0 API. No public release is tagged yet;
+progress is tracked in [the v1 roadmap](docs/V1_ROADMAP.md). Until then, treat
+the repository tip as the source of truth.
 
 ## Object schemas
 
@@ -37,22 +36,17 @@ type User struct {
 	Age   int
 }
 
-userSchema := shape.Object[User](
-	shape.Field(
-		"name",
-		shape.String().Trim().Min(2).Max(50),
-		func(user *User, value string) { user.Name = value },
-	),
-	shape.Field(
-		"email",
-		shape.String().Trim().Email(),
-		func(user *User, value string) { user.Email = value },
-	),
-	shape.Field(
-		"age",
-		shape.Int().Min(18).Max(120),
-		func(user *User, value int) { user.Age = value },
-	),
+f := shape.Fields[User]()
+userSchema := shape.Object(
+	f.Str("name", "姓名").Trim().Min(2).Max(50).Set(func(user *User, value string) {
+		user.Name = value
+	}),
+	f.Email("email", "邮箱").Trim().Set(func(user *User, value string) {
+		user.Email = value
+	}),
+	f.Int("age").Min(18).Max(120).Set(func(user *User, value int) {
+		user.Age = value
+	}),
 ).Strict()
 
 user, err := userSchema.Parse(map[string]any{
@@ -62,11 +56,22 @@ user, err := userSchema.Parse(map[string]any{
 })
 ```
 
-Fields are required by default. Use `Optional()` to permit a missing field or
-`Default(value)` to assign a deeply immutable typed default. Reference-bearing
-defaults use `DefaultFunc(func() T)` so every parse gets fresh state. Objects
-strip unknown input keys by default; `Strict()` reports them as
-`unknown_field` issues.
+The second argument to `Str` / `Email` / `Int` / `Bool` is an optional display
+label for validation messages. `Field(...)` remains available for custom
+schemas. Fields are required by default. Use `Optional()` to permit a missing
+field or `Default(value)` to assign a deeply immutable typed default.
+Reference-bearing defaults use `DefaultFunc(func() T)` so every parse gets
+fresh state. Objects strip unknown input keys by default; `Strict()` reports
+them as `unknown_field` issues.
+
+For real request bodies, prefer JSON helpers instead of building a `map` by
+hand:
+
+```go
+user, err := shape.Parse(userSchema, requestBody)
+// or
+user, err := shape.Parse(userSchema, `{"name":"Pong","email":"pong@example.com","age":30}`)
+```
 
 ## Collections and composition
 
@@ -138,17 +143,26 @@ as `users[3].address.zip` for display. Error codes are stable and do not require
 parsing human-readable messages. Composite validation retains at most 100
 issues by default and ends a truncated result with `too_many_issues`.
 
+Human-readable messages come only from JSON catalogs under `messages/`
+(for example `messages/en.json` and `messages/zh-CN.json`). Single-language
+apps can call `shape.SetLanguage("zh-CN")` once at startup. Per-request
+language uses `shape.WithLocale(ctx, "zh-CN")` with `ParseContext`.
+
+Field and value display names are set directly with `Field(...).Label("姓名")`
+or `shape.Label("年龄", shape.Int().Min(18))` and appear in issue messages as
+`{{.Label}}`.
+
 ## JSON
 
 ```go
-user, err := shape.ParseJSON(userSchema, requestBody)
+user, err := shape.Parse(userSchema, requestBody)
 ```
 
-JSON is an adapter, not GoShape's core representation. `ParseJSON` accepts
+JSON is an adapter, not GoShape's core representation. `Parse` accepts
 exactly one JSON value and retains numeric precision with `encoding/json.Number`.
-Context and reader variants are available as `ParseJSONContext`,
-`ParseJSONReader`, and `ParseJSONReaderContext`. For an untrusted stream, use
-`ParseJSONReaderLimit` or `ParseJSONReaderLimitContext` to enforce a byte limit.
+Context and reader variants are available as `ParseContext`,
+`ParseReader`, and `ParseReaderContext`. For an untrusted stream, use
+`ParseReaderLimit` or `ParseReaderLimitContext` to enforce a byte limit.
 
 ## Explicit coercion
 
@@ -189,7 +203,9 @@ Dependency-free adapters are available at:
 
 - `github.com/rhevorn/shape/jsonschema`
 - `github.com/rhevorn/shape/openapi`
-- `github.com/rhevorn/shape/http` (package name `shapehttp`)
+
+HTTP handlers should call `shape.Parse` / `shape.ParseReaderLimitContext`
+directly; there is no separate `net/http` adapter package.
 
 ## Schemas and rules
 
@@ -204,8 +220,8 @@ Dependency-free adapters are available at:
 - `Record`: typed key and value schemas, `Min`, `Max`, `NonEmpty`, `Refine`
 - `Tuple`: fixed-length heterogeneous positions with typed setters
 - `Object`: `Strict`, `Strip`, `Refine`
-- Composition: `Field`, `Optional`, `Default`, `Transform`, `Refine`,
-  `DefaultFunc`, `RefineContext`
+- Composition: `Fields` / `Field`, `Optional`, `Default`, `DefaultFunc`,
+  `Label`, `Transform`, `Refine`, `RefineContext`, `Annotate`
 
 ## Design goals
 
@@ -226,11 +242,12 @@ make test-race
 make fuzz-smoke
 ```
 
-See [the v1 roadmap](docs/V1_ROADMAP.md), [compatibility
-policy](docs/COMPATIBILITY.md), [performance baseline](docs/BENCHMARKS.md),
-[pre-v1 migration notes](docs/PRE_V1_MIGRATION.md), [the original development
+See [the v1 roadmap](docs/V1_ROADMAP.md), [public
+contract](docs/COMPATIBILITY.md), [API sketch](docs/API_SKETCH.md),
+[architecture](docs/ARCHITECTURE.md), [performance
+baseline](docs/BENCHMARKS.md), [the original development
 plan](docs/DEVELOPMENT_PLAN.md), [security policy](SECURITY.md), and
-[contribution guide](CONTRIBUTING.md) for scope and release checks.
+[contribution guide](CONTRIBUTING.md).
 
 ## License
 

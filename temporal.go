@@ -57,17 +57,17 @@ func (s TimeSchema) ParseContext(ctx context.Context, value any) (time.Time, err
 	if !ok {
 		if s.coerce {
 			if _, isString := value.(string); isString {
-				return time.Time{}, validationError(Issue{Code: CodeInvalidFormat, Message: "cannot parse time using the configured layouts", Expected: s.layouts, Received: value})
+				return time.Time{}, validationError(ctx, keyedIssue(CodeInvalidFormat, "invalid_format.time", s.layouts, value))
 			}
 		}
-		return time.Time{}, validationError(invalidType("time.Time", value))
+		return time.Time{}, validationError(ctx, invalidType("time.Time", value))
 	}
 	issues, err := runRefinements(ctx, parsed, s.refinements)
 	if err != nil {
 		return time.Time{}, err
 	}
 	if len(issues) != 0 {
-		return time.Time{}, &ValidationError{Issues: issues}
+		return time.Time{}, validationIssues(ctx, issues)
 	}
 	return parsed, nil
 }
@@ -119,17 +119,17 @@ func (s DurationSchema) ParseContext(ctx context.Context, value any) (time.Durat
 	if !ok {
 		if s.coerce {
 			if _, isString := value.(string); isString {
-				return 0, validationError(Issue{Code: CodeInvalidFormat, Message: "cannot parse Go duration", Expected: "Go duration", Received: value})
+				return 0, validationError(ctx, keyedIssue(CodeInvalidFormat, "invalid_format.duration", "Go duration", value))
 			}
 		}
-		return 0, validationError(invalidType("time.Duration", value))
+		return 0, validationError(ctx, invalidType("time.Duration", value))
 	}
 	issues, err := runRefinements(ctx, parsed, s.refinements)
 	if err != nil {
 		return 0, err
 	}
 	if len(issues) != 0 {
-		return 0, &ValidationError{Issues: issues}
+		return 0, validationIssues(ctx, issues)
 	}
 	return parsed, nil
 }

@@ -2,10 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/rhevorn/shape"
-	shapehttp "github.com/rhevorn/shape/http"
 )
 
 type CreateUserRequest struct {
@@ -13,28 +13,45 @@ type CreateUserRequest struct {
 	Email string
 }
 
-var createUserSchema = shape.Object[CreateUserRequest](
-	shape.Field("name", shape.String().Trim().Min(2), func(request *CreateUserRequest, value string) {
-		request.Name = value
-	}),
-	shape.Field("email", shape.String().Trim().Email(), func(request *CreateUserRequest, value string) {
-		request.Email = value
-	}),
-).Strict()
+var createUserSchema = func() shape.ObjectSchema[CreateUserRequest] {
+	f := shape.Fields[CreateUserRequest]()
+	return shape.Object(
+		f.Str("name").Trim().Min(2).Set(func(request *CreateUserRequest, value string) {
+			request.Name = value
+		}),
+		f.Email("email").Trim().Set(func(request *CreateUserRequest, value string) {
+			request.Email = value
+		}),
+	).Strict()
+}()
 
-func createUser(response http.ResponseWriter, request *http.Request) {
-	input, err := shapehttp.DecodeJSON(request, createUserSchema)
+func createUser(w http.ResponseWriter, r *http.Request) {
+	input, err := shape.ParseReaderLimitContext(r.Context(), createUserSchema, r.Body, 1<<20)
 	if err != nil {
-		if shapehttp.WriteValidationError(response, http.StatusUnprocessableEntity, err) {
+		// Simple alternative: plain-text summary via err.Error(), e.g.
+		//   "validation failed: name: String must contain at least 2 character(s)"
+		//   "validation failed with 2 issues; first issue: ..."
+		// http.Error(w, err.Error(), http.StatusBadRequest)
+		// return
+
+		var validation *shape.ValidationError
+		if errors.As(err, &validation) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_ = json.NewEncoder(w).Encode(map[string]any{"issues": validation.Issues})
 			return
 		}
-		http.Error(response, err.Error(), http.StatusBadRequest)
+		if errors.Is(err, shape.ErrJSONTooLarge) {
+			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	response.Header().Set("Content-Type", "application/json")
-	response.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(response).Encode(input)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(input)
 }
 
 func main() {

@@ -11,11 +11,26 @@ v1.0.0 and will use Semantic Versioning from that point onward.
 
 - Renamed the root package and module path from `goshape` /
   `github.com/rhevorn/goshape` to `shape` / `github.com/rhevorn/shape`
-- Renamed the HTTP adapter package from `goshapehttp` to `shapehttp`
 - Renamed JSON Schema vendor extensions from `x-goshape-*` to `x-shape-*`
+
+### Removed
+
+- Dropped the `shape/http` (`shapehttp`) adapter; use `shape.Parse` /
+  `ParseReaderLimitContext` and handle `*ValidationError` in the handler
+- Dropped `docs/PRE_V1_MIGRATION.md`; the tip API is documented in the README
+  and `docs/` without a migration trail
 
 ### Added
 
+- Locale-aware validation messages via `SetLanguage`, `WithLocale`, and JSON
+  message catalogs under `messages/` (built-in issue text comes only from
+  catalogs; code no longer embeds natural-language messages)
+- `Label` / `Field.Label` for human-readable names interpolated into issue
+  messages as `{{.Label}}`
+- Fluent object fields via `Fields[T]()`: `Str` / `Email` / `Int` / `Bool` with
+  optional display label and terminal `Set`
+- Package-level `Parse` / `ParseContext` / `ParseReader*` for JSON input
+  (`string` or `[]byte`); `schema.Parse` remains for decoded Go values
 - Generic `Schema[T]` contract with context-aware parsing
 - Structured validation issues and typed field/index paths
 - String, int, int64, float64, and bool schemas
@@ -30,7 +45,7 @@ v1.0.0 and will use Semantic Versioning from that point onward.
 - Time, duration, URL, UUID, and IP schemas
 - Additional string, number, and collection rules
 - Schema metadata and JSON Schema Draft 2020-12 export
-- OpenAPI 3.1, net/http, and dedicated JSON Schema adapters
+- OpenAPI 3.1 and dedicated JSON Schema adapters
 - Reader- and context-aware JSON helpers
 - Go 1.24 minimum version and generic `Number[T]`/`CoerceNumber[T]` schemas for
   named signed, unsigned, and floating-point types

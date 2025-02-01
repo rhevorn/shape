@@ -23,7 +23,7 @@ func FuzzIntJSON(f *testing.F) {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, input string) {
-		_, _ = ParseJSON(Int64(), []byte(input))
+		_, _ = Parse(Int64(), []byte(input))
 	})
 }
 
@@ -32,8 +32,8 @@ func FuzzGenericNumberJSON(f *testing.F) {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, input string) {
-		_, _ = ParseJSON(Number[uint8](), []byte(input))
-		_, _ = ParseJSON(Number[float32](), []byte(input))
+		_, _ = Parse(Number[uint8](), []byte(input))
+		_, _ = Parse(Number[float32](), []byte(input))
 	})
 }
 
@@ -54,7 +54,7 @@ func FuzzObject(f *testing.F) {
 	})
 }
 
-func FuzzParseJSON(f *testing.F) {
+func FuzzParse(f *testing.F) {
 	for _, seed := range [][]byte{
 		[]byte(`{"name":"Pong","email":"pong@example.com","age":30}`),
 		[]byte(`null`),
@@ -65,7 +65,7 @@ func FuzzParseJSON(f *testing.F) {
 	}
 	schema := testUserSchema().Strict()
 	f.Fuzz(func(t *testing.T, input []byte) {
-		_, _ = ParseJSON(schema, input)
+		_, _ = Parse(schema, input)
 	})
 }
 
@@ -79,7 +79,7 @@ func FuzzTupleJSON(f *testing.F) {
 	}
 	schema := coordinateSchema()
 	f.Fuzz(func(t *testing.T, input []byte) {
-		_, _ = ParseJSON(schema, input)
+		_, _ = Parse(schema, input)
 	})
 }
 
@@ -93,7 +93,7 @@ func FuzzRecordJSON(f *testing.F) {
 	}
 	schema := Record(String().ToLower().NonEmpty(), Int())
 	f.Fuzz(func(t *testing.T, input []byte) {
-		_, _ = ParseJSON(schema, input)
+		_, _ = Parse(schema, input)
 	})
 }
 
@@ -107,7 +107,7 @@ func FuzzLazyJSON(f *testing.F) {
 	}
 	schema := treeSchema(nil)
 	f.Fuzz(func(t *testing.T, input []byte) {
-		_, _ = ParseJSON(schema, input)
+		_, _ = Parse(schema, input)
 	})
 }
 
@@ -139,7 +139,7 @@ func FuzzJSONSchemaExport(f *testing.F) {
 	})
 }
 
-func FuzzParseJSONReaderLimit(f *testing.F) {
+func FuzzParseReaderLimit(f *testing.F) {
 	for _, seed := range []struct {
 		data  []byte
 		limit uint16
@@ -152,7 +152,7 @@ func FuzzParseJSONReaderLimit(f *testing.F) {
 	}
 	schema := testUserSchema().Strict()
 	f.Fuzz(func(t *testing.T, input []byte, limit uint16) {
-		_, _ = ParseJSONReaderLimit(schema, bytes.NewReader(input), int64(limit))
+		_, _ = ParseReaderLimit(schema, bytes.NewReader(input), int64(limit))
 	})
 }
 

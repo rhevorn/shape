@@ -41,7 +41,7 @@ func (s EnumSchema[T]) ParseContext(ctx context.Context, value any) (T, error) {
 	}
 	parsed, ok := parseComparable[T](value)
 	if !ok {
-		return zero, validationError(invalidType(genericTypeName[T](), value))
+		return zero, validationError(ctx, invalidType(genericTypeName[T](), value))
 	}
 	for _, allowed := range s.values {
 		if parsed == allowed {
@@ -50,12 +50,12 @@ func (s EnumSchema[T]) ParseContext(ctx context.Context, value any) (T, error) {
 				return zero, err
 			}
 			if len(issues) != 0 {
-				return zero, &ValidationError{Issues: issues}
+				return zero, validationIssues(ctx, issues)
 			}
 			return parsed, nil
 		}
 	}
-	return zero, validationError(Issue{Code: CodeInvalidEnum, Message: "must be one of the allowed values", Expected: s.values, Received: parsed})
+	return zero, validationError(ctx, keyedIssue(CodeInvalidEnum, "invalid_enum", s.values, parsed))
 }
 
 func (s EnumSchema[T]) buildJSONSchema(_ *jsonSchemaBuildContext) (map[string]any, error) {
@@ -84,10 +84,10 @@ func (s LiteralSchema[T]) ParseContext(ctx context.Context, value any) (T, error
 	}
 	parsed, ok := parseComparable[T](value)
 	if !ok {
-		return zero, validationError(invalidType(genericTypeName[T](), value))
+		return zero, validationError(ctx, invalidType(genericTypeName[T](), value))
 	}
 	if parsed != s.value {
-		return zero, validationError(Issue{Code: CodeInvalidValue, Message: "must equal the literal value", Expected: s.value, Received: parsed})
+		return zero, validationError(ctx, keyedIssue(CodeInvalidValue, "invalid_value.literal", s.value, parsed))
 	}
 	return parsed, nil
 }

@@ -3,7 +3,6 @@ package shape
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -110,15 +109,15 @@ func (s IntSchema) ParseContext(ctx context.Context, value any) (int, error) {
 			if parseOK {
 				parsed, ok = int(parsed64), true
 			} else {
-				return 0, invalidJSONIntegerError("int", encoded)
+				return 0, invalidJSONIntegerError(ctx, "int", encoded)
 			}
 		}
 	}
 	if !ok {
 		if s.coerce && isNumericCoercionCandidate(value) {
-			return 0, validationError(Issue{Code: CodeInvalidNumber, Message: "cannot be converted to int", Expected: "int", Received: value})
+			return 0, validationError(ctx, keyedIssue(CodeInvalidNumber, "number.coerce", "int", value))
 		}
-		return 0, validationError(invalidType("int", value))
+		return 0, validationError(ctx, invalidType("int", value))
 	}
 	return parseNumber(ctx, parsed, s.rules, s.refinements)
 }
@@ -219,15 +218,15 @@ func (s Int64Schema) ParseContext(ctx context.Context, value any) (int64, error)
 		if encoded, encodedOK := value.(json.Number); encodedOK {
 			parsed, ok = parseJSONInteger(string(encoded), 64)
 			if !ok {
-				return 0, invalidJSONIntegerError("int64", encoded)
+				return 0, invalidJSONIntegerError(ctx, "int64", encoded)
 			}
 		}
 	}
 	if !ok {
 		if s.coerce && isNumericCoercionCandidate(value) {
-			return 0, validationError(Issue{Code: CodeInvalidNumber, Message: "cannot be converted to int64", Expected: "int64", Received: value})
+			return 0, validationError(ctx, keyedIssue(CodeInvalidNumber, "number.coerce", "int64", value))
 		}
-		return 0, validationError(invalidType("int64", value))
+		return 0, validationError(ctx, invalidType("int64", value))
 	}
 	return parseNumber(ctx, parsed, s.rules, s.refinements)
 }
@@ -328,28 +327,18 @@ func (s Float64Schema) ParseContext(ctx context.Context, value any) (float64, er
 		if encoded, encodedOK := value.(json.Number); encodedOK {
 			parsed, ok = parseJSONFloat(string(encoded))
 			if !ok {
-				return 0, validationError(Issue{
-					Code:     CodeInvalidNumber,
-					Message:  "must be a finite float64 number",
-					Expected: "float64",
-					Received: encoded.String(),
-				})
+				return 0, validationError(ctx, keyedIssue(CodeInvalidNumber, "number.finite_float64", "float64", encoded.String()))
 			}
 		}
 	}
 	if !ok {
 		if s.coerce && isNumericCoercionCandidate(value) {
-			return 0, validationError(Issue{Code: CodeInvalidNumber, Message: "cannot be converted to float64", Expected: "float64", Received: value})
+			return 0, validationError(ctx, keyedIssue(CodeInvalidNumber, "number.coerce", "float64", value))
 		}
-		return 0, validationError(invalidType("float64", value))
+		return 0, validationError(ctx, invalidType("float64", value))
 	}
 	if math.IsNaN(parsed) || math.IsInf(parsed, 0) {
-		return 0, validationError(Issue{
-			Code:     CodeInvalidNumber,
-			Message:  "must be a finite number",
-			Expected: "finite float64",
-			Received: parsed,
-		})
+		return 0, validationError(ctx, keyedIssue(CodeInvalidNumber, "number.finite", "finite float64", parsed))
 	}
 	return parseNumber(ctx, parsed, s.rules, s.refinements)
 }
@@ -367,41 +356,33 @@ func (s Float64Schema) buildJSONSchema(_ *jsonSchemaBuildContext) (map[string]an
 
 func lowerRule[N number](bound N, inclusive bool) numberRule[N] {
 	return func(value N) *Issue {
+		key := "number.gt"
 		valid := value > bound
-		comparison := "greater than"
 		if inclusive {
+			key = "number.gte"
 			valid = value >= bound
-			comparison = "greater than or equal to"
 		}
 		if valid {
 			return nil
 		}
-		return &Issue{
-			Code:     CodeTooSmall,
-			Message:  fmt.Sprintf("must be %s %v", comparison, bound),
-			Expected: bound,
-			Received: value,
-		}
+		issue := keyedIssue(CodeTooSmall, key, bound, value)
+		return &issue
 	}
 }
 
 func upperRule[N number](bound N, inclusive bool) numberRule[N] {
 	return func(value N) *Issue {
+		key := "number.lt"
 		valid := value < bound
-		comparison := "less than"
 		if inclusive {
+			key = "number.lte"
 			valid = value <= bound
-			comparison = "less than or equal to"
 		}
 		if valid {
 			return nil
 		}
-		return &Issue{
-			Code:     CodeTooBig,
-			Message:  fmt.Sprintf("must be %s %v", comparison, bound),
-			Expected: bound,
-			Received: value,
-		}
+		issue := keyedIssue(CodeTooBig, key, bound, value)
+		return &issue
 	}
 }
 
@@ -413,7 +394,8 @@ func numberOneOfRule[N number](allowed []N) numberRule[N] {
 				return nil
 			}
 		}
-		return &Issue{Code: CodeInvalidEnum, Message: "must be one of the allowed values", Expected: values, Received: value}
+		issue := keyedIssue(CodeInvalidEnum, "invalid_enum", values, value)
+		return &issue
 	}
 }
 
@@ -444,7 +426,7 @@ func parseNumber[N number](ctx context.Context, value N, rules []numberRule[N], 
 	issues, _ = appendIssuesBounded(issues, refinementIssues...)
 	if len(issues) != 0 {
 		var zero N
-		return zero, &ValidationError{Issues: issues}
+		return zero, validationIssues(ctx, issues)
 	}
 	return value, nil
 }
@@ -606,13 +588,8 @@ func parseJSONFloat(value string) (float64, bool) {
 	return parsed, true
 }
 
-func invalidJSONIntegerError(expected string, value json.Number) error {
-	return validationError(Issue{
-		Code:     CodeInvalidNumber,
-		Message:  "must be an integer within the target type's range",
-		Expected: expected,
-		Received: value.String(),
-	})
+func invalidJSONIntegerError(ctx context.Context, expected string, value json.Number) error {
+	return validationError(ctx, keyedIssue(CodeInvalidNumber, "number.json_integer", expected, value.String()))
 }
 
 // CoerceInt returns an int schema that explicitly accepts lossless numeric and

@@ -65,7 +65,7 @@ func (s MapSchema[T]) ParseContext(ctx context.Context, value any) (map[string]T
 		}
 	}
 	if !ok {
-		return nil, validationError(invalidType("map[string]any", value))
+		return nil, validationError(ctx, invalidType("map[string]any", value))
 	}
 
 	var issues []Issue
@@ -75,7 +75,7 @@ func (s MapSchema[T]) ParseContext(ctx context.Context, value any) (map[string]T
 		}
 	}
 	if len(issues) != 0 {
-		return nil, &ValidationError{Issues: issues}
+		return nil, validationIssues(ctx, issues)
 	}
 	keys := make([]string, 0, len(input))
 	for key := range input {
@@ -103,7 +103,7 @@ func (s MapSchema[T]) ParseContext(ctx context.Context, value any) (map[string]T
 		result[key] = parsed
 	}
 	if len(issues) != 0 {
-		return nil, &ValidationError{Issues: issues}
+		return nil, validationIssues(ctx, issues)
 	}
 
 	refinementIssues, err := runRefinements(ctx, result, s.refinements)
@@ -111,7 +111,7 @@ func (s MapSchema[T]) ParseContext(ctx context.Context, value any) (map[string]T
 		return nil, err
 	}
 	if len(refinementIssues) != 0 {
-		return nil, &ValidationError{Issues: refinementIssues}
+		return nil, validationIssues(ctx, refinementIssues)
 	}
 	return result, nil
 }

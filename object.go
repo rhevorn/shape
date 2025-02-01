@@ -22,6 +22,7 @@ type FieldDef[T, V any] struct {
 	hasDefault     bool
 	defaultValue   V
 	defaultFactory func() V
+	label          string
 }
 
 // Field creates a required object field.
@@ -36,6 +37,13 @@ func Field[T, V any](name string, schema Schema[V], setter func(*T, V)) FieldDef
 		panic("shape: field setter must not be nil")
 	}
 	return FieldDef[T, V]{name: name, schema: schema, setter: setter}
+}
+
+// Label sets a human-readable display name for this field. It is copied into
+// validation issues and shown by localized message templates.
+func (f FieldDef[T, V]) Label(name string) FieldDef[T, V] {
+	f.label = name
+	return f
 }
 
 // Optional permits the field to be absent without invoking its setter.
@@ -87,13 +95,10 @@ func (f FieldDef[T, V]) parseAndSet(ctx context.Context, target *T, input any, p
 		if f.optional {
 			return nil, nil
 		}
-		return []Issue{{
-			Code:     CodeRequired,
-			Path:     Path{FieldPath(f.name)},
-			Message:  "field is required",
-			Expected: "present",
-			Received: "missing",
-		}}, nil
+		issue := keyedIssue(CodeRequired, "required", "present", "missing")
+		issue.Path = Path{FieldPath(f.name)}
+		issue.Label = f.label
+		return []Issue{issue}, nil
 	}
 
 	parsed, err := f.schema.ParseContext(ctx, input)
@@ -101,7 +106,7 @@ func (f FieldDef[T, V]) parseAndSet(ctx context.Context, target *T, input any, p
 		if contextErr := contextError(err, ctx); contextErr != nil {
 			return nil, contextErr
 		}
-		return prefixIssues(issuesFromError(err), FieldPath(f.name)), nil
+		return applyIssueLabel(prefixIssues(issuesFromError(err), FieldPath(f.name)), f.label), nil
 	}
 	f.setter(target, parsed)
 	return nil, nil
@@ -180,7 +185,7 @@ func (s ObjectSchema[T]) ParseContext(ctx context.Context, value any) (T, error)
 	}
 	input, ok := value.(map[string]any)
 	if !ok {
-		return zero, validationError(invalidType("map[string]any", value))
+		return zero, validationError(ctx, invalidType("map[string]any", value))
 	}
 
 	var candidate T
@@ -208,13 +213,9 @@ func (s ObjectSchema[T]) ParseContext(ctx context.Context, value any) (T, error)
 		sort.Strings(unknown)
 		for _, key := range unknown {
 			var capped bool
-			issues, capped = appendIssuesBounded(issues, Issue{
-				Code:     CodeUnknownField,
-				Path:     Path{FieldPath(key)},
-				Message:  "field is not allowed",
-				Expected: "declared field",
-				Received: key,
-			})
+			issue := keyedIssue(CodeUnknownField, "unknown_field", "declared field", key)
+			issue.Path = Path{FieldPath(key)}
+			issues, capped = appendIssuesBounded(issues, issue)
 			if capped {
 				break
 			}
@@ -222,14 +223,14 @@ func (s ObjectSchema[T]) ParseContext(ctx context.Context, value any) (T, error)
 	}
 
 	if len(issues) != 0 {
-		return zero, &ValidationError{Issues: issues}
+		return zero, validationIssues(ctx, issues)
 	}
 	refinementIssues, err := runRefinements(ctx, candidate, s.refinements)
 	if err != nil {
 		return zero, err
 	}
 	if len(refinementIssues) != 0 {
-		return zero, &ValidationError{Issues: refinementIssues}
+		return zero, validationIssues(ctx, refinementIssues)
 	}
 	return candidate, nil
 }

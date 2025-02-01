@@ -109,16 +109,16 @@ func (s NumberSchema[N]) ParseContext(ctx context.Context, value any) (N, error)
 	}
 	if !ok {
 		if jsonNumberInput {
-			return zero, validationError(Issue{Code: CodeInvalidNumber, Message: "JSON number is outside the target type or is not integral", Expected: genericTypeName[N](), Received: value})
+			return zero, validationError(ctx, keyedIssue(CodeInvalidNumber, "number.json_range", genericTypeName[N](), value))
 		}
 		if s.coerce && isNumericCoercionCandidate(value) {
-			return zero, validationError(Issue{Code: CodeInvalidNumber, Message: "cannot be converted to the target number type", Expected: genericTypeName[N](), Received: value})
+			return zero, validationError(ctx, keyedIssue(CodeInvalidNumber, "number.convert", genericTypeName[N](), value))
 		}
-		return zero, validationError(invalidType(genericTypeName[N](), value))
+		return zero, validationError(ctx, invalidType(genericTypeName[N](), value))
 	}
 	converted := float64(parsed)
 	if math.IsNaN(converted) || math.IsInf(converted, 0) {
-		return zero, validationError(Issue{Code: CodeInvalidNumber, Message: "must be a finite number", Expected: genericTypeName[N](), Received: parsed})
+		return zero, validationError(ctx, keyedIssue(CodeInvalidNumber, "number.finite", genericTypeName[N](), parsed))
 	}
 	return parseNumber(ctx, parsed, s.rules, s.refinements)
 }

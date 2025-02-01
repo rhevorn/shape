@@ -1,7 +1,5 @@
 package shape
 
-import "fmt"
-
 type lengthRule func(int) *Issue
 
 func minLengthRule(kind string, minimum int) lengthRule {
@@ -10,12 +8,8 @@ func minLengthRule(kind string, minimum int) lengthRule {
 		if length >= minimum {
 			return nil
 		}
-		return &Issue{
-			Code:     CodeTooSmall,
-			Message:  fmt.Sprintf("must contain at least %d items", minimum),
-			Expected: minimum,
-			Received: length,
-		}
+		issue := keyedIssue(CodeTooSmall, "too_small.collection", minimum, length)
+		return &issue
 	}
 }
 
@@ -25,11 +19,7 @@ func maxLengthRule(kind string, maximum int) lengthRule {
 		if length <= maximum {
 			return nil
 		}
-		return &Issue{
-			Code:     CodeTooBig,
-			Message:  fmt.Sprintf("must contain at most %d items", maximum),
-			Expected: maximum,
-			Received: length,
-		}
+		issue := keyedIssue(CodeTooBig, "too_big.collection", maximum, length)
+		return &issue
 	}
 }

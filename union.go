@@ -62,12 +62,7 @@ func (s UnionSchema[T]) ParseContext(ctx context.Context, value any) (T, error) 
 		if matches == 1 {
 			return candidate, nil
 		}
-		return zero, validationError(Issue{
-			Code:     CodeInvalidUnion,
-			Message:  "must match exactly one schema",
-			Expected: 1,
-			Received: matches,
-		})
+		return zero, validationError(ctx, keyedIssue(CodeInvalidUnion, "invalid_union.oneof", 1, matches))
 	}
 	for _, alternative := range s.alternatives {
 		parsed, err := alternative.ParseContext(ctx, value)
@@ -78,12 +73,7 @@ func (s UnionSchema[T]) ParseContext(ctx context.Context, value any) (T, error) 
 			return zero, contextErr
 		}
 	}
-	return zero, validationError(Issue{
-		Code:     CodeInvalidUnion,
-		Message:  "must match at least one schema",
-		Expected: "one or more matches",
-		Received: typeNameOf(value),
-	})
+	return zero, validationError(ctx, keyedIssue(CodeInvalidUnion, "invalid_union", "one or more matches", typeNameOf(value)))
 }
 
 func (s UnionSchema[T]) buildJSONSchema(ctx *jsonSchemaBuildContext) (map[string]any, error) {

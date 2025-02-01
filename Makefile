@@ -19,12 +19,12 @@ fuzz-smoke:
 	go test -run '^$$' -fuzz '^FuzzIntJSON$$' -fuzztime 2s
 	go test -run '^$$' -fuzz '^FuzzGenericNumberJSON$$' -fuzztime 2s
 	go test -run '^$$' -fuzz '^FuzzObject$$' -fuzztime 2s
-	go test -run '^$$' -fuzz '^FuzzParseJSON$$' -fuzztime 2s
+	go test -run '^$$' -fuzz '^FuzzParse$$' -fuzztime 2s
 	go test -run '^$$' -fuzz '^FuzzTupleJSON$$' -fuzztime 2s
 	go test -run '^$$' -fuzz '^FuzzRecordJSON$$' -fuzztime 2s
 	go test -run '^$$' -fuzz '^FuzzLazyJSON$$' -fuzztime 2s
 	go test -run '^$$' -fuzz '^FuzzJSONSchemaExport$$' -fuzztime 2s
-	go test -run '^$$' -fuzz '^FuzzParseJSONReaderLimit$$' -fuzztime 2s
+	go test -run '^$$' -fuzz '^FuzzParseReaderLimit$$' -fuzztime 2s
 
 bench:
 	go test -run '^$$' -bench . -benchmem ./...

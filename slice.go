@@ -90,7 +90,7 @@ func (s SliceSchema[T]) ParseContext(ctx context.Context, value any) ([]T, error
 		}
 	}
 	if !ok {
-		return nil, validationError(invalidType("[]any", value))
+		return nil, validationError(ctx, invalidType("[]any", value))
 	}
 
 	var issues []Issue
@@ -100,7 +100,7 @@ func (s SliceSchema[T]) ParseContext(ctx context.Context, value any) ([]T, error
 		}
 	}
 	if len(issues) != 0 {
-		return nil, &ValidationError{Issues: issues}
+		return nil, validationIssues(ctx, issues)
 	}
 
 	result := make([]T, len(input))
@@ -123,7 +123,7 @@ func (s SliceSchema[T]) ParseContext(ctx context.Context, value any) ([]T, error
 		result[index] = parsed
 	}
 	if len(issues) != 0 {
-		return nil, &ValidationError{Issues: issues}
+		return nil, validationIssues(ctx, issues)
 	}
 	if s.unique {
 		deepItems := 0
@@ -139,12 +139,7 @@ func (s SliceSchema[T]) ParseContext(ctx context.Context, value any) ([]T, error
 			}
 		}
 		if deepItems > DefaultMaxDeepUniqueItems {
-			return nil, validationError(Issue{
-				Code:     CodeTooBig,
-				Message:  "too many items require deep uniqueness comparison",
-				Expected: DefaultMaxDeepUniqueItems,
-				Received: deepItems,
-			})
+			return nil, validationError(ctx, keyedIssue(CodeTooBig, "invalid_value.unique_deep_limit", DefaultMaxDeepUniqueItems, deepItems))
 		}
 		var seen map[any]struct{}
 		for i := 0; i < len(result); i++ {
@@ -158,7 +153,7 @@ func (s SliceSchema[T]) ParseContext(ctx context.Context, value any) ([]T, error
 					seen = make(map[any]struct{}, len(result)-deepItems)
 				}
 				if _, duplicate := seen[item]; duplicate {
-					return nil, duplicateItemError(i, result[i])
+					return nil, duplicateItemError(ctx, i, result[i])
 				}
 				seen[item] = struct{}{}
 				continue
@@ -170,7 +165,7 @@ func (s SliceSchema[T]) ParseContext(ctx context.Context, value any) ([]T, error
 					}
 				}
 				if reflect.TypeOf(any(result[j])) == itemType && reflect.DeepEqual(result[i], result[j]) {
-					return nil, duplicateItemError(i, result[i])
+					return nil, duplicateItemError(ctx, i, result[i])
 				}
 			}
 		}
@@ -181,19 +176,15 @@ func (s SliceSchema[T]) ParseContext(ctx context.Context, value any) ([]T, error
 		return nil, err
 	}
 	if len(refinementIssues) != 0 {
-		return nil, &ValidationError{Issues: refinementIssues}
+		return nil, validationIssues(ctx, refinementIssues)
 	}
 	return result, nil
 }
 
-func duplicateItemError[T any](index int, value T) *ValidationError {
-	return validationError(Issue{
-		Code:     CodeInvalidValue,
-		Path:     Path{IndexPath(index)},
-		Message:  "must contain unique items",
-		Expected: "unique item",
-		Received: value,
-	})
+func duplicateItemError[T any](ctx context.Context, index int, value T) *ValidationError {
+	issue := keyedIssue(CodeInvalidValue, "invalid_value.unique_items", "unique item", value)
+	issue.Path = Path{IndexPath(index)}
+	return validationError(ctx, issue)
 }
 
 // deepEqualUsesEquality reports types for which reflect.DeepEqual has the same

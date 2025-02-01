@@ -39,6 +39,9 @@ var (
 	_ Schema[string]            = Refine(String(), func(string) error { return nil })
 	_ Schema[string]            = RefineContext(String(), func(_ context.Context, _ string) error { return nil })
 	_ Schema[string]            = Annotate(String())
+	_ Schema[string]            = Label("name", String())
+	_ ObjectField[testUser]     = Fields[testUser]().Str("name").Set(func(*testUser, string) {})
+	_ ObjectField[testUser]     = Fields[testUser]().Int("age").Set(func(*testUser, int) {})
 	_ Schema[apiContractObject] = Object[apiContractObject](
 		Field("name", String(), func(value *apiContractObject, name string) { value.Name = name }),
 	)

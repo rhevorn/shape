@@ -1,6 +1,7 @@
 package shape
 
 import (
+	"context"
 	"errors"
 	"fmt"
 )
@@ -38,8 +39,10 @@ type Issue struct {
 	Code     string `json:"code"`
 	Path     Path   `json:"path"`
 	Message  string `json:"message"`
+	Label    string `json:"label,omitempty"`
 	Expected any    `json:"expected,omitempty"`
 	Received any    `json:"received,omitempty"`
+	key      string
 }
 
 // NewIssue creates an issue suitable for returning from a refinement.
@@ -75,8 +78,12 @@ func (e *ValidationError) Error() string {
 	)
 }
 
-func validationError(issue Issue) *ValidationError {
-	return &ValidationError{Issues: []Issue{issue}}
+func validationError(ctx context.Context, issue Issue) *ValidationError {
+	return validationIssues(ctx, []Issue{issue})
+}
+
+func validationIssues(ctx context.Context, issues []Issue) *ValidationError {
+	return &ValidationError{Issues: localizeIssues(resolveLocale(ctx), issues)}
 }
 
 func issuesFromError(err error) []Issue {
@@ -87,7 +94,7 @@ func issuesFromError(err error) []Issue {
 	var validation *ValidationError
 	if errors.As(err, &validation) {
 		if validation == nil {
-			return []Issue{{Code: CodeCustom, Message: "validation failed"}}
+			return []Issue{keyedIssue(CodeCustom, "custom.validation_failed", nil, nil)}
 		}
 		result, _ := appendIssuesBounded(nil, validation.Issues...)
 		return result
@@ -96,7 +103,7 @@ func issuesFromError(err error) []Issue {
 	var issue *Issue
 	if errors.As(err, &issue) {
 		if issue == nil {
-			return []Issue{{Code: CodeCustom, Message: "validation failed"}}
+			return []Issue{keyedIssue(CodeCustom, "custom.validation_failed", nil, nil)}
 		}
 		return []Issue{*issue}
 	}
@@ -105,11 +112,7 @@ func issuesFromError(err error) []Issue {
 }
 
 func tooManyIssues() Issue {
-	return Issue{
-		Code:     CodeTooManyIssues,
-		Message:  "additional validation issues were omitted",
-		Expected: fmt.Sprintf("at most %d reported issues", DefaultMaxIssues),
-	}
+	return keyedIssue(CodeTooManyIssues, "too_many_issues", DefaultMaxIssues, nil)
 }
 
 // appendIssuesBounded preserves issue order while limiting retained work. The

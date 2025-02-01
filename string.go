@@ -63,12 +63,8 @@ func (s StringSchema) Min(n int) StringSchema {
 		if length >= n {
 			return nil
 		}
-		return &Issue{
-			Code:     CodeTooSmall,
-			Message:  fmt.Sprintf("must contain at least %d characters", n),
-			Expected: n,
-			Received: length,
-		}
+		issue := keyedIssue(CodeTooSmall, "too_small.string", n, length)
+		return &issue
 	})
 	return s.withConstraint("minLength", n)
 }
@@ -81,12 +77,8 @@ func (s StringSchema) Max(n int) StringSchema {
 		if length <= n {
 			return nil
 		}
-		return &Issue{
-			Code:     CodeTooBig,
-			Message:  fmt.Sprintf("must contain at most %d characters", n),
-			Expected: n,
-			Received: length,
-		}
+		issue := keyedIssue(CodeTooBig, "too_big.string", n, length)
+		return &issue
 	})
 	return s.withConstraint("maxLength", n)
 }
@@ -103,12 +95,8 @@ func (s StringSchema) Len(n int) StringSchema {
 		if length > n {
 			code = CodeTooBig
 		}
-		return &Issue{
-			Code:     code,
-			Message:  fmt.Sprintf("must contain exactly %d characters", n),
-			Expected: n,
-			Received: length,
-		}
+		issue := keyedIssue(code, "string.len", n, length)
+		return &issue
 	})
 	s = s.withConstraint("minLength", n)
 	return s.withConstraint("maxLength", n)
@@ -123,12 +111,8 @@ func (s StringSchema) Pattern(pattern *regexp.Regexp) StringSchema {
 		if pattern.MatchString(value) {
 			return nil
 		}
-		return &Issue{
-			Code:     CodeInvalidFormat,
-			Message:  "must match the required pattern",
-			Expected: pattern.String(),
-			Received: value,
-		}
+		issue := keyedIssue(CodeInvalidFormat, "invalid_format.pattern", pattern.String(), value)
+		return &issue
 	})
 	return s.withConstraint("pattern", pattern.String())
 }
@@ -139,7 +123,8 @@ func (s StringSchema) StartsWith(prefix string) StringSchema {
 		if strings.HasPrefix(value, prefix) {
 			return nil
 		}
-		return &Issue{Code: CodeInvalidString, Message: "must start with " + strconv.Quote(prefix), Expected: prefix, Received: value}
+		issue := keyedIssue(CodeInvalidString, "invalid_string.starts_with", prefix, value)
+		return &issue
 	})
 	return s.withConstraint("pattern", "^"+regexp.QuoteMeta(prefix))
 }
@@ -150,7 +135,8 @@ func (s StringSchema) EndsWith(suffix string) StringSchema {
 		if strings.HasSuffix(value, suffix) {
 			return nil
 		}
-		return &Issue{Code: CodeInvalidString, Message: "must end with " + strconv.Quote(suffix), Expected: suffix, Received: value}
+		issue := keyedIssue(CodeInvalidString, "invalid_string.ends_with", suffix, value)
+		return &issue
 	})
 	return s.withConstraint("pattern", regexp.QuoteMeta(suffix)+"$")
 }
@@ -161,7 +147,8 @@ func (s StringSchema) Contains(part string) StringSchema {
 		if strings.Contains(value, part) {
 			return nil
 		}
-		return &Issue{Code: CodeInvalidString, Message: "must contain " + strconv.Quote(part), Expected: part, Received: value}
+		issue := keyedIssue(CodeInvalidString, "invalid_string.contains", part, value)
+		return &issue
 	})
 	return s.withConstraint("pattern", regexp.QuoteMeta(part))
 }
@@ -174,12 +161,8 @@ func (s StringSchema) Email() StringSchema {
 		if err == nil && address.Address == value && strings.Contains(value, "@") {
 			return nil
 		}
-		return &Issue{
-			Code:     CodeInvalidEmail,
-			Message:  "must be a valid email address",
-			Expected: "email",
-			Received: value,
-		}
+		issue := keyedIssue(CodeInvalidEmail, "invalid_email", "email", value)
+		return &issue
 	})
 	return s.withConstraint("format", "email")
 }
@@ -191,7 +174,8 @@ func (s StringSchema) URL() StringSchema {
 		if err == nil && parsed.Scheme != "" && parsed.Host != "" {
 			return nil
 		}
-		return &Issue{Code: CodeInvalidURL, Message: "must be a valid absolute URL", Expected: "url", Received: value}
+		issue := keyedIssue(CodeInvalidURL, "invalid_url", "url", value)
+		return &issue
 	})
 	return s.withConstraint("format", "uri")
 }
@@ -202,7 +186,8 @@ func (s StringSchema) UUID() StringSchema {
 		if isUUID(value) {
 			return nil
 		}
-		return &Issue{Code: CodeInvalidUUID, Message: "must be a valid UUID", Expected: "uuid", Received: value}
+		issue := keyedIssue(CodeInvalidUUID, "invalid_uuid", "uuid", value)
+		return &issue
 	})
 	return s.withConstraint("format", "uuid")
 }
@@ -213,7 +198,8 @@ func (s StringSchema) IP() StringSchema {
 		if net.ParseIP(value) != nil {
 			return nil
 		}
-		return &Issue{Code: CodeInvalidIP, Message: "must be a valid IP address", Expected: "ip", Received: value}
+		issue := keyedIssue(CodeInvalidIP, "invalid_ip", "ip", value)
+		return &issue
 	})
 	return s.withConstraint("format", "ip")
 }
@@ -239,7 +225,7 @@ func (s StringSchema) ParseContext(ctx context.Context, value any) (string, erro
 		parsed, ok = coerceStringValue(value)
 	}
 	if !ok {
-		return "", validationError(invalidType("string", value))
+		return "", validationError(ctx, invalidType("string", value))
 	}
 	if s.trim {
 		parsed = strings.TrimSpace(parsed)
@@ -262,7 +248,7 @@ func (s StringSchema) ParseContext(ctx context.Context, value any) (string, erro
 	}
 	issues, _ = appendIssuesBounded(issues, refinementIssues...)
 	if len(issues) != 0 {
-		return "", &ValidationError{Issues: issues}
+		return "", validationIssues(ctx, issues)
 	}
 	return parsed, nil
 }
