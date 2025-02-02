@@ -37,7 +37,7 @@ func TestTuple(t *testing.T) {
 func TestTupleJSONSchema(t *testing.T) {
 	t.Parallel()
 
-	document, err := JSONSchema(coordinateSchema())
+	document, err := ExportDocument(coordinateSchema())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestRecordJSONSchema(t *testing.T) {
 	t.Parallel()
 
 	schema := Record(String().Pattern(regexp.MustCompile(`^[a-z]+$`)), Bool()).Min(1).Max(5)
-	document, err := JSONSchema(schema)
+	document, err := ExportDocument(schema)
 	if err != nil {
 		t.Fatal(err)
 	}

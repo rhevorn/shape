@@ -1,7 +1,8 @@
 # Contributing
 
-GoShape targets Go 1.24 and newer. Keep changes small, dependency-light, and
-covered by tests.
+`shape` targets Go 1.24 and newer. Keep `go.mod`, CI, examples, and
+documentation in sync with this minimum. Keep changes small, dependency-light,
+and covered by tests.
 
 Before submitting a change, run:
 
@@ -22,6 +23,15 @@ path with reflection merely to reduce source-code repetition. Reflection is
 acceptable at adapter boundaries, such as converting a decoded JSON number
 into a user-defined named numeric type, when generics alone cannot construct
 the value.
+
+Schema builders are immutable values: copy slices and maps before any write,
+and keep constructed schemas safe for concurrent reuse. Every public behavior
+change needs tests (`go test ./...`, `go test -race ./...`, `go vet ./...`,
+plus relevant fuzz or benchmark checks).
+
+Keep the core API explicit. Do not add struct-tag DSLs, hidden coercion,
+logging, or network behavior. The one intentional process default is
+`SetLanguage`, which is overridden by `WithLocale` on a parse context.
 
 The project is licensed under MIT. Contributions are accepted under the same
 license.

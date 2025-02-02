@@ -21,20 +21,22 @@ func TestJSONSchemaGoldenObject(t *testing.T) {
 		Field("role", Enum("user", "admin"), func(value *user, role string) { value.Role = role }).Default("user"),
 		Field("tags", Slice(String()).Max(3), func(value *user, tags []string) { value.Tags = tags }).Optional(),
 	).Strict()
-	document, err := JSONSchema(schema)
+	document, err := ExportDocument(schema)
 	if err != nil {
 		t.Fatal(err)
 	}
+	document["$schema"] = "https://json-schema.org/draft/2020-12/schema"
 	assertJSONGolden(t, filepath.Join("testdata", "jsonschema", "object.json"), document)
 }
 
 func TestJSONSchemaGoldenRecursive(t *testing.T) {
 	t.Parallel()
 
-	document, err := JSONSchema(treeSchema(nil))
+	document, err := ExportDocument(treeSchema(nil))
 	if err != nil {
 		t.Fatal(err)
 	}
+	document["$schema"] = "https://json-schema.org/draft/2020-12/schema"
 	assertJSONGolden(t, filepath.Join("testdata", "jsonschema", "recursive.json"), document)
 }
 

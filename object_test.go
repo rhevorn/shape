@@ -133,7 +133,7 @@ func TestObjectMutableDefaultsRequireFactory(t *testing.T) {
 		t.Fatal("DefaultFunc reused mutable state")
 	}
 	var unsupported *UnsupportedSchemaError
-	if _, err := JSONSchema(schema); !errors.As(err, &unsupported) {
+	if _, err := ExportDocument(schema); !errors.As(err, &unsupported) {
 		t.Fatalf("dynamic default export error = %T, %v", err, err)
 	}
 }

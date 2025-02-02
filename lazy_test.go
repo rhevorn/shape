@@ -88,7 +88,7 @@ func TestLazyResolvesOnceConcurrently(t *testing.T) {
 func TestLazyJSONSchemaDefinitions(t *testing.T) {
 	t.Parallel()
 
-	document, err := JSONSchema(treeSchema(nil))
+	document, err := ExportDocument(treeSchema(nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func TestLazyJSONSchemaDefinitions(t *testing.T) {
 func TestLazyJSONSchemaEscapesNameAndRejectsDuplicates(t *testing.T) {
 	t.Parallel()
 
-	escaped, err := JSONSchema(Lazy("path~/node", func() Schema[string] { return String() }))
+	escaped, err := ExportDocument(Lazy("path~/node", func() Schema[string] { return String() }))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestLazyJSONSchemaEscapesNameAndRejectsDuplicates(t *testing.T) {
 
 	first := Lazy("Entry", func() Schema[string] { return String() })
 	second := Lazy("Entry", func() Schema[string] { return UUID() })
-	if _, err := JSONSchema(Union[string](first, second)); err == nil {
+	if _, err := ExportDocument(Union[string](first, second)); err == nil {
 		t.Fatal("duplicate lazy schema name was accepted")
 	}
 }

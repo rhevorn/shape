@@ -158,7 +158,7 @@ func FuzzParseReaderLimit(f *testing.F) {
 
 func assertJSONSchemaInvariant[T any](t *testing.T, schema Schema[T]) {
 	t.Helper()
-	first, err := JSONSchema(schema)
+	first, err := ExportDocument(schema)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ func assertJSONSchemaInvariant[T any](t *testing.T, schema Schema[T]) {
 	if err != nil || !json.Valid(encoded) {
 		t.Fatalf("invalid JSON Schema: %s, %v", encoded, err)
 	}
-	second, err := JSONSchema(schema)
+	second, err := ExportDocument(schema)
 	if err != nil {
 		t.Fatal(err)
 	}

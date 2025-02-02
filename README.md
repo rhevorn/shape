@@ -1,8 +1,8 @@
-# GoShape
+# shape
 
 **Type-safe, composable schema parsing and validation for Go.**
 
-GoShape turns untrusted runtime data into validated, typed Go values without
+`shape` turns untrusted runtime data into validated, typed Go values without
 struct tags or validation DSLs.
 
 Requires Go 1.24 or newer. The module and bundled adapters use only the Go
@@ -23,9 +23,8 @@ fmt.Println(value)
 // hello
 ```
 
-GoShape is moving toward a stable v1.0 API. No public release is tagged yet;
-progress is tracked in [the v1 roadmap](docs/V1_ROADMAP.md). Until then, treat
-the repository tip as the source of truth.
+`shape` has no tagged release yet. Treat the repository tip as the source of
+truth while the API continues to evolve.
 
 ## Object schemas
 
@@ -56,10 +55,11 @@ user, err := userSchema.Parse(map[string]any{
 })
 ```
 
-The second argument to `Str` / `Email` / `Int` / `Bool` is an optional display
-label for validation messages. `Field(...)` remains available for custom
-schemas. Fields are required by default. Use `Optional()` to permit a missing
-field or `Default(value)` to assign a deeply immutable typed default.
+The second argument to `Str` / `Email` / `Int` / `Bool` / `Int64` /
+`Float64` / `Time` / `Duration` is an optional display label for validation
+messages. `Field(...)` remains available for custom schemas. Fields are
+required by default. Use `Optional()` to permit a missing field or
+`Default(value)` to assign a deeply immutable typed default.
 Reference-bearing defaults use `DefaultFunc(func() T)` so every parse gets
 fresh state. Objects strip unknown input keys by default; `Strict()` reports
 them as `unknown_field` issues.
@@ -88,7 +88,7 @@ port := shape.Transform(
 Use `Refine` methods for rules that keep the same output type. Object-level
 refinements can validate relationships between fields.
 
-GoShape also provides `Enum`, `Literal`, same-output-type `Union`/`OneOf`,
+`shape` also provides `Enum`, `Literal`, same-output-type `Union`/`OneOf`,
 `Nullable`, fixed-length heterogeneous `Tuple`, typed-key `Record`, and
 recursive `Lazy` schemas. `Nullable(schema)` returns `Schema[*T]`, preserving
 the difference between JSON `null` and a non-null value. Typed `[]T` and map
@@ -158,7 +158,7 @@ or `shape.Label("年龄", shape.Int().Min(18))` and appear in issue messages as
 user, err := shape.Parse(userSchema, requestBody)
 ```
 
-JSON is an adapter, not GoShape's core representation. `Parse` accepts
+JSON is an adapter, not the package's core representation. `Parse` accepts
 exactly one JSON value and retains numeric precision with `encoding/json.Number`.
 Context and reader variants are available as `ParseContext`,
 `ParseReader`, and `ParseReaderContext`. For an untrusted stream, use
@@ -181,7 +181,7 @@ Additional schemas include `Time`, `Duration`, `URL`, `UUID`, and `IP`.
 ## JSON Schema and OpenAPI
 
 ```go
-document, err := shape.JSONSchema(userSchema)
+document, err := jsonschema.Export(userSchema)
 requestBody, err := openapi.JSONRequestBody(userSchema, true)
 ```
 
@@ -242,11 +242,7 @@ make test-race
 make fuzz-smoke
 ```
 
-See [the v1 roadmap](docs/V1_ROADMAP.md), [public
-contract](docs/COMPATIBILITY.md), [API sketch](docs/API_SKETCH.md),
-[architecture](docs/ARCHITECTURE.md), [performance
-baseline](docs/BENCHMARKS.md), [the original development
-plan](docs/DEVELOPMENT_PLAN.md), [security policy](SECURITY.md), and
+See [architecture](docs/ARCHITECTURE.md), [security policy](SECURITY.md), and
 [contribution guide](CONTRIBUTING.md).
 
 ## License

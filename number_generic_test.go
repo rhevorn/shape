@@ -49,11 +49,11 @@ func TestGenericNumberUnsignedAndFloatBoundaries(t *testing.T) {
 func TestGenericNumberJSONSchema(t *testing.T) {
 	t.Parallel()
 
-	integer, err := JSONSchema(Number[percentage]().Min(1).Max(100))
+	integer, err := ExportDocument(Number[percentage]().Min(1).Max(100))
 	if err != nil || integer["type"] != "integer" || integer["minimum"] != percentage(1) {
 		t.Fatalf("integer JSON Schema = %#v, %v", integer, err)
 	}
-	floating, err := JSONSchema(CoerceNumber[temperature]())
+	floating, err := ExportDocument(CoerceNumber[temperature]())
 	if err != nil || floating["type"] != "number" || floating["x-shape-coerce"] != true {
 		t.Fatalf("float JSON Schema = %#v, %v", floating, err)
 	}

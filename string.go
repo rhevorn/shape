@@ -24,7 +24,6 @@ type StringSchema struct {
 	rules       []stringRule
 	refinements []refinement[string]
 	constraints []map[string]any
-	metadata    schemaMetadata
 }
 
 // String returns a strict string schema.
@@ -333,46 +332,12 @@ func (s StringSchema) withConstraint(key string, value any) StringSchema {
 	return s
 }
 
-// Title sets schema title metadata.
-func (s StringSchema) Title(value string) StringSchema {
-	s.metadata = s.metadata.title(value)
-	return s
-}
-
-// Description sets schema description metadata.
-func (s StringSchema) Description(value string) StringSchema {
-	s.metadata = s.metadata.description(value)
-	return s
-}
-
-// Example appends an example value.
-func (s StringSchema) Example(value string) StringSchema {
-	s.metadata = s.metadata.example(value)
-	return s
-}
-
-// Deprecated marks the schema as deprecated metadata.
-func (s StringSchema) Deprecated() StringSchema {
-	s.metadata = s.metadata.deprecated()
-	return s
-}
-
-// DefaultValue sets descriptive default metadata without changing parsing.
-func (s StringSchema) DefaultValue(value string) StringSchema {
-	s.metadata = s.metadata.defaultValue(value)
-	return s
-}
-
-// Metadata returns a copy of the string schema metadata.
-func (s StringSchema) Metadata() SchemaMetadata { return copyMetadata(s.metadata) }
-
 func (s StringSchema) buildJSONSchema(_ *jsonSchemaBuildContext) (map[string]any, error) {
 	if err := unsupportedIfRefined(len(s.refinements)); err != nil {
 		return nil, err
 	}
 	document := map[string]any{"type": "string"}
 	applyConstraints(document, s.constraints)
-	applyMetadata(document, s.metadata)
 	if s.trim || s.caseMode != 0 {
 		normalization := make([]string, 0, 2)
 		if s.trim {

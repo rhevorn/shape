@@ -239,7 +239,7 @@ func TestCompositeSchemasConcurrentReuse(t *testing.T) {
 					errorsFound <- err
 					return
 				}
-				if _, err := JSONSchema(recursive); err != nil {
+				if _, err := ExportDocument(recursive); err != nil {
 					errorsFound <- err
 					return
 				}

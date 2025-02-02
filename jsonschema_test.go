@@ -18,7 +18,7 @@ func TestJSONSchemaObject(t *testing.T) {
 		Score *int
 	}
 	schema := Object[request](
-		Field("name", String().Min(2).Max(50).Description("Display name").Example("Pong"), func(value *request, field string) {
+		Field("name", Annotate(String().Min(2).Max(50)).Description("Display name").Example("Pong"), func(value *request, field string) {
 			value.Name = field
 		}),
 		Field("role", Enum("user", "admin"), func(value *request, field string) {
@@ -32,11 +32,11 @@ func TestJSONSchemaObject(t *testing.T) {
 		}).Optional(),
 	).Strict()
 
-	document, err := JSONSchema(schema)
+	document, err := ExportDocument(schema)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if document["$schema"] != jsonSchemaDraft202012 || document["type"] != "object" || document["additionalProperties"] != false {
+	if document["type"] != "object" || document["additionalProperties"] != false {
 		t.Fatalf("unexpected root schema: %#v", document)
 	}
 	if got, want := document["required"], []string{"name"}; !reflect.DeepEqual(got, want) {
@@ -55,7 +55,7 @@ func TestJSONSchemaObject(t *testing.T) {
 	if tags["minItems"] != 1 || tags["maxItems"] != 5 || tags["uniqueItems"] != true {
 		t.Fatalf("tags schema = %#v", tags)
 	}
-	if _, err := document.Bytes(); err != nil {
+	if _, err := json.Marshal(document); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -69,7 +69,7 @@ func TestJSONSchemaMetadataWrapperAndFormats(t *testing.T) {
 		Example("https://example.com").
 		DefaultValue("https://example.com").
 		Deprecated()
-	document, err := JSONSchema(schema)
+	document, err := ExportDocument(schema)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,21 +110,21 @@ func TestMetadataValuesAreDetached(t *testing.T) {
 func TestJSONSchemaUnionMapTemporalAndCoercion(t *testing.T) {
 	t.Parallel()
 
-	union, err := JSONSchema(Union[string](String().Email(), UUID()))
+	union, err := ExportDocument(Union[string](String().Email(), UUID()))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if alternatives := union["anyOf"].([]any); len(alternatives) != 2 {
 		t.Fatalf("union alternatives = %d", len(alternatives))
 	}
-	oneOf, err := JSONSchema(OneOf[string](String().Email(), UUID()))
+	oneOf, err := ExportDocument(OneOf[string](String().Email(), UUID()))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if alternatives := oneOf["oneOf"].([]any); len(alternatives) != 2 {
 		t.Fatalf("oneOf alternatives = %d", len(alternatives))
 	}
-	mapDocument, err := JSONSchema(Map(CoerceBool()))
+	mapDocument, err := ExportDocument(Map(CoerceBool()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,11 +132,11 @@ func TestJSONSchemaUnionMapTemporalAndCoercion(t *testing.T) {
 	if additional["type"] != "boolean" || additional["x-shape-coerce"] != true {
 		t.Fatalf("map value schema = %#v", additional)
 	}
-	sizedMap, err := JSONSchema(Map(String()).Min(1).Max(3))
+	sizedMap, err := ExportDocument(Map(String()).Min(1).Max(3))
 	if err != nil || sizedMap["minProperties"] != 1 || sizedMap["maxProperties"] != 3 {
 		t.Fatalf("sized map schema = %#v, %v", sizedMap, err)
 	}
-	timeDocument, err := JSONSchema(CoerceTime())
+	timeDocument, err := ExportDocument(CoerceTime())
 	if err != nil || timeDocument["format"] != "date-time" {
 		t.Fatalf("time schema = %#v, %v", timeDocument, err)
 	}
@@ -146,16 +146,16 @@ func TestJSONSchemaUnsupportedOperations(t *testing.T) {
 	t.Parallel()
 
 	for _, run := range []func() error{
-		func() error { _, err := JSONSchema(String().Refine(func(string) error { return nil })); return err },
+		func() error { _, err := ExportDocument(String().Refine(func(string) error { return nil })); return err },
 		func() error {
-			_, err := JSONSchema(Transform(String(), func(string) (int, error) { return 0, nil }))
+			_, err := ExportDocument(Transform(String(), func(string) (int, error) { return 0, nil }))
 			return err
 		},
 		func() error {
-			_, err := JSONSchema(RefineContext(String(), func(context.Context, string) error { return nil }))
+			_, err := ExportDocument(RefineContext(String(), func(context.Context, string) error { return nil }))
 			return err
 		},
-		func() error { _, err := JSONSchema(Time()); return err },
+		func() error { _, err := ExportDocument(Time()); return err },
 	} {
 		err := run()
 		var unsupported *UnsupportedSchemaError
@@ -169,7 +169,7 @@ func TestJSONSchemaMarshalsAsDraftDocument(t *testing.T) {
 	t.Parallel()
 
 	source := Int().Min(1).Max(10).OneOf(1, 2, 3)
-	document, err := JSONSchema(source)
+	document, err := ExportDocument(source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +181,7 @@ func TestJSONSchemaMarshalsAsDraftDocument(t *testing.T) {
 		t.Fatalf("invalid JSON schema: %s", data)
 	}
 	document["enum"].([]int)[0] = 99
-	again, err := JSONSchema(source)
+	again, err := ExportDocument(source)
 	if err != nil {
 		t.Fatal(err)
 	}

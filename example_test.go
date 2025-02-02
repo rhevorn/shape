@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/rhevorn/shape"
+	"github.com/rhevorn/shape/jsonschema"
 )
 
 func ExampleString() {
@@ -262,13 +263,13 @@ func ExampleParseReaderLimit() {
 	// Output: value
 }
 
-func ExampleJSONSchema() {
-	document, err := shape.JSONSchema(shape.String().Min(2).Email())
+func Example_jsonschema() {
+	document, err := jsonschema.Export(shape.String().Min(2).Email())
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(document["type"], document["format"], document["minLength"])
-	// Output: string email 2
+	fmt.Println(document["type"], document["format"], document["minLength"], document["$schema"] != nil)
+	// Output: string email 2 true
 }
 
 func ExampleAnnotate() {

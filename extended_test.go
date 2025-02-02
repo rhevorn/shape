@@ -14,8 +14,8 @@ import (
 func TestExtendedStringRulesAndFormats(t *testing.T) {
 	t.Parallel()
 
-	got, err := String().Trim().ToLower().StartsWith("go").EndsWith("shape").Contains("sha").Parse("  GoShape  ")
-	if err != nil || got != "goshape" {
+	got, err := String().Trim().ToLower().StartsWith("my").EndsWith("shape").Contains("ysh").Parse("  MyShape  ")
+	if err != nil || got != "myshape" {
 		t.Fatalf("normalized string = %q, %v", got, err)
 	}
 	requireIssueCodes(t, parseError(String().NonEmpty(), ""), CodeTooSmall)
@@ -49,8 +49,8 @@ func TestCoercion(t *testing.T) {
 	if got, err := CoerceInt64().Parse(uint32(42)); err != nil || got != 42 {
 		t.Fatalf("CoerceInt64 = %d, %v", got, err)
 	}
-	if got, err := CoerceFloat().Parse("1.25"); err != nil || got != 1.25 {
-		t.Fatalf("CoerceFloat = %v, %v", got, err)
+	if got, err := CoerceFloat64().Parse("1.25"); err != nil || got != 1.25 {
+		t.Fatalf("CoerceFloat64 = %v, %v", got, err)
 	}
 	if got, err := CoerceBool().Parse("TRUE"); err != nil || !got {
 		t.Fatalf("CoerceBool = %v, %v", got, err)

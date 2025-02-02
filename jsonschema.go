@@ -1,25 +1,16 @@
 package shape
 
 import (
-	"encoding/json"
 	"fmt"
 	"reflect"
 )
 
-const jsonSchemaDraft202012 = "https://json-schema.org/draft/2020-12/schema"
-
-// JSONSchemaDocument is a JSON Schema Draft 2020-12 document.
-type JSONSchemaDocument map[string]any
-
-// Bytes marshals the document as JSON.
-func (d JSONSchemaDocument) Bytes() ([]byte, error) { return json.Marshal(d) }
-
 // UnsupportedSchemaError reports a schema operation that cannot be represented
-// faithfully in JSON Schema.
+// faithfully in JSON Schema or OpenAPI export.
 type UnsupportedSchemaError struct{ Operation string }
 
 func (e *UnsupportedSchemaError) Error() string {
-	return "shape: JSON Schema does not support " + e.Operation
+	return "shape: schema export does not support " + e.Operation
 }
 
 type jsonSchemaNode interface {
@@ -40,22 +31,22 @@ func newJSONSchemaBuildContext() *jsonSchemaBuildContext {
 	}
 }
 
-// JSONSchema exports schema as JSON Schema Draft 2020-12. Custom refinements
-// and transforms return UnsupportedSchemaError instead of being silently lost.
-func JSONSchema[T any](schema Schema[T]) (JSONSchemaDocument, error) {
+// ExportDocument builds a JSON Schema object tree for adapter packages
+// (jsonschema, openapi). It does not set $schema; adapters own dialect
+// declarations. Application code should call those packages' public APIs.
+func ExportDocument[T any](schema Schema[T]) (map[string]any, error) {
 	if schema == nil {
-		panic("shape: JSON Schema source must not be nil")
+		panic("shape: schema export source must not be nil")
 	}
 	buildContext := newJSONSchemaBuildContext()
 	document, err := buildJSONSchemaWithContext(schema, buildContext)
 	if err != nil {
 		return nil, err
 	}
-	document["$schema"] = jsonSchemaDraft202012
 	if len(buildContext.definitions) != 0 {
 		document["$defs"] = buildContext.definitions
 	}
-	return JSONSchemaDocument(document), nil
+	return document, nil
 }
 
 func buildJSONSchemaWithContext(schema any, ctx *jsonSchemaBuildContext) (map[string]any, error) {

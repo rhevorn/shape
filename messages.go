@@ -133,17 +133,6 @@ func renderMessage(lang, key string, issue Issue) (string, bool) {
 	return buf.String(), true
 }
 
-// RenderIssue fills Message from the locale catalog. Custom issues that already
-// carry a Message and no catalog key are returned unchanged.
-func RenderIssue(issue Issue, lang string) Issue {
-	return localizeIssue(normalizeLocale(lang), issue)
-}
-
-// TruncatedIssuesIssue is the terminal issue used when issue lists are capped.
-func TruncatedIssuesIssue() Issue {
-	return tooManyIssues()
-}
-
 // keyedIssue builds a built-in issue whose Message is resolved from catalogs.
 func keyedIssue(code, key string, expected, received any) Issue {
 	return Issue{Code: code, Expected: expected, Received: received, key: key}

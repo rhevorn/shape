@@ -604,9 +604,6 @@ func CoerceInt64() Int64Schema { return Int64Schema{coerce: true} }
 // values and base-10 string representations.
 func CoerceFloat64() Float64Schema { return Float64Schema{coerce: true} }
 
-// CoerceFloat is an alias for CoerceFloat64.
-func CoerceFloat() Float64Schema { return CoerceFloat64() }
-
 func coerceInteger(value any, bits int) (int64, bool) {
 	switch typed := value.(type) {
 	case int:

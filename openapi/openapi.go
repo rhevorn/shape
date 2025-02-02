@@ -1,18 +1,13 @@
-// Package openapi adapts GoShape schemas for OpenAPI 3.1 documents.
+// Package openapi adapts shape schemas for OpenAPI 3.1 documents.
 package openapi
 
 import "github.com/rhevorn/shape"
 
 // Schema exports an OpenAPI 3.1-compatible Schema Object. OpenAPI 3.1 aligns
-// its Schema Object with JSON Schema Draft 2020-12, so only the root dialect
-// declaration is removed.
+// its Schema Object with JSON Schema Draft 2020-12, so the document is the
+// exported schema object without a JSON Schema $schema dialect declaration.
 func Schema[T any](schema shape.Schema[T]) (map[string]any, error) {
-	document, err := shape.JSONSchema(schema)
-	if err != nil {
-		return nil, err
-	}
-	delete(document, "$schema")
-	return map[string]any(document), nil
+	return shape.ExportDocument(schema)
 }
 
 // JSONRequestBody builds an OpenAPI requestBody object for JSON input.

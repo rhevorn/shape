@@ -1,6 +1,6 @@
 # Security Policy
 
-GoShape has no public release yet. The first supported release will be v1.0.0;
+`shape` has no public release yet. The first supported release will be v1.0.0;
 after that, the latest v1.x release receives security fixes.
 
 Please report suspected vulnerabilities privately through

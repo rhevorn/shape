@@ -55,7 +55,8 @@ default). `WithLocale(ctx, lang)` overrides it for a parse. `Localize` /
 
 `Issue.Label` holds an optional display name. Attach it with
 `Field(...).Label("姓名")`, `shape.Label("年龄", schema)`, or the optional
-label argument on `Fields[T]().Str` / `Email` / `Int` / `Bool`.
+label argument on `Fields[T]().Str` / `Email` / `Int` / `Bool` / `Int64` /
+`Float64` / `Time` / `Duration`.
 
 Paths are stored as typed field/index segments and formatted only for display.
 Composite schemas prefix child issues by copying the path; they never mutate an
@@ -233,8 +234,12 @@ are `anyOf` and `oneOf`, respectively.
   errors; untrusted input never causes a construction panic.
 - Concrete builders should be created with their constructor functions. A useful
   zero value is not promised for composites that require child definitions.
-- `CoerceFloat` is an intentional convenience alias for `CoerceFloat64`.
+- `CoerceFloat` is removed; use `CoerceFloat64`.
 - There is no dedicated `net/http` adapter; handlers call root JSON helpers.
+- JSON Schema / OpenAPI export live in the `jsonschema` and `openapi`
+  packages. The root exposes `ExportDocument` only as an adapter hook; prefer
+  those packages' public APIs. Schema metadata uses `Annotate`, not methods on
+  concrete builders.
 
 The repository is licensed under MIT.
 
@@ -244,8 +249,8 @@ Implemented in the root module: primitives, generic numbers, collections,
 typed objects (`Field` and `Fields`), transforms, refinements, explicit
 coercion, time/duration, URL/UUID/IP, enum/literal/union/oneOf/nullable,
 lazy recursion, JSON parse helpers, metadata/`Annotate`, locale catalogs, and
-labels. Stdlib-only adapters cover JSON Schema Draft 2020-12 and OpenAPI 3.1
-export (`jsonschema`, `openapi` packages).
+labels. JSON Schema and OpenAPI export live in the `jsonschema` and `openapi`
+packages (root `ExportDocument` is the shared adapter hook).
 
 Framework-specific integrations (Gin, Echo, Fiber, and similar) stay out of
 the root module so ordinary users do not inherit third-party dependency graphs.
