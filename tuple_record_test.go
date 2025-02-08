@@ -49,20 +49,20 @@ func TestTupleJSONSchema(t *testing.T) {
 	}
 }
 
-func TestRecord(t *testing.T) {
+func TestMapKeyed(t *testing.T) {
 	t.Parallel()
 
-	schema := Record(String().ToLower().Pattern(regexp.MustCompile(`^[a-z]+$`)), Int().Positive()).NonEmpty()
+	schema := Map(String().ToLower().Pattern(regexp.MustCompile(`^[a-z]+$`)), Int().Positive()).NonEmpty()
 	got, err := schema.Parse(map[string]any{"One": 1, "two": 2})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(got, map[string]int{"one": 1, "two": 2}) {
-		t.Fatalf("Record parse = %#v", got)
+		t.Fatalf("Map parse = %#v", got)
 	}
 	typed, err := schema.Parse(map[string]int{"THREE": 3})
 	if err != nil || !reflect.DeepEqual(typed, map[string]int{"three": 3}) {
-		t.Fatalf("Record typed parse = %#v, %v", typed, err)
+		t.Fatalf("Map typed parse = %#v, %v", typed, err)
 	}
 	issues := requireIssueCodes(t, parseError(schema, map[string]any{"bad-key": 1, "ok": 0}), CodeInvalidFormat, CodeTooSmall)
 	if paths := []string{issues[0].Path.String(), issues[1].Path.String()}; !reflect.DeepEqual(paths, []string{`["bad-key"]`, "ok"}) {
@@ -71,10 +71,10 @@ func TestRecord(t *testing.T) {
 	requireIssueCodes(t, parseError(schema, map[string]any{"A": 1, "a": 2}), CodeInvalidValue)
 }
 
-func TestRecordJSONSchema(t *testing.T) {
+func TestMapKeyedJSONSchema(t *testing.T) {
 	t.Parallel()
 
-	schema := Record(String().Pattern(regexp.MustCompile(`^[a-z]+$`)), Bool()).Min(1).Max(5)
+	schema := Map(String().Pattern(regexp.MustCompile(`^[a-z]+$`)), Bool()).Min(1).Max(5)
 	document, err := ExportDocument(schema)
 	if err != nil {
 		t.Fatal(err)

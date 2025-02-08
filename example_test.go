@@ -93,8 +93,8 @@ func ExampleTuple() {
 	// Output: 10 20
 }
 
-func ExampleRecord() {
-	schema := shape.Record(shape.String().ToLower(), shape.Int().Positive())
+func ExampleMap() {
+	schema := shape.Map(shape.String().ToLower(), shape.Int().Positive())
 
 	values, err := schema.Parse(map[string]any{"ONE": 1})
 	if err != nil {
@@ -153,7 +153,7 @@ func ExampleLazySchema_MaxDepth() {
 func ExampleFieldDef_DefaultFunc() {
 	type Config struct{ Labels map[string]string }
 	schema := shape.Object[Config](
-		shape.Field("labels", shape.Map(shape.String()), func(config *Config, labels map[string]string) {
+		shape.Field("labels", shape.Map(shape.String(), shape.String()), func(config *Config, labels map[string]string) {
 			config.Labels = labels
 		}).DefaultFunc(func() map[string]string { return make(map[string]string) }),
 	)

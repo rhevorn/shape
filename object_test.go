@@ -108,13 +108,13 @@ func TestObjectMutableDefaultsRequireFactory(t *testing.T) {
 
 	type settings struct{ Labels map[string]string }
 	requirePanic(t, func() {
-		_ = Field("labels", Map(String()), func(value *settings, labels map[string]string) {
+		_ = Field("labels", Map(String(), String()), func(value *settings, labels map[string]string) {
 			value.Labels = labels
 		}).Default(map[string]string{"origin": "shared"})
 	})
 
 	schema := Object[settings](
-		Field("labels", Map(String()), func(value *settings, labels map[string]string) {
+		Field("labels", Map(String(), String()), func(value *settings, labels map[string]string) {
 			value.Labels = labels
 		}).DefaultFunc(func() map[string]string {
 			return map[string]string{"origin": "fresh"}

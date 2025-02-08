@@ -89,11 +89,11 @@ func TestTypedCollectionsAndUnique(t *testing.T) {
 	if issues[0].Path.String() != "[1]" {
 		t.Fatalf("duplicate path = %q", issues[0].Path)
 	}
-	mapValue, err := Map(Int()).Parse(map[string]int{"one": 1})
+	mapValue, err := Map(String(), Int()).Parse(map[string]int{"one": 1})
 	if err != nil || mapValue["one"] != 1 {
 		t.Fatalf("typed map = %#v, %v", mapValue, err)
 	}
-	requireIssueCodes(t, parseError(Map(String()).NonEmpty(), map[string]any{}), CodeTooSmall)
+	requireIssueCodes(t, parseError(Map(String(), String()).NonEmpty(), map[string]any{}), CodeTooSmall)
 }
 
 func TestEnumLiteralAndUnion(t *testing.T) {

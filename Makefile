@@ -21,7 +21,7 @@ fuzz-smoke:
 	go test -run '^$$' -fuzz '^FuzzObject$$' -fuzztime 2s
 	go test -run '^$$' -fuzz '^FuzzParse$$' -fuzztime 2s
 	go test -run '^$$' -fuzz '^FuzzTupleJSON$$' -fuzztime 2s
-	go test -run '^$$' -fuzz '^FuzzRecordJSON$$' -fuzztime 2s
+	go test -run '^$$' -fuzz '^FuzzMapJSON$$' -fuzztime 2s
 	go test -run '^$$' -fuzz '^FuzzLazyJSON$$' -fuzztime 2s
 	go test -run '^$$' -fuzz '^FuzzJSONSchemaExport$$' -fuzztime 2s
 	go test -run '^$$' -fuzz '^FuzzParseReaderLimit$$' -fuzztime 2s

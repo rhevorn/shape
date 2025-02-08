@@ -28,8 +28,9 @@ var (
 	_ Schema[time.Duration]     = Duration()
 	_ Schema[uint16]            = Number[uint16]()
 	_ Schema[[]string]          = Slice(String())
-	_ Schema[map[string]int]    = Map(Int())
-	_ Schema[map[string]int]    = Record(String(), Int())
+	_ Schema[map[string]int]    = Map(String(), Int())
+	_ Schema[map[string]any]    = Map(String(), Any())
+	_ Schema[any]               = Any()
 	_ Schema[*string]           = Nullable(String())
 	_ Schema[string]            = Enum("open", "closed")
 	_ Schema[string]            = Literal("fixed")
@@ -55,7 +56,7 @@ var (
 		)
 	}).MaxDepth(DefaultMaxRecursiveDepth)
 	_ Schema[apiContractDefaults] = Object[apiContractDefaults](
-		Field("labels", Map(String()), func(value *apiContractDefaults, labels map[string]string) {
+		Field("labels", Map(String(), String()), func(value *apiContractDefaults, labels map[string]string) {
 			value.Labels = labels
 		}).DefaultFunc(func() map[string]string { return make(map[string]string) }),
 	)

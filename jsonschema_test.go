@@ -124,7 +124,7 @@ func TestJSONSchemaUnionMapTemporalAndCoercion(t *testing.T) {
 	if alternatives := oneOf["oneOf"].([]any); len(alternatives) != 2 {
 		t.Fatalf("oneOf alternatives = %d", len(alternatives))
 	}
-	mapDocument, err := ExportDocument(Map(CoerceBool()))
+	mapDocument, err := ExportDocument(Map(String(), CoerceBool()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestJSONSchemaUnionMapTemporalAndCoercion(t *testing.T) {
 	if additional["type"] != "boolean" || additional["x-shape-coerce"] != true {
 		t.Fatalf("map value schema = %#v", additional)
 	}
-	sizedMap, err := ExportDocument(Map(String()).Min(1).Max(3))
+	sizedMap, err := ExportDocument(Map(String(), String()).Min(1).Max(3))
 	if err != nil || sizedMap["minProperties"] != 1 || sizedMap["maxProperties"] != 3 {
 		t.Fatalf("sized map schema = %#v, %v", sizedMap, err)
 	}

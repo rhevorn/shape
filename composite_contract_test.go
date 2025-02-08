@@ -39,8 +39,8 @@ func TestCompositeSchemasPropagateCancellation(t *testing.T) {
 		run  func() error
 	}{
 		{"slice", func() error { _, err := Slice(String()).ParseContext(ctx, []any{"x"}); return err }},
-		{"map", func() error { _, err := Map(String()).ParseContext(ctx, map[string]any{"x": "y"}); return err }},
-		{"record", func() error { _, err := Record(String(), Int()).ParseContext(ctx, map[string]any{"x": 1}); return err }},
+		{"map", func() error { _, err := Map(String(), String()).ParseContext(ctx, map[string]any{"x": "y"}); return err }},
+		{"map-keyed", func() error { _, err := Map(String(), Int()).ParseContext(ctx, map[string]any{"x": 1}); return err }},
 		{"tuple", func() error { _, err := coordinateSchema().ParseContext(ctx, []any{1, 2, "x"}); return err }},
 		{"object", func() error { _, err := testUserSchema().ParseContext(ctx, map[string]any{}); return err }},
 		{"union", func() error { _, err := Union[string](String(), UUID()).ParseContext(ctx, "x"); return err }},
@@ -126,12 +126,12 @@ func TestCompositeIssueOrderIsDeterministic(t *testing.T) {
 		},
 		{
 			name:  "map",
-			err:   parseError(Map(String().Min(1)), map[string]any{"z": "", "a": ""}),
+			err:   parseError(Map(String(), String().Min(1)), map[string]any{"z": "", "a": ""}),
 			paths: []string{"a", "z"},
 		},
 		{
 			name:  "record",
-			err:   parseError(Record(String(), String().Min(1)), map[string]any{"z": "", "a": ""}),
+			err:   parseError(Map(String(), String().Min(1)), map[string]any{"z": "", "a": ""}),
 			paths: []string{"a", "z"},
 		},
 		{
@@ -186,7 +186,7 @@ func TestCompositeBuildersAreImmutable(t *testing.T) {
 		t.Fatalf("derived slice mutated base: %v", err)
 	}
 
-	baseMap := Map(String())
+	baseMap := Map(String(), String())
 	if _, err := baseMap.Max(0).Parse(map[string]any{"x": "y"}); err == nil {
 		t.Fatal("bounded map accepted oversized input")
 	}
@@ -194,11 +194,11 @@ func TestCompositeBuildersAreImmutable(t *testing.T) {
 		t.Fatalf("derived map mutated base: %v", err)
 	}
 
-	baseRecord := Record(String(), Int())
-	if _, err := baseRecord.Max(0).Parse(map[string]any{"x": 1}); err == nil {
+	baseMapKeyed := Map(String(), Int())
+	if _, err := baseMapKeyed.Max(0).Parse(map[string]any{"x": 1}); err == nil {
 		t.Fatal("bounded record accepted oversized input")
 	}
-	if _, err := baseRecord.Parse(map[string]any{"x": 1}); err != nil {
+	if _, err := baseMapKeyed.Parse(map[string]any{"x": 1}); err != nil {
 		t.Fatalf("derived record mutated base: %v", err)
 	}
 
@@ -223,7 +223,7 @@ func TestCompositeSchemasConcurrentReuse(t *testing.T) {
 	t.Parallel()
 
 	recursive := treeSchema(nil)
-	record := Record(String().ToLower(), Int().Positive())
+	record := Map(String().ToLower(), Int().Positive())
 	tuple := coordinateSchema()
 	union := OneOf[string](String().Email(), UUID())
 	const workers = 24

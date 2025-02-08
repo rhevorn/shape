@@ -83,7 +83,7 @@ func FuzzTupleJSON(f *testing.F) {
 	})
 }
 
-func FuzzRecordJSON(f *testing.F) {
+func FuzzMapJSON(f *testing.F) {
 	for _, seed := range [][]byte{
 		[]byte(`{"ONE":1,"two":2}`),
 		[]byte(`{}`),
@@ -91,7 +91,7 @@ func FuzzRecordJSON(f *testing.F) {
 	} {
 		f.Add(seed)
 	}
-	schema := Record(String().ToLower().NonEmpty(), Int())
+	schema := Map(String().ToLower().NonEmpty(), Int())
 	f.Fuzz(func(t *testing.T, input []byte) {
 		_, _ = Parse(schema, input)
 	})
@@ -124,7 +124,7 @@ func FuzzJSONSchemaExport(f *testing.F) {
 		case 1:
 			assertJSONSchemaInvariant(t, Slice(Number[uint16]().Max(uint16(maximum))).Max(maximum))
 		case 2:
-			assertJSONSchemaInvariant(t, Record(String().Min(minimum), Bool()).Max(maximum))
+			assertJSONSchemaInvariant(t, Map(String().Min(minimum), Bool()).Max(maximum))
 		case 3:
 			assertJSONSchemaInvariant(t, coordinateSchema())
 		case 4:
@@ -134,7 +134,7 @@ func FuzzJSONSchemaExport(f *testing.F) {
 		case 6:
 			assertJSONSchemaInvariant(t, testUserSchema().Strict())
 		case 7:
-			assertJSONSchemaInvariant(t, Map(String()).Min(minimum).Max(maximum))
+			assertJSONSchemaInvariant(t, Map(String(), String()).Min(minimum).Max(maximum))
 		}
 	})
 }

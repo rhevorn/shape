@@ -118,8 +118,10 @@ independent controls.
 ## Collections
 
 `Slice` and `Map` consume the natural untrusted representations `[]any` and
-`map[string]any`. They also accept their exact typed output representations,
-`[]T` and `map[string]T`, without reflection.
+`map[string]any`. `Map(key, value)` parses each JSON string key through the key
+schema and each value through the value schema, producing `map[K]V`. They also
+accept typed `[]T` and `map[string]V` inputs without reflection where the shape
+is unambiguous.
 
 Collection size rules evaluate after type checking and before child parsing.
 When size is valid, child errors are aggregated and prefixed with their index or

@@ -46,16 +46,16 @@ func TestSlice(t *testing.T) {
 func TestMapDeterministicPaths(t *testing.T) {
 	t.Parallel()
 
-	schema := Map(Int().Min(1))
+	schema := Map(String(), Int().Min(1))
 	issues := requireIssueCodes(t, parseError(schema, map[string]any{"z": 0, "a": "bad"}), CodeInvalidType, CodeTooSmall)
 	if got := []string{issues[0].Path.String(), issues[1].Path.String()}; !reflect.DeepEqual(got, []string{"a", "z"}) {
 		t.Fatalf("map paths = %v", got)
 	}
-	got, err := Map(String()).Parse(map[string]any{"key": "value"})
+	got, err := Map(String(), String()).Parse(map[string]any{"key": "value"})
 	if err != nil || got["key"] != "value" {
 		t.Fatalf("Map parse = %#v, %v", got, err)
 	}
-	requireIssueCodes(t, parseError(Map(String()).Refine(func(map[string]string) error {
+	requireIssueCodes(t, parseError(Map(String(), String()).Refine(func(map[string]string) error {
 		return NewIssue("map_rule", "rejected")
 	}), map[string]any{}), "map_rule")
 }
@@ -95,7 +95,8 @@ func TestCompositionInvalidConfigurationPanics(t *testing.T) {
 
 	var nilStringSchema Schema[string]
 	requirePanic(t, func() { Slice(nilStringSchema) })
-	requirePanic(t, func() { Map(nilStringSchema) })
+	requirePanic(t, func() { Map(String(), nilStringSchema) })
+	requirePanic(t, func() { Map(nilStringSchema, String()) })
 	requirePanic(t, func() { Refine(nilStringSchema, func(string) error { return nil }) })
 	requirePanic(t, func() { Transform(nilStringSchema, func(string) (int, error) { return 0, nil }) })
 	requirePanic(t, func() { Transform(String(), (func(string) (int, error))(nil)) })
