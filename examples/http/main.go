@@ -16,10 +16,10 @@ type CreateUserRequest struct {
 var createUserSchema = func() shape.ObjectSchema[CreateUserRequest] {
 	f := shape.Fields[CreateUserRequest]()
 	return shape.Object(
-		f.Str("name").Trim().Min(2).Set(func(request *CreateUserRequest, value string) {
+		f.Str("name", "姓名").Trim().Min(2).Set(func(request *CreateUserRequest, value string) {
 			request.Name = value
 		}),
-		f.Email("email").Trim().Set(func(request *CreateUserRequest, value string) {
+		f.Email("email", "邮箱").Trim().Set(func(request *CreateUserRequest, value string) {
 			request.Email = value
 		}),
 	).Strict()
@@ -28,12 +28,6 @@ var createUserSchema = func() shape.ObjectSchema[CreateUserRequest] {
 func createUser(w http.ResponseWriter, r *http.Request) {
 	input, err := shape.ParseReaderLimitContext(r.Context(), createUserSchema, r.Body, 1<<20)
 	if err != nil {
-		// Simple alternative: plain-text summary via err.Error(), e.g.
-		//   "validation failed: name: String must contain at least 2 character(s)"
-		//   "validation failed with 2 issues; first issue: ..."
-		// http.Error(w, err.Error(), http.StatusBadRequest)
-		// return
-
 		var validation *shape.ValidationError
 		if errors.As(err, &validation) {
 			w.Header().Set("Content-Type", "application/json")

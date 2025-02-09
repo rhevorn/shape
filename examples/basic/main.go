@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/rhevorn/shape"
@@ -29,7 +28,6 @@ var userSchema = func() shape.ObjectSchema[User] {
 }()
 
 func main() {
-	// Typical input is JSON text, not a Go map.
 	body := []byte(`{
 		"name": " Pong ",
 		"email": "pong@example.com",
@@ -38,12 +36,7 @@ func main() {
 
 	user, err := shape.Parse(userSchema, body)
 	if err != nil {
-		var validation *shape.ValidationError
-		if errors.As(err, &validation) {
-			for _, issue := range validation.Issues {
-				fmt.Printf("%s: %s\n", issue.Path, issue.Message)
-			}
-		}
+		fmt.Println(err)
 		return
 	}
 	fmt.Printf("%+v\n", user)

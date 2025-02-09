@@ -254,6 +254,34 @@ func ExampleParse() {
 	// Output: Pong 30
 }
 
+func ExampleMustStruct() {
+	type User struct {
+		Name  string `json:"name" shape:"trim,min=2,label='姓名'"`
+		Email string `json:"email" shape:"trim,email"`
+	}
+	schema := shape.MustStruct[User]().Strict()
+	user, err := shape.Parse(schema, `{"name":" Pong ","email":"pong@example.com"}`)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(user.Name, user.Email)
+	// Output: Pong pong@example.com
+}
+
+func ExampleBind() {
+	type User struct {
+		Name string `json:"name" shape:"trim,min=1"`
+		Age  int    `json:"age" shape:"min=1"`
+	}
+	var user User
+	err := shape.Bind(&user, `{"name":" Pong ","age":30}`)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(user.Name, user.Age)
+	// Output: Pong 30
+}
+
 func ExampleParseReaderLimit() {
 	value, err := shape.ParseReaderLimit(shape.String(), strings.NewReader(`"value"`), 64)
 	if err != nil {

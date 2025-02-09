@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/rhevorn/shape"
@@ -27,7 +26,6 @@ func main() {
 		}),
 	).Strict()
 
-	// Request body, file contents, queue payload, etc.
 	body := `{
 		"name": " Pong ",
 		"email": "pong@example.com",
@@ -36,24 +34,13 @@ func main() {
 
 	user, err := shape.Parse(schema, body)
 	if err != nil {
-		var validation *shape.ValidationError
-		if errors.As(err, &validation) {
-			for _, issue := range validation.Issues {
-				fmt.Printf("%s: %s\n", issue.Path, issue.Message)
-			}
-			return
-		}
 		fmt.Println(err)
 		return
 	}
 	fmt.Printf("%+v\n", user)
 
-	// Invalid JSON values still produce structured validation issues.
 	_, err = shape.Parse(schema, []byte(`{"name":"x","email":"bad","age":10}`))
-	var validation *shape.ValidationError
-	if errors.As(err, &validation) {
-		for _, issue := range validation.Issues {
-			fmt.Printf("%s: %s\n", issue.Path, issue.Message)
-		}
+	if err != nil {
+		fmt.Println(err)
 	}
 }

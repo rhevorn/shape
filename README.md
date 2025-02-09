@@ -2,9 +2,9 @@
 
 **Type-safe, composable schema parsing and validation for Go.**
 
-Turn untrusted input—especially JSON—into typed values without struct tags or
-a validation DSL. Requires Go 1.24+. The core and bundled adapters use only the
-standard library.
+Turn untrusted input—especially JSON—into typed values. Prefer explicit
+schemas; optional `shape` struct tags cover simple HTTP DTOs. Requires Go
+1.24+. The core and bundled adapters use only the standard library.
 
 ```sh
 go get github.com/rhevorn/shape
@@ -47,6 +47,30 @@ you call `Strict()`.
 ```go
 users := shape.Slice(userSchema).Min(1) // []User
 ```
+
+### Struct tags (optional)
+
+Tags are a convenience for simple DTOs. Prefer explicit `Object` / `Fields`
+above; see [`examples/structtag`](examples/structtag) for `MustStruct` and
+`Bind`. Tag names match fluent methods in lowercase (`Trim` → `trim`, …).
+Successful `MustStruct` builds are cached by type.
+
+```go
+type CreateUserRequest struct {
+	Name  string `json:"name" shape:"trim,min=2,max=50,label='姓名'"`
+	Email string `json:"email" shape:"trim,email,label='邮箱'"`
+	Age   int    `json:"age" shape:"min=18"`
+}
+
+var createUser = shape.MustStruct[CreateUserRequest]().Strict()
+
+user, err := shape.ParseReaderLimitContext(ctx, createUser, r.Body, 1<<20)
+// or: err := shape.BindReaderLimitContext(ctx, &req, r.Body, 1<<20)
+```
+
+`optional` or `json:",omitempty"` marks a field optional. On `time.Duration` /
+`time.Time`, `coerce` maps to `CoerceDuration` / `CoerceTime` (e.g. `"3s"`).
+Complex rules (`Transform`, `Union`, cross-field `Refine`) stay in code.
 
 ## Collections and composition
 
@@ -123,8 +147,13 @@ Less common: `Tuple` (fixed-length positions into a struct) and `Lazy`
 
 ## Errors and locale
 
+`err.Error()` is enough for logs and most handlers. Use `errors.As` only when
+you need the structured `Issues` list (for example a JSON API body):
+
 ```go
 if err != nil {
+	fmt.Println(err) // validation failed: name: ...
+
 	var validation *shape.ValidationError
 	if errors.As(err, &validation) {
 		for _, issue := range validation.Issues {
@@ -171,16 +200,17 @@ Unsupported operations (custom refine/transform) return `UnsupportedSchemaError`
 | Area               | Builders                                                                                                 |
 | ------------------ | -------------------------------------------------------------------------------------------------------- |
 | Scalars            | `String`, `Bool`, `Int`, `Int64`, `Float64`, `Number[T]`, `Any`, `Time`, `Duration`, `URL`, `UUID`, `IP` |
-| Objects            | `Object`, `Fields`, `Field`, `Optional`, `Default`, `DefaultFunc`, `Strict` / `Strip`                    |
+| Objects            | `Object`, `Fields`, `Field`, `Struct` / `MustStruct`, `Optional`, `Default`, `DefaultFunc`, `Strict` / `Strip` |
 | Collections        | `Slice`, `Map(key, value)`, `Tuple`                                                                     |
 | Choice / recursion | `Enum`, `Literal`, `Union`, `OneOf`, `Nullable`, `Lazy`                                                  |
 | Pipeline           | `Transform`, `Refine`, `RefineContext`, `Label`, `Annotate`                                              |
-| Input              | `Parse`, `ParseContext`, `ParseReader`, `ParseReaderLimit` (+ Context)                                   |
+| Input              | `Parse`, `ParseContext`, `ParseReader`, `ParseReaderLimit` (+ Context), `Bind` / `BindReaderLimit` (+ Context) |
 
 
 ## Design
 
-- Compile-time types via generics; no struct-tag DSL
+- Compile-time types via generics; fluent `Object`/`Fields` stay first-class
+- Optional `MustStruct` tags for simple DTOs (construction-time reflection only)
 - Explicit normalize / coerce / transform
 - Path-aware structured errors
 - Immutable schemas, safe to reuse concurrently

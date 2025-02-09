@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/rhevorn/shape"
@@ -34,19 +33,8 @@ func main() {
 		"email": "plain",
 		"age": 10
 	}`)
-	printIssues(err)
+	fmt.Println(err)
 
 	_, err = shape.Label("昵称", shape.String().Min(3)).Parse("ab")
-	printIssues(err)
-}
-
-func printIssues(err error) {
-	var validation *shape.ValidationError
-	if !errors.As(err, &validation) {
-		fmt.Println(err)
-		return
-	}
-	for _, issue := range validation.Issues {
-		fmt.Println(issue.Path, issue.Message)
-	}
+	fmt.Println(err)
 }

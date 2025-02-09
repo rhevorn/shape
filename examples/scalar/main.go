@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 
@@ -31,7 +30,6 @@ func main() {
 	}
 	fmt.Println(email)
 
-	// Transform changes the output type after a successful parse.
 	port, err := shape.Transform(shape.String().Trim(), strconv.Atoi).Parse("8080")
 	if err != nil {
 		fmt.Println(err)
@@ -39,7 +37,6 @@ func main() {
 	}
 	fmt.Println(port) // 8080
 
-	// Collections still validate each element with a scalar schema.
 	tags, err := shape.Slice(shape.String().Trim().NonEmpty()).Min(1).Parse([]any{" go ", "shape"})
 	if err != nil {
 		fmt.Println(err)
@@ -47,12 +44,6 @@ func main() {
 	}
 	fmt.Println(tags) // [go shape]
 
-	// Failures return structured issues.
 	_, err = shape.String().Min(3).Parse("x")
-	var validation *shape.ValidationError
-	if errors.As(err, &validation) {
-		for _, issue := range validation.Issues {
-			fmt.Println(issue.Code, issue.Message)
-		}
-	}
+	fmt.Println(err)
 }

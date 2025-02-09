@@ -20,8 +20,9 @@ copied before append so two derived schemas cannot share writable backing
 storage.
 
 Primitive parsing uses type assertions, not reflection. Reflection is allowed
-only at explicit adapter boundaries when Go cannot construct a named runtime
-type directly.
+at explicit adapter boundaries when Go cannot construct a named runtime type
+directly, and at `Struct` / `MustStruct` construction time (cached field
+indexes in setters). Parse paths for primitives stay assertion-based.
 
 ## Parse pipeline
 
@@ -54,9 +55,9 @@ default). `WithLocale(ctx, lang)` overrides it for a parse. `Localize` /
 `LocalizeContext` rewrite an existing `*ValidationError` for display.
 
 `Issue.Label` holds an optional display name. Attach it with
-`Field(...).Label("姓名")`, `shape.Label("年龄", schema)`, or the optional
+`Field(...).Label("姓名")`, `shape.Label("年龄", schema)`, the optional
 label argument on `Fields[T]().Str` / `Email` / `Int` / `Bool` / `Int64` /
-`Float64` / `Time` / `Duration`.
+`Float64` / `Time` / `Duration`, or `label='…'` in a `shape` struct tag.
 
 Paths are stored as typed field/index segments and formatted only for display.
 Composite schemas prefix child issues by copying the path; they never mutate an
@@ -174,6 +175,27 @@ only for successfully parsed fields.
 
 Duplicate field names are programmer errors and should panic during object
 construction. Empty field names and nil setters are also construction errors.
+
+### Struct tags
+
+`Struct[T]()` / `MustStruct[T]()` build an `ObjectSchema[T]` from exported
+fields. Input keys come from `json` tags (or the Go field name). Rules come
+from the `shape` tag. Option names match fluent methods in lowercase
+(`trim` ↔ `Trim`, `min` ↔ `Min`, `email` ↔ `Email`, …). Field-level options:
+
+- `label='…'` — display name on issues
+- `optional` — same as `Optional()`; `json:",omitempty"` also marks optional
+
+Supported kinds: `string`, `bool`, `int`, `int64`, `float64`, `time.Duration`,
+`time.Time`, nested structs, and slices of those. On duration/time fields,
+`coerce` selects `CoerceDuration` / `CoerceTime` (for example `"3s"`, RFC3339).
+Pointer fields are rejected. Unsupported or misspelled tags fail at
+construction (`Struct` error / `MustStruct` panic), not at parse.
+
+Keep package-level `var schema = MustStruct[T]()` so the value is named and
+reusable. `Struct` / `MustStruct` / `Bind` also cache successful tag builds by
+`reflect.Type`, so repeated Bind calls do not re-parse tags. Complex pipelines
+(`Transform`, `Union`, cross-field `Refine`) remain code.
 
 ## Refinement and transformation
 
