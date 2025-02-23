@@ -1,101 +1,266 @@
 package shape
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/rhevorn/shape/internal/spec"
+	"github.com/rhevorn/shape/validate"
 	"reflect"
+	"time"
 )
 
-// UnsupportedSchemaError reports a schema operation that cannot be represented
-// faithfully in JSON Schema or OpenAPI export.
+// UnsupportedSchemaError reports processing that JSON Schema cannot represent
+// without changing Shape's runtime behavior.
 type UnsupportedSchemaError struct{ Operation string }
 
 func (e *UnsupportedSchemaError) Error() string {
 	return "shape: schema export does not support " + e.Operation
 }
 
-type jsonSchemaNode interface {
-	buildJSONSchema(*jsonSchemaBuildContext) (map[string]any, error)
-}
-
-type jsonSchemaBuildContext struct {
-	definitions map[string]any
-	owners      map[string]*lazyIdentity
-	building    map[string]bool
-}
-
-func newJSONSchemaBuildContext() *jsonSchemaBuildContext {
-	return &jsonSchemaBuildContext{
-		definitions: make(map[string]any),
-		owners:      make(map[string]*lazyIdentity),
-		building:    make(map[string]bool),
-	}
-}
-
-// ExportDocument builds a JSON Schema object tree for adapter packages
-// (jsonschema, openapi). It does not set $schema; adapters own dialect
-// declarations. Application code should call those packages' public APIs.
+// ExportDocument exports representable behavior as a JSON Schema object without
+// a root $schema dialect declaration. Most users should call jsonschema.Export.
 func ExportDocument[T any](schema Schema[T]) (map[string]any, error) {
-	if schema == nil {
-		panic("shape: schema export source must not be nil")
+	provider, ok := any(schema).(interface{ exportPlan() (*valuePlan, error) })
+	if !ok {
+		return nil, &UnsupportedSchemaError{Operation: "custom schema"}
 	}
-	buildContext := newJSONSchemaBuildContext()
-	document, err := buildJSONSchemaWithContext(schema, buildContext)
+	p, err := provider.exportPlan()
 	if err != nil {
 		return nil, err
 	}
-	if len(buildContext.definitions) != 0 {
-		document["$defs"] = buildContext.definitions
+	return exportPlan(p)
+}
+func exportPlan(p *valuePlan) (map[string]any, error) {
+	if p == nil {
+		return nil, &UnsupportedSchemaError{Operation: "uninitialized schema"}
+	}
+	if p.fallbackKind != "" {
+		return nil, &UnsupportedSchemaError{Operation: p.fallbackKind + " fallback"}
+	}
+	if len(p.transforms) > 0 {
+		return nil, &UnsupportedSchemaError{Operation: "transform"}
+	}
+	t := p.typ
+	var document map[string]any
+	if t == durationType {
+		document = map[string]any{"type": "string", "format": "duration"}
+		if len(p.descriptors) != 0 {
+			return nil, &UnsupportedSchemaError{Operation: "duration comparison rules"}
+		}
+		return applyExportRules(document, p)
+	}
+	if t == reflect.TypeFor[time.Time]() {
+		document = map[string]any{"type": "string", "format": "date-time"}
+		return applyExportRules(document, p)
+	}
+	if hasCustomJSON(t) {
+		return nil, &UnsupportedSchemaError{Operation: fmt.Sprintf("custom JSON representation for %v", t)}
+	}
+	switch t.Kind() {
+	case reflect.String:
+		document = map[string]any{"type": "string"}
+	case reflect.Bool:
+		document = map[string]any{"type": "boolean"}
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		document = map[string]any{"type": "integer"}
+		if t.Kind() >= reflect.Uint && t.Kind() <= reflect.Uint64 {
+			document["minimum"] = uint64(0)
+			document["maximum"] = unsignedMaximum(t.Bits())
+		} else {
+			minimum, maximum := signedRange(t.Bits())
+			document["minimum"] = minimum
+			document["maximum"] = maximum
+		}
+	case reflect.Float32, reflect.Float64:
+		document = map[string]any{"type": "number"}
+	case reflect.Pointer:
+		if p.element == nil {
+			return nil, &UnsupportedSchemaError{Operation: "custom pointer element"}
+		}
+		inner, err := exportPlan(p.element)
+		if err != nil {
+			return nil, err
+		}
+		document = inner
+	case reflect.Slice:
+		if p.element == nil {
+			return nil, &UnsupportedSchemaError{Operation: "custom slice element"}
+		}
+		inner, err := exportPlan(p.element)
+		if err != nil {
+			return nil, err
+		}
+		document = map[string]any{"type": "array", "items": inner}
+	case reflect.Map:
+		if p.element == nil || p.key == nil {
+			return nil, &UnsupportedSchemaError{Operation: "custom map element or key"}
+		}
+		if p.key.typ.Kind() != reflect.String || p.key.fallbackKind != "" || len(p.key.transforms) != 0 || len(p.key.checks) != 0 {
+			return nil, &UnsupportedSchemaError{Operation: "map key processing"}
+		}
+		inner, err := exportPlan(p.element)
+		if err != nil {
+			return nil, err
+		}
+		document = map[string]any{"type": "object", "additionalProperties": inner}
+	case reflect.Struct:
+		if p.fields == nil {
+			return nil, &UnsupportedSchemaError{Operation: "explicit Object fields"}
+		}
+		properties := make(map[string]any, len(p.fields))
+		required := make([]string, 0, len(p.fields))
+		for _, field := range p.fields {
+			child, err := exportPlan(field.plan)
+			if err != nil {
+				return nil, err
+			}
+			properties[field.name] = child
+			if !planAcceptsZero(field.plan) {
+				required = append(required, field.name)
+			}
+		}
+		document = map[string]any{"type": "object", "properties": properties}
+		if len(required) != 0 {
+			document["required"] = required
+		}
+	default:
+		return nil, &UnsupportedSchemaError{Operation: fmt.Sprintf("schema %v", t)}
+	}
+	return applyExportRules(document, p)
+}
+
+var (
+	jsonMarshalerType   = reflect.TypeFor[json.Marshaler]()
+	jsonUnmarshalerType = reflect.TypeFor[json.Unmarshaler]()
+)
+
+func hasCustomJSON(t reflect.Type) bool {
+	if t.Implements(jsonMarshalerType) || t.Implements(jsonUnmarshalerType) {
+		return true
+	}
+	return t.Kind() != reflect.Pointer &&
+		(reflect.PointerTo(t).Implements(jsonMarshalerType) || reflect.PointerTo(t).Implements(jsonUnmarshalerType))
+}
+
+func applyExportRules(document map[string]any, p *valuePlan) (map[string]any, error) {
+	for _, descriptor := range p.descriptors {
+		var key string
+		var value any
+		name, args := spec.RuleName(descriptor), spec.RuleArguments(descriptor)
+		switch name {
+		case "min":
+			if p.typ.Kind() == reflect.String {
+			} else if p.typ.Kind() == reflect.Slice {
+				key = "minItems"
+			} else if p.typ.Kind() == reflect.Map {
+				key = "minProperties"
+			} else {
+				key = "minimum"
+			}
+			value = args[0]
+		case "max":
+			if p.typ.Kind() == reflect.Slice {
+				key = "maxItems"
+			} else if p.typ.Kind() == reflect.Map {
+				key = "maxProperties"
+			} else {
+				key = "maximum"
+			}
+			value = args[0]
+		case "minlength":
+			key, value = "minLength", args[0]
+		case "maxlength":
+			key, value = "maxLength", args[0]
+		case "len":
+			switch p.typ.Kind() {
+			case reflect.Slice:
+				document["minItems"], document["maxItems"] = args[0], args[0]
+			case reflect.Map:
+				document["minProperties"], document["maxProperties"] = args[0], args[0]
+			default:
+				document["minLength"], document["maxLength"] = args[0], args[0]
+			}
+			continue
+		case "gt":
+			key, value = "exclusiveMinimum", args[0]
+		case "gte":
+			key, value = "minimum", args[0]
+		case "lt":
+			key, value = "exclusiveMaximum", args[0]
+		case "lte":
+			key, value = "maximum", args[0]
+		case "positive":
+			key, value = "exclusiveMinimum", 0
+		case "negative":
+			key, value = "exclusiveMaximum", 0
+		case "nonnegative":
+			key, value = "minimum", 0
+		case "oneof":
+			key, value = "enum", args
+		case "between":
+			document["minimum"], document["maximum"] = args[0], args[1]
+			continue
+		case "pattern":
+			key, value = "pattern", args[0]
+		case "email", "url", "uuid", "ip":
+			format := name
+			if format == "url" {
+				format = "uri"
+			}
+			key, value = "format", format
+		case "notempty":
+			switch p.typ.Kind() {
+			case reflect.String:
+				key, value = "minLength", 1
+			case reflect.Slice:
+				key, value = "minItems", 1
+			case reflect.Map:
+				key, value = "minProperties", 1
+			case reflect.Pointer:
+				continue
+			default:
+				continue
+			}
+		case "notnull":
+			// The non-null branch already excludes null. Whether a null branch is
+			// added is decided from the complete plan below.
+			continue
+		case "unique":
+			key, value = "uniqueItems", true
+		default:
+			return nil, &UnsupportedSchemaError{Operation: "rule " + name}
+		}
+		document[key] = value
+	}
+	if planAcceptsZero(p) {
+		return map[string]any{
+			"anyOf": []any{document, map[string]any{"type": "null"}},
+		}, nil
 	}
 	return document, nil
 }
 
-func buildJSONSchemaWithContext(schema any, ctx *jsonSchemaBuildContext) (map[string]any, error) {
-	node, ok := schema.(jsonSchemaNode)
-	if !ok {
-		return nil, &UnsupportedSchemaError{Operation: fmt.Sprintf("custom schema type %T", schema)}
+func planAcceptsZero(p *valuePlan) bool {
+	if p == nil {
+		return false
 	}
-	return node.buildJSONSchema(ctx)
+	issues := make([]validate.Issue, 0)
+	_, err := validatePlan(context.Background(), p, reflect.Zero(p.typ), nil, 0, false, &issues)
+	return err == nil && len(issues) == 0
 }
 
-func unsupportedIfRefined(count int) error {
-	if count != 0 {
-		return &UnsupportedSchemaError{Operation: "custom refinement"}
+func signedRange(bits int) (int64, int64) {
+	if bits == 64 {
+		return -1 << 63, 1<<63 - 1
 	}
-	return nil
+	maximum := int64(1)<<(bits-1) - 1
+	return -maximum - 1, maximum
 }
 
-func applyConstraints(document map[string]any, constraints []map[string]any) {
-	for _, constraint := range constraints {
-		for key, value := range constraint {
-			if existing, exists := document[key]; exists && !reflect.DeepEqual(existing, value) {
-				allOf, _ := document["allOf"].([]any)
-				allOf = append(allOf, map[string]any{key: cloneJSONValue(value)})
-				document["allOf"] = allOf
-				continue
-			}
-			document[key] = cloneJSONValue(value)
-		}
+func unsignedMaximum(bits int) uint64 {
+	if bits == 64 {
+		return ^uint64(0)
 	}
-}
-
-func cloneJSONValue(value any) any {
-	if value == nil {
-		return nil
-	}
-	original := reflect.ValueOf(value)
-	switch original.Kind() {
-	case reflect.Slice:
-		copyValue := reflect.MakeSlice(original.Type(), original.Len(), original.Len())
-		reflect.Copy(copyValue, original)
-		return copyValue.Interface()
-	case reflect.Map:
-		copyValue := reflect.MakeMapWithSize(original.Type(), original.Len())
-		iterator := original.MapRange()
-		for iterator.Next() {
-			copyValue.SetMapIndex(iterator.Key(), iterator.Value())
-		}
-		return copyValue.Interface()
-	default:
-		return value
-	}
+	return uint64(1)<<bits - 1
 }

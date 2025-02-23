@@ -18,9 +18,9 @@ func (d Document) Bytes() ([]byte, error) { return json.Marshal(d) }
 // UnsupportedError reports an operation that cannot be exported faithfully.
 type UnsupportedError = shape.UnsupportedSchemaError
 
-// Export converts a schema to JSON Schema Draft 2020-12.
-// Custom refinements and transforms return UnsupportedError instead of being
-// silently lost.
+// Export converts representable value behavior to JSON Schema Draft 2020-12.
+// Fallbacks, custom refinements, transforms, and other behavior that JSON
+// Schema cannot execute return UnsupportedError instead of being silently lost.
 func Export[T any](schema shape.Schema[T]) (Document, error) {
 	document, err := shape.ExportDocument(schema)
 	if err != nil {

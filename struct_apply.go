@@ -1,370 +1,250 @@
 package shape
 
 import (
+	"context"
 	"fmt"
-	"regexp"
+	"github.com/rhevorn/shape/internal/spec"
+	"github.com/rhevorn/shape/types"
+	"math"
+	"reflect"
 	"strconv"
+	"strings"
+	"time"
+	"unicode"
 )
 
-func applyStringTags(schema StringSchema, options []tagOption) (StringSchema, error) {
-	for _, opt := range options {
-		switch opt.name {
+var durationType = reflect.TypeFor[types.Duration]()
+
+func parseConstant(t reflect.Type, text string) (reflect.Value, error) {
+	v := reflect.New(t).Elem()
+	if t == durationType {
+		n, e := time.ParseDuration(text)
+		v.SetInt(int64(n))
+		return v, e
+	}
+	if t == reflect.TypeFor[time.Time]() {
+		n, e := time.Parse(time.RFC3339Nano, text)
+		return reflect.ValueOf(n), e
+	}
+	switch t.Kind() {
+	case reflect.String:
+		v.SetString(text)
+	case reflect.Bool:
+		if text != "true" && text != "false" {
+			return v, fmt.Errorf("expected true or false")
+		}
+		v.SetBool(text == "true")
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		n, e := strconv.ParseInt(text, 10, t.Bits())
+		if e != nil {
+			return v, e
+		}
+		v.SetInt(n)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		n, e := strconv.ParseUint(text, 10, t.Bits())
+		if e != nil {
+			return v, e
+		}
+		v.SetUint(n)
+	case reflect.Float32, reflect.Float64:
+		if strings.ContainsAny(text, "xXpP_") {
+			return v, fmt.Errorf("expected decimal float")
+		}
+		n, e := strconv.ParseFloat(text, t.Bits())
+		if e != nil {
+			return v, e
+		}
+		if math.IsInf(n, 0) || math.IsNaN(n) {
+			return v, fmt.Errorf("non-finite constant")
+		}
+		v.SetFloat(n)
+	default:
+		return v, fmt.Errorf("unsupported constant type %v", t)
+	}
+	return v, nil
+}
+func applyTag(p *valuePlan, text string) (out *valuePlan, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			out = nil
+			err = fmt.Errorf("shape: %v", r)
+		}
+	}()
+	opts, e := parseShapeTag(text)
+	if e != nil {
+		return nil, e
+	}
+	p = copyPlan(p)
+	labelSeen := false
+	for _, o := range opts {
+		target := p
+		outer := o.name == "ifzero" || o.name == "ifnull" || o.name == "notnull" || o.name == "notempty" || o.name == "label"
+		pointerInner := p.typ.Kind() == reflect.Pointer && !outer
+		if pointerInner {
+			if p.element == nil {
+				return nil, fmt.Errorf("missing pointer element")
+			}
+			target = copyPlan(p.element)
+		}
+		isFlag := map[string]bool{"notnull": true, "notempty": true, "positive": true, "negative": true, "nonnegative": true, "unique": true, "tolower": true, "toupper": true, "email": true, "url": true, "uuid": true, "ip": true}
+		if isFlag[o.name] && o.has {
+			return nil, fmt.Errorf("%s takes no argument", o.name)
+		}
+		switch o.name {
+		case "label":
+			if !o.has || labelSeen {
+				return nil, fmt.Errorf("invalid or duplicate label")
+			}
+			p.label = o.value
+			labelSeen = true
+		case "ifzero", "ifnull":
+			if !o.has {
+				return nil, fmt.Errorf("%s requires a constant", o.name)
+			}
+			t := p.typ
+			if t.Kind() == reflect.Pointer {
+				t = t.Elem()
+			}
+			value, e := parseConstant(t, o.value)
+			if e != nil {
+				return nil, e
+			}
+			if p.typ.Kind() == reflect.Pointer {
+				ptr := reflect.New(t)
+				ptr.Elem().Set(value)
+				value = ptr
+			}
+			p = addOptions(p, spec.NewOption(o.name, value.Interface()))
+		case "trim", "ltrim", "rtrim", "tolower", "toupper":
+			if target.typ.Kind() != reflect.String {
+				return nil, fmt.Errorf("%s requires string", o.name)
+			}
+			var args []string
+			if o.has {
+				args = []string{o.value}
+			}
+			fn := func(ctx context.Context, v reflect.Value) (reflect.Value, error) {
+				if err := ctx.Err(); err != nil {
+					return reflect.Value{}, err
+				}
+				s := applyStringTransform(o.name, v.String(), args)
+				out := reflect.New(v.Type()).Elem()
+				out.SetString(s)
+				return out, nil
+			}
+			if pointerInner {
+				p = appendPointerTagTransform(p, fn)
+			} else {
+				p = appendCompiledTransform(p, fn)
+			}
+		default:
+			var args []any
+			if o.has {
+				switch o.name {
+				case "minlength", "maxlength", "len":
+					n, e := tagCount(o.value)
+					if e != nil {
+						return nil, e
+					}
+					args = []any{n}
+				case "pattern", "startswith", "endswith", "contains":
+					args = []any{o.value}
+				case "min", "max", "gt", "gte", "lt", "lte", "between", "oneof":
+					if target.typ.Kind() == reflect.Slice || target.typ.Kind() == reflect.Map {
+						n, e := tagCount(o.value)
+						if e != nil {
+							return nil, e
+						}
+						args = []any{n}
+					} else {
+						parts := []string{o.value}
+						if o.name == "between" || o.name == "oneof" {
+							parts = strings.Split(o.value, "|")
+						}
+						for _, part := range parts {
+							v, e := parseConstant(target.typ, strings.TrimSpace(part))
+							if e != nil {
+								return nil, e
+							}
+							args = append(args, v.Interface())
+						}
+					}
+				default:
+					return nil, fmt.Errorf("unknown or argument-less tag %s", o.name)
+				}
+			} else if !isFlag[o.name] {
+				return nil, fmt.Errorf("unknown tag or missing argument: %s", o.name)
+			}
+			descriptor := spec.NewRule(o.name, args...)
+			if pointerInner {
+				p = appendPointerTagRule(p, descriptor)
+			} else {
+				p = addRules(p, descriptor)
+			}
+		}
+	}
+	return p, nil
+}
+
+func applyStringTransform(name, value string, args []string) string {
+	if len(args) == 0 {
+		switch name {
 		case "trim":
-			if opt.has {
-				return schema, fmt.Errorf("tag trim takes no value")
-			}
-			schema = schema.Trim()
+			return strings.TrimSpace(value)
+		case "ltrim":
+			return strings.TrimLeftFunc(value, unicode.IsSpace)
+		case "rtrim":
+			return strings.TrimRightFunc(value, unicode.IsSpace)
 		case "tolower":
-			if opt.has {
-				return schema, fmt.Errorf("tag tolower takes no value")
-			}
-			schema = schema.ToLower()
+			return strings.ToLower(value)
 		case "toupper":
-			if opt.has {
-				return schema, fmt.Errorf("tag toupper takes no value")
-			}
-			schema = schema.ToUpper()
-		case "nonempty":
-			if opt.has {
-				return schema, fmt.Errorf("tag nonempty takes no value")
-			}
-			schema = schema.NonEmpty()
-		case "min":
-			n, err := tagInt(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.Min(n)
-		case "max":
-			n, err := tagInt(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.Max(n)
-		case "len":
-			n, err := tagInt(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.Len(n)
-		case "pattern":
-			value, err := tagRequiredString(opt)
-			if err != nil {
-				return schema, err
-			}
-			re, err := regexp.Compile(value)
-			if err != nil {
-				return schema, fmt.Errorf("tag pattern: %w", err)
-			}
-			schema = schema.Pattern(re)
-		case "startswith":
-			value, err := tagRequiredString(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.StartsWith(value)
-		case "endswith":
-			value, err := tagRequiredString(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.EndsWith(value)
-		case "contains":
-			value, err := tagRequiredString(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.Contains(value)
-		case "email":
-			if opt.has {
-				return schema, fmt.Errorf("tag email takes no value")
-			}
-			schema = schema.Email()
-		case "url":
-			if opt.has {
-				return schema, fmt.Errorf("tag url takes no value")
-			}
-			schema = schema.URL()
-		case "uuid":
-			if opt.has {
-				return schema, fmt.Errorf("tag uuid takes no value")
-			}
-			schema = schema.UUID()
-		case "ip":
-			if opt.has {
-				return schema, fmt.Errorf("tag ip takes no value")
-			}
-			schema = schema.IP()
-		default:
-			return schema, fmt.Errorf("unsupported string tag %q", opt.name)
+			return strings.ToUpper(value)
 		}
 	}
-	return schema, nil
+	switch name {
+	case "trim":
+		return strings.Trim(value, args[0])
+	case "ltrim":
+		return strings.TrimLeft(value, args[0])
+	case "rtrim":
+		return strings.TrimRight(value, args[0])
+	}
+	return value
 }
 
-func applyIntTags(schema IntSchema, options []tagOption) (IntSchema, error) {
-	for _, opt := range options {
-		switch opt.name {
-		case "min":
-			n, err := tagInt(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.Min(n)
-		case "max":
-			n, err := tagInt(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.Max(n)
-		case "gt":
-			n, err := tagInt(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.Gt(n)
-		case "gte":
-			n, err := tagInt(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.Gte(n)
-		case "lt":
-			n, err := tagInt(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.Lt(n)
-		case "lte":
-			n, err := tagInt(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.Lte(n)
-		case "positive":
-			if opt.has {
-				return schema, fmt.Errorf("tag positive takes no value")
-			}
-			schema = schema.Positive()
-		case "negative":
-			if opt.has {
-				return schema, fmt.Errorf("tag negative takes no value")
-			}
-			schema = schema.Negative()
-		case "nonnegative":
-			if opt.has {
-				return schema, fmt.Errorf("tag nonnegative takes no value")
-			}
-			schema = schema.NonNegative()
-		case "oneof":
-			value, err := tagRequiredString(opt)
-			if err != nil {
-				return schema, err
-			}
-			parts := splitOneOf(value)
-			if len(parts) == 0 {
-				return schema, fmt.Errorf("tag oneof requires at least one value")
-			}
-			values := make([]int, len(parts))
-			for i, part := range parts {
-				n, err := strconv.Atoi(part)
-				if err != nil {
-					return schema, fmt.Errorf("tag oneof value %q is not an int", part)
-				}
-				values[i] = n
-			}
-			schema = schema.OneOf(values...)
-		default:
-			return schema, fmt.Errorf("unsupported int tag %q", opt.name)
-		}
-	}
-	return schema, nil
+func appendCompiledTransform(p *valuePlan, fn func(context.Context, reflect.Value) (reflect.Value, error)) *valuePlan {
+	p = copyPlan(p)
+	p.transforms = appendCopy(p.transforms, fn)
+	p.steps = appendCopy(p.steps, valueStep{kind: valueStepTransform, transform: fn})
+	return p
 }
 
-func applyInt64Tags(schema Int64Schema, options []tagOption) (Int64Schema, error) {
-	for _, opt := range options {
-		switch opt.name {
-		case "min":
-			n, err := tagInt64(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.Min(n)
-		case "max":
-			n, err := tagInt64(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.Max(n)
-		case "gt":
-			n, err := tagInt64(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.Gt(n)
-		case "gte":
-			n, err := tagInt64(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.Gte(n)
-		case "lt":
-			n, err := tagInt64(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.Lt(n)
-		case "lte":
-			n, err := tagInt64(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.Lte(n)
-		case "positive":
-			if opt.has {
-				return schema, fmt.Errorf("tag positive takes no value")
-			}
-			schema = schema.Positive()
-		case "negative":
-			if opt.has {
-				return schema, fmt.Errorf("tag negative takes no value")
-			}
-			schema = schema.Negative()
-		case "nonnegative":
-			if opt.has {
-				return schema, fmt.Errorf("tag nonnegative takes no value")
-			}
-			schema = schema.NonNegative()
-		case "oneof":
-			value, err := tagRequiredString(opt)
-			if err != nil {
-				return schema, err
-			}
-			parts := splitOneOf(value)
-			if len(parts) == 0 {
-				return schema, fmt.Errorf("tag oneof requires at least one value")
-			}
-			values := make([]int64, len(parts))
-			for i, part := range parts {
-				n, err := strconv.ParseInt(part, 10, 64)
-				if err != nil {
-					return schema, fmt.Errorf("tag oneof value %q is not an int64", part)
-				}
-				values[i] = n
-			}
-			schema = schema.OneOf(values...)
-		default:
-			return schema, fmt.Errorf("unsupported int64 tag %q", opt.name)
+func appendPointerTagTransform(p *valuePlan, inner func(context.Context, reflect.Value) (reflect.Value, error)) *valuePlan {
+	p = copyPlan(p)
+	outer := func(ctx context.Context, value reflect.Value) (reflect.Value, error) {
+		if value.IsNil() {
+			return value, nil
 		}
+		out, err := inner(ctx, value.Elem())
+		if err != nil {
+			return reflect.Value{}, err
+		}
+		result := reflect.New(value.Type().Elem())
+		result.Elem().Set(out)
+		return result, nil
 	}
-	return schema, nil
+	p.transforms = appendCopy(p.transforms, outer)
+	p.steps = appendCopy(p.steps, valueStep{kind: valueStepTransform, transform: outer})
+	return p
 }
 
-func applyFloat64Tags(schema Float64Schema, options []tagOption) (Float64Schema, error) {
-	for _, opt := range options {
-		switch opt.name {
-		case "min":
-			n, err := tagFloat64(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.Min(n)
-		case "max":
-			n, err := tagFloat64(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.Max(n)
-		case "gt":
-			n, err := tagFloat64(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.Gt(n)
-		case "gte":
-			n, err := tagFloat64(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.Gte(n)
-		case "lt":
-			n, err := tagFloat64(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.Lt(n)
-		case "lte":
-			n, err := tagFloat64(opt)
-			if err != nil {
-				return schema, err
-			}
-			schema = schema.Lte(n)
-		case "positive":
-			if opt.has {
-				return schema, fmt.Errorf("tag positive takes no value")
-			}
-			schema = schema.Positive()
-		case "negative":
-			if opt.has {
-				return schema, fmt.Errorf("tag negative takes no value")
-			}
-			schema = schema.Negative()
-		case "nonnegative":
-			if opt.has {
-				return schema, fmt.Errorf("tag nonnegative takes no value")
-			}
-			schema = schema.NonNegative()
-		case "oneof":
-			value, err := tagRequiredString(opt)
-			if err != nil {
-				return schema, err
-			}
-			parts := splitOneOf(value)
-			if len(parts) == 0 {
-				return schema, fmt.Errorf("tag oneof requires at least one value")
-			}
-			values := make([]float64, len(parts))
-			for i, part := range parts {
-				n, err := strconv.ParseFloat(part, 64)
-				if err != nil {
-					return schema, fmt.Errorf("tag oneof value %q is not a float", part)
-				}
-				values[i] = n
-			}
-			schema = schema.OneOf(values...)
-		default:
-			return schema, fmt.Errorf("unsupported float64 tag %q", opt.name)
-		}
-	}
-	return schema, nil
-}
-
-func applyDurationTags(schema DurationSchema, options []tagOption) (DurationSchema, error) {
-	for _, opt := range options {
-		switch opt.name {
-		case "coerce":
-			if opt.has {
-				return schema, fmt.Errorf("tag coerce takes no value")
-			}
-			schema = CoerceDuration()
-		default:
-			return schema, fmt.Errorf("unsupported duration tag %q", opt.name)
-		}
-	}
-	return schema, nil
-}
-
-func applyTimeTags(schema TimeSchema, options []tagOption) (TimeSchema, error) {
-	for _, opt := range options {
-		switch opt.name {
-		case "coerce":
-			if opt.has {
-				return schema, fmt.Errorf("tag coerce takes no value")
-			}
-			schema = CoerceTime()
-		default:
-			return schema, fmt.Errorf("unsupported time tag %q", opt.name)
-		}
-	}
-	return schema, nil
+func appendPointerTagRule(p *valuePlan, descriptor spec.Rule) *valuePlan {
+	p = copyPlan(p)
+	inner := copyPlan(p.element)
+	check := compileRule(inner.typ, descriptor)
+	inner.checks = appendCopy(inner.checks, check)
+	inner.descriptors = appendCopy(inner.descriptors, descriptor)
+	inner.steps = appendCopy(inner.steps, valueStep{kind: valueStepRule, check: check})
+	p.element = inner
+	return p
 }

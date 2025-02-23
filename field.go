@@ -1,0 +1,138 @@
+package shape
+
+import (
+	"context"
+	"reflect"
+
+	"github.com/rhevorn/shape/transform"
+	"github.com/rhevorn/shape/validate"
+)
+
+// Numeric is the set of scalar number types supported by Number.
+type Numeric interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 |
+		~float32 | ~float64
+}
+
+// MapKey is the set of key types supported by Map. Named string and integer
+// types are included through the underlying-type constraints.
+type MapKey interface {
+	~string |
+		~int | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
+}
+
+// Contract is the common transform-and-validate contract accepted by Pointer,
+// Slice, and Map. Specs and Schema values both implement it.
+type Contract[T any] interface {
+	transform.Transformer[T]
+	validate.Validator[T]
+}
+
+// FieldSpec is an explicit field definition accepted by New. Its unexported
+// method intentionally limits implementations to this package.
+type FieldSpec interface{ fieldDefinition() erasedField }
+
+type erasedField struct {
+	name        string
+	typ         reflect.Type
+	transform   func(context.Context, reflect.Value) (reflect.Value, error)
+	validateAll func(context.Context, reflect.Value) error
+	validateOne func(context.Context, reflect.Value) error
+}
+
+type explicitField[T any] struct {
+	name        string
+	transformer transform.Transformer[T]
+	validator   validate.Validator[T]
+}
+
+func (f explicitField[T]) fieldDefinition() erasedField {
+	return eraseField(f.name, f.transformer, f.validator)
+}
+
+func eraseField[T any](name string, transformer transform.Transformer[T], validator validate.Validator[T]) erasedField {
+	return erasedField{
+		name: name,
+		typ:  reflect.TypeFor[T](),
+		transform: func(ctx context.Context, value reflect.Value) (reflect.Value, error) {
+			out, err := transformer.TransformContext(ctx, value.Interface().(T))
+			if err != nil {
+				return reflect.Value{}, err
+			}
+			return reflect.ValueOf(&out).Elem(), nil
+		},
+		validateAll: func(ctx context.Context, value reflect.Value) error {
+			return validator.ValidateContext(ctx, value.Interface().(T))
+		},
+		validateOne: func(ctx context.Context, value reflect.Value) error {
+			return validator.ValidateFirstContext(ctx, value.Interface().(T))
+		},
+	}
+}
+
+func oneFieldName(names []string) string {
+	if len(names) > 1 {
+		panic("shape: field factory accepts at most one name")
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	return names[0]
+}
+
+func requireContract[T any](contract Contract[T]) {
+	if contract == nil {
+		panic("shape: nil contract")
+	}
+}
+
+// ValueSpec defines transform and validation behavior for a value of any type.
+type ValueSpec[T any] struct {
+	name        string
+	transformer transform.ValueTransformer[T]
+	validator   validate.ValueValidator[T]
+}
+
+func (f ValueSpec[T]) fieldDefinition() erasedField {
+	return eraseField(f.name, f.transformer, f.validator)
+}
+func (f ValueSpec[T]) Transform(v T) (T, error) { return f.transformer.Transform(v) }
+func (f ValueSpec[T]) TransformContext(ctx context.Context, v T) (T, error) {
+	return f.transformer.TransformContext(ctx, v)
+}
+func (f ValueSpec[T]) Validate(v T) error { return f.validator.Validate(v) }
+func (f ValueSpec[T]) ValidateContext(ctx context.Context, v T) error {
+	return f.validator.ValidateContext(ctx, v)
+}
+func (f ValueSpec[T]) ValidateFirst(v T) error { return f.validator.ValidateFirst(v) }
+func (f ValueSpec[T]) ValidateFirstContext(ctx context.Context, v T) error {
+	return f.validator.ValidateFirstContext(ctx, v)
+}
+func (f ValueSpec[T]) IfZero(v T) ValueSpec[T] {
+	f.transformer = f.transformer.IfZero(v)
+	return f
+}
+func (f ValueSpec[T]) Apply(values ...func(T) (T, error)) ValueSpec[T] {
+	f.transformer = f.transformer.Apply(values...)
+	return f
+}
+func (f ValueSpec[T]) ApplyContext(values ...func(context.Context, T) (T, error)) ValueSpec[T] {
+	f.transformer = f.transformer.ApplyContext(values...)
+	return f
+}
+func (f ValueSpec[T]) Refine(values ...func(T) error) ValueSpec[T] {
+	f.validator = f.validator.Refine(values...)
+	return f
+}
+func (f ValueSpec[T]) RefineContext(values ...func(context.Context, T) error) ValueSpec[T] {
+	f.validator = f.validator.RefineContext(values...)
+	return f
+}
+func (f ValueSpec[T]) Label(label string) ValueSpec[T] {
+	f.validator = f.validator.Label(label)
+	return f
+}
+func (f ValueSpec[T]) Pointer() PointerSpec[T] { return pointerSpec(f.name, f) }
+func (f ValueSpec[T]) Slice() SliceSpec[T]     { return sliceSpec(f.name, f) }

@@ -1,13 +1,10 @@
-// Package shape provides type-safe, composable schemas for parsing and
-// validating untrusted runtime values.
+// Package shape defines explicit and tag-driven JSON struct schemas.
 //
-// Prefer explicit Schema values built with Object, Fields, and related
-// helpers. Struct / MustStruct optionally derive the same ObjectSchema from
-// json and shape tags for simple DTOs. A schema parses an unknown input,
-// applies normalization and validation, and returns a typed Go value or a
-// structured ValidationError.
+// New defines an explicit Schema from typed field contracts. BindJSON derives
+// a cached Schema from a target struct's tags. Both paths compose encoding/json
+// decoding, transformation, and validation in that order, and Bind methods
+// update targets only after the operation succeeds.
 //
-// Composite errors and named recursion have conservative default bounds.
-// Collection Max rules and JSON reader limits provide additional controls for
-// attacker-facing input.
+// Use the validate and transform subpackages directly for ordinary typed
+// values that do not need a reusable Schema or JSON binding.
 package shape
