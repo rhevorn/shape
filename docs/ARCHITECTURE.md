@@ -1,280 +1,262 @@
-# Architecture and Behavioral Decisions
+# Architecture and compatibility contract
 
-This document records the current implementation contract. Update it whenever
-the public API or parse behavior changes intentionally.
+This document fixes the package boundaries, execution model, ownership rules,
+and compatibility policy for public releases. The exact exported inventory is
+in [API.md](API.md).
 
-## Public shape
+## 1. Design goals
 
-The central contract is:
-
-```go
-type Schema[T any] interface {
-	Parse(value any) (T, error)
-	ParseContext(ctx context.Context, value any) (T, error)
-}
-```
-
-Concrete builders are small values. Chained methods return a modified copy;
-they never mutate a previously constructed schema. Any internal slices must be
-copied before append so two derived schemas cannot share writable backing
-storage.
-
-Primitive parsing uses type assertions, not reflection. Reflection is allowed
-at explicit adapter boundaries when Go cannot construct a named runtime type
-directly, and at `Struct` / `MustStruct` construction time (cached field
-indexes in setters). Parse paths for primitives stay assertion-based.
-
-## Parse pipeline
-
-Schemas follow this order where applicable:
-
-1. Check context and input type
-2. Decode an adapter-specific representation, such as `json.Number`
-3. Normalize
-4. Apply built-in rules in declaration order
-5. Apply refinements in declaration order
-6. Transform the successfully parsed value
-
-Normal `Parse` delegates to `ParseContext(context.Background(), value)`.
-Context cancellation is returned as `ctx.Err()` rather than converted into a
-validation issue.
-
-## Error model
-
-Validation failures return `*ValidationError`, containing one or more `Issue`
-values. Error codes are exported constants so callers do not depend on message
-text. `errors.As` must work for `*ValidationError`.
-
-Built-in issue messages come only from JSON catalogs under `messages/`
-(for example `en.json`, `zh-CN.json`). Templates may use `{{.Label}}`,
-`{{.Expected}}`, and similar placeholders. Custom `NewIssue` text and plain
-errors keep the caller-supplied message.
-
-`SetLanguage` sets the process-default catalog (the one intentional process
-default). `WithLocale(ctx, lang)` overrides it for a parse. `Localize` /
-`LocalizeContext` rewrite an existing `*ValidationError` for display.
-
-`Issue.Label` holds an optional display name. Attach it with
-`Field(...).Label("姓名")`, `shape.Label("年龄", schema)`, the optional
-label argument on `Fields[T]().Str` / `Email` / `Int` / `Bool` / `Int64` /
-`Float64` / `Time` / `Duration`, or `label='…'` in a `shape` struct tag.
-
-Paths are stored as typed field/index segments and formatted only for display.
-Composite schemas prefix child issues by copying the path; they never mutate an
-error returned by a reusable child schema.
-
-Primitive schemas generally emit one issue. Slices, maps, and objects collect
-issues from independently parseable children in deterministic input/schema
-order, up to `DefaultMaxIssues`. When more failures exist, the last retained
-issue has code `too_many_issues` and sibling traversal stops. An object does not
-run its object-level refinement if any field failed, because the partially
-populated value is not a valid refinement input.
-
-An arbitrary error returned by a value or object refinement becomes a `custom`
-issue. An `Issue` or `ValidationError` returned by a refinement preserves its
-structured data. An arbitrary transform error becomes `transform_failed`.
-
-## Strings
-
-`Min`, `Max`, and `Len` count Unicode code points, not bytes. Normalization runs
-before length, pattern, email, and refinement checks. Invalid rule parameters,
-such as a negative length, should fail at schema construction time with a clear
-panic; this catches programmer errors while keeping parse calls allocation-light.
-
-Email validation should use a documented, pragmatic policy suitable for common
-application input. It should not claim full RFC mailbox deliverability.
-
-## Numbers and JSON
-
-Direct primitive constructors are strict:
-
-- `Int` accepts `int`
-- `Int64` accepts `int64`
-- `Float64` accepts `float64`
-- `Bool` accepts `bool`
-
-Package-level `Parse` / `ParseContext` accept JSON as `string` or `[]byte` and
-decode with `json.Decoder.UseNumber`. Numeric schemas accept `json.Number` and
-reject overflow, non-integral values for integers, and malformed numbers. This
-is support for the JSON adapter's number type, not general string coercion.
-Already-decoded Go values use `schema.Parse` / `schema.ParseContext` instead;
-those entry points do not auto-decode JSON text (a string schema must keep
-seeing strings).
-
-`Parse` must consume exactly one JSON value and reject trailing non-space
-input. JSON syntax/decoding failures are returned as ordinary errors, while
-schema failures remain `*ValidationError`.
-
-Reader helpers decode directly from the stream rather than buffering the full
-input. `ParseReaderLimit` and its context variant use an explicit maximum
-byte count and return `ErrJSONTooLarge` when exceeded. HTTP handlers typically
-pass `1 << 20` (1 MiB) or another app-specific limit.
-
-Composite results retain at most 100 issues, and each named `Lazy` schema has a
-64-level default recursion limit. These local immutable limits require no
-request-specific mutable state. JSON decoder nesting protection, byte-limited
-readers, collection `Max`, and context cancellation provide additional
-independent controls.
-
-## Collections
-
-`Slice` and `Map` consume the natural untrusted representations `[]any` and
-`map[string]any`. `Map(key, value)` parses each JSON string key through the key
-schema and each value through the value schema, producing `map[K]V`. They also
-accept typed `[]T` and `map[string]V` inputs without reflection where the shape
-is unambiguous.
-
-Collection size rules evaluate after type checking and before child parsing.
-When size is valid, child errors are aggregated and prefixed with their index or
-key. Map issue order must be deterministic; keys are sorted before parsing.
-`Slice.Unique` uses hash-map equality for types where it is equivalent to
-`reflect.DeepEqual`. The cancellable deep-comparison fallback is limited to 128
-items so non-comparable inputs cannot restore unbounded quadratic work.
-
-## Objects and fields
-
-Preferred object construction for common scalars uses `Fields[T]()`:
+Shape optimizes for contracts that are readable at the call site:
 
 ```go
-f := Fields[User]()
-Object(
-	f.Str("name", "姓名").Trim().Min(2).Set(func(user *User, value string) {
-		user.Name = value
-	}),
-	f.Int("age").Min(18).Set(func(user *User, age int) { user.Age = age }),
+var userSchema = shape.New[User](
+	shape.String("Name").Trim().NotEmpty(),
+	shape.Int("Age").Min(18),
 )
 ```
 
-`Field` remains for arbitrary nested schemas. The setter's signature allows Go
-to infer both the object type and field value type:
+The design keeps four properties explicit:
 
-```go
-Field("age", Int(), func(user *User, age int) { user.Age = age })
+- Go types remain visible and are checked wherever the language permits.
+- transformation and validation can run independently;
+- JSON orchestration has one fixed, documented order;
+- invalid configuration fails during construction, not during random traffic.
+
+## 2. Package boundaries
+
+```text
+validate.Validator[T]
+    reads T
+    returns error
+    never transforms T
+
+transform.Transformer[T]
+    reads T
+    returns a T of the same Go type
+    never validates T
+
+shape.Schema[T]
+    combines both capabilities for an ordinary struct
+    owns JSON decode and atomic bind
+    adds paths for fields and nested values
+
+types.Duration
+    defines a human-readable JSON duration representation
+
+jsonschema / openapi
+    read an exportable Schema plan
+    never affect runtime processing
 ```
 
-Fields are required by default. Semantics:
+The `validate` and `transform` packages do not import the root package. The root
+package depends on both. Adapters depend on the root Schema contract.
 
-| Input state | Plain field | `Optional()` | `Default(v)` |
-| --- | --- | --- | --- |
-| Missing | `required` issue | no setter | setter receives `v` |
-| Present and valid | setter receives parsed value | same | same |
-| Present and invalid | schema issue | same | same |
-| Present `nil` | parsed normally and usually `invalid_type` | same | same |
+## 3. Two Schema construction paths
 
-`Default(v)` implies optional-on-missing behavior; requiring an additional
-`Optional()` call would add ceremony without changing meaning. It accepts only
-deeply immutable values. `DefaultFunc(func() V)` supports reference-bearing
-defaults by creating a fresh value per parse. Dynamic defaults are not
-exportable to JSON Schema because invoking a factory during documentation
-generation would not faithfully describe runtime behavior.
-
-Objects default to strip mode. Strip means unknown keys are ignored while the
-typed output naturally contains only declared fields. `Strict` emits one
-`unknown_field` issue per unknown key, ordered lexicographically. Setters run
-only for successfully parsed fields.
-
-Duplicate field names are programmer errors and should panic during object
-construction. Empty field names and nil setters are also construction errors.
-
-### Struct tags
-
-`Struct[T]()` / `MustStruct[T]()` build an `ObjectSchema[T]` from exported
-fields. Input keys come from `json` tags (or the Go field name). Rules come
-from the `shape` tag. Option names match fluent methods in lowercase
-(`trim` ↔ `Trim`, `min` ↔ `Min`, `email` ↔ `Email`, …). Field-level options:
-
-- `label='…'` — display name on issues
-- `optional` — same as `Optional()`; `json:",omitempty"` also marks optional
-
-Supported kinds: `string`, `bool`, `int`, `int64`, `float64`, `time.Duration`,
-`time.Time`, nested structs, and slices of those. On duration/time fields,
-`coerce` selects `CoerceDuration` / `CoerceTime` (for example `"3s"`, RFC3339).
-Pointer fields are rejected. Unsupported or misspelled tags fail at
-construction (`Struct` error / `MustStruct` panic), not at parse.
-
-Keep package-level `var schema = MustStruct[T]()` so the value is named and
-reusable. `Struct` / `MustStruct` / `Bind` also cache successful tag builds by
-`reflect.Type`, so repeated Bind calls do not re-parse tags. Complex pipelines
-(`Transform`, `Union`, cross-field `Refine`) remain code.
-
-## Refinement and transformation
-
-Changing a schema's output type uses a top-level helper:
+### Explicit field Schema
 
 ```go
-Transform(source, func(A) (B, error)) Schema[B]
+shape.New[T](fields...)
 ```
 
-Value-preserving refinement should be available on concrete schema builders
-where ergonomic, backed by a shared generic helper if needed. Cross-type method
-generic parameters are not used because Go methods cannot introduce them.
+`T` must be an ordinary value struct. Every field Spec type-erases a strongly
+typed Transformer and Validator into an immutable field operation. Construction
+uses reflection once to resolve the Go field, verify its type, and record the
+effective JSON path.
 
-Refinement and transform callbacks are treated as immutable schema definition
-state. Callers are responsible for making captured state concurrency-safe.
+An explicit Schema:
 
-## Dependency policy
+- processes fields in `shape.New` argument order;
+- ignores `shape` tags;
+- leaves omitted fields unchanged and unvalidated;
+- supports nested Schema, pointer, slice, and map composition;
+- runs whole-struct `Apply`/`Refine` after field operations in the same phase.
 
-The module targets Go 1.24 and newer and uses only the Go standard library.
-Generics are the preferred mechanism for preserving relationships between
-schema output, collection elements, object fields, refinements, and transforms.
-Concrete primitive fast paths remain appropriate when they avoid reflection or
-materially reduce allocations. Reflection is limited to adapter boundaries
-where Go generics cannot construct a named runtime type directly.
+### Tagged Schema
 
-The confirmed canonical module path is `github.com/rhevorn/shape`.
+```go
+shape.Struct[T]()
+shape.BindJSON(&target, source)
+```
 
-## Recursive schemas
+The tagged compiler walks the supported Go field graph, parses `shape` tags,
+and builds an immutable recursive plan. Successful and failed compilation
+results are cached by `reflect.Type`, so repeated Bind calls do not reparse tags.
 
-`Lazy(name, provider)` is the explicit recursion boundary. Its provider is
-resolved at most once and the resolved schema is safely published to concurrent
-parsers. Construction remains explicit: recursion does not depend on reflection,
-global registries, or mutable package state.
+A tagged Schema:
 
-Parsing tracks active calls to each Lazy identity in parse-local context state.
-The state is synchronized for safe context propagation and is never stored on
-the reusable schema. The default limit is 64 and `MaxDepth` returns a configured
-schema copy. This terminates cyclic in-memory graphs and bounds error-path
-amplification without changing recursive JSON Schema export.
+- processes exported fields in Go declaration order;
+- uses tags on nested value structs automatically;
+- rejects unsupported graphs, anonymous fields, recursion, and duplicate JSON
+  names during construction;
+- is the current source for JSON Schema/OpenAPI export metadata.
 
-The name is used only as the JSON Schema `$defs` key. Names must be unique per
-exported document, and JSON Pointer escaping is applied when constructing a
-`$ref`. Recursive exports share one build context so direct and mutually
-recursive graphs terminate without dropping definitions.
+Package-level Bind functions infer `T`, retrieve the cached tagged plan, and run
+the same Schema JSON pipeline.
 
-## Alternative schemas
+## 4. Independent phases
 
-`Union` means that at least one alternative must parse successfully and returns
-the first successful result. `OneOf` evaluates every alternative and succeeds
-only when exactly one parses successfully. Their JSON Schema representations
-are `anyOf` and `oneOf`, respectively.
+For an existing value:
 
-## Intentional decisions
+```text
+Schema.Transform(value)      → transformed copy or error
+Schema.Validate(value)       → all validation issues or nil
+Schema.ValidateFirst(value)  → first validation issue or nil
+```
 
-- Email validation accepts plain mailbox addresses parsed by `net/mail`; display
-  names are rejected, and deliverability is out of scope.
-- Error codes, paths, and structured `Issue` fields are the machine API.
-  Catalog message text is for humans and may change; prefer codes and paths.
-- Invalid schema construction parameters panic because they are programmer
-  errors; untrusted input never causes a construction panic.
-- Concrete builders should be created with their constructor functions. A useful
-  zero value is not promised for composites that require child definitions.
-- `CoerceFloat` is removed; use `CoerceFloat64`.
-- There is no dedicated `net/http` adapter; handlers call root JSON helpers.
-- JSON Schema / OpenAPI export live in the `jsonschema` and `openapi`
-  packages. The root exposes `ExportDocument` only as an adapter hook; prefer
-  those packages' public APIs. Schema metadata uses `Annotate`, not methods on
-  concrete builders.
+These calls are deliberately independent. `Validate` observes exactly the
+supplied value; `Transform` does not decide whether the result is valid.
 
-The repository is licensed under MIT.
+For JSON:
 
-## Current surface
+```text
+read exactly one JSON value
+    ↓
+encoding/json decode into a fresh zero T
+    ↓
+run every field transform
+    ↓
+run whole-struct transforms
+    ↓
+run every field validation rule
+    ↓
+run whole-struct validation rules
+    ↓
+return T, or atomically replace the Bind target
+```
 
-Implemented in the root module: primitives, generic numbers, collections,
-typed objects (`Field` and `Fields`), transforms, refinements, explicit
-coercion, time/duration, URL/UUID/IP, enum/literal/union/oneOf/nullable,
-lazy recursion, JSON parse helpers, metadata/`Annotate`, locale catalogs, and
-labels. JSON Schema and OpenAPI export live in the `jsonschema` and `openapi`
-packages (root `ExportDocument` is the shared adapter hook).
+Transform and validation methods may be visually interleaved on one field Spec,
+but their phases are not interleaved at runtime. Within each phase, declarations
+retain their order.
 
-Framework-specific integrations (Gin, Echo, Fiber, and similar) stay out of
-the root module so ordinary users do not inherit third-party dependency graphs.
+For tag text, `shape:"notempty,trim"` and `shape:"trim,notempty"` therefore both
+trim during the transform phase and validate the transformed value afterward.
+
+## 5. Stable traversal order
+
+Determinism is part of the error contract:
+
+```text
+explicit struct fields     shape.New argument order
+tagged struct fields       Go declaration order
+field rules/callbacks      fluent method-call order within the phase
+slices                     ascending index
+maps                       sorted supported key order
+```
+
+`ValidateFirst` follows the same order and stops before evaluating later work.
+`Validate` aggregates up to `validate.DefaultMaxIssues`; reaching the cap emits
+the stable `too_many_issues` code.
+
+## 6. Ownership and immutability
+
+Constructed Validators, Transformers, and Schemas are immutable values. Fluent
+methods return a new value and do not modify the receiver. They can be stored as
+package variables and reused concurrently.
+
+Built-in transforms do not mutate caller-owned pointer pointees, slice backing
+arrays, or maps. They return new outer storage. Fallback values are snapshotted
+at construction and copied for calls where the graph can be copied safely.
+
+No partial value is returned after transform failure. Bind never changes the
+target after a decode, transform, validation, size-limit, or context failure.
+
+## 7. JSON boundary
+
+Shape intentionally delegates representation rules to `encoding/json`:
+
+- `json` field names and `json:",string"` follow the standard library;
+- custom `UnmarshalJSON` methods run normally;
+- `[]byte` follows standard base64 behavior;
+- numeric overflow and type mismatch remain decoder errors;
+- missing keys and JSON null become whatever zero/nil state the standard
+  decoder produces for the Go field.
+
+Shape does not retain raw tokens or presence bits after decoding. `IfZero`
+therefore cannot distinguish missing, null, and explicit zero when they decode
+to the same scalar. Pointer/slice/map nil state is preserved and may be handled
+with `IfNull` or `NotNull`.
+
+Unknown-field rejection and byte limits are opt-in through `JSONOptions`.
+Exactly one top-level JSON value is accepted.
+
+## 8. Errors
+
+Validation returns `*validate.Error`, which contains ordered `Issue` values.
+Codes and paths are stable machine-facing fields; localized messages are
+human-facing.
+
+Built-in messages use a typed `validate.Language`. Process-wide language is
+atomic; context locale overrides it per request. Custom Refine errors retain the
+user message and receive code `custom`.
+
+Schema transform failures use `*shape.TransformError`, prefix nested JSON paths,
+and preserve the original error through `Unwrap`. Decode errors retain the
+`encoding/json` cause.
+
+Invalid program configuration panics at construction. Invalid external input
+returns an error. This distinction is intentional and stable.
+
+## 9. Context and bounds
+
+Context-aware entry points check cancellation between rules, fields, collection
+items, copies, and map traversal. `ApplyContext` and `RefineContext` receive the
+same context. A non-context callback already executing cannot be preempted.
+
+Traversal/copy depth and issue aggregation are bounded. Reader input can be
+bounded with `JSONOptions.MaxBytes`. These limits protect request handlers from
+pathological input without introducing hidden goroutines.
+
+## 10. Static analysis
+
+Go compilation catches ordinary method/type mistakes. It cannot interpret tag
+strings or connect a string literal field name to `T`.
+
+`shapevet` supplements compilation for statically visible declarations. Runtime
+construction remains the final authority because Specs may be stored in
+variables or assembled dynamically.
+
+The analyzer is optional and never imported by runtime packages.
+
+## 11. Export boundary
+
+JSON Schema/OpenAPI export is conservative: behavior is exported only when the
+adapter can represent it without changing semantics. Unsupported transforms,
+fallbacks, callbacks, custom JSON representations, and rules return
+`UnsupportedSchemaError`.
+
+The initial export contract accepts representable tagged plans. Explicit field
+Schemas remain runtime-only until their metadata representation can guarantee
+the same fidelity. Silent omission is forbidden.
+
+## 12. Compatibility policy
+
+After the first public release, the following require a major version:
+
+- removing or renaming a documented public identifier;
+- changing a public signature or generic constraint incompatibly;
+- changing Decode → Transform → Validate order;
+- making Transform validate or Validate transform;
+- changing aggregate/fail-fast semantics or traversal order;
+- changing documented zero, null, empty, path, or atomic Bind behavior;
+- changing an existing stable validation code to mean something different;
+- adding implicit coercion to an existing strict operation.
+
+Minor versions may add new factories, rules, transforms, languages, issue codes,
+or optional adapters when existing programs retain their behavior.
+
+The following concepts are intentionally absent from the initial contract:
+
+```text
+implicit coercion
+Optional
+Default
+SkipNull
+Nullable
+NotBlank
+cross-type Transform
+ordinary-value Parse or in-place Bind
+```
+
+`IfZero`, `IfNull`, pointers, and explicit custom callbacks cover the intended
+cases without hiding JSON state or mixing validation with transformation.

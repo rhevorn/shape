@@ -1,232 +1,218 @@
-# Shape
+# shape
 
-**Type-safe, composable schema parsing and validation for Go.**
+Type-safe validation, transformation, and JSON binding for Go.
 
-Turn untrusted input—especially JSON—into typed values. Prefer explicit
-schemas; optional `shape` struct tags cover simple HTTP DTOs. Requires Go
-1.24+. The core and bundled adapters use only the standard library.
+`shape` lets you describe a struct once, then reuse that definition to:
+
+- transform an existing Go value;
+- validate an existing Go value;
+- decode, transform, and validate JSON;
+- collect every validation issue or stop at the first one.
+
+The public API uses Go generics. Invalid field names and incompatible field
+types are rejected when a schema is created, while normal method and argument
+mistakes are caught by the Go compiler.
+
+## Install
 
 ```sh
 go get github.com/rhevorn/shape
 ```
 
+Requires Go 1.24 or newer. Runtime packages use only the standard library.
+
 ## Quick start
 
+This is a complete program:
+
 ```go
+package main
+
+import (
+	"fmt"
+
+	"github.com/rhevorn/shape"
+)
+
 type User struct {
-	Name  string
-	Email string
-	Age   int
+	Name string   `json:"name"`
+	Age  int      `json:"age"`
+	Tags []string `json:"tags"`
 }
 
-f := shape.Fields[User]()
-userSchema := shape.Object(
-	f.Str("name", "姓名").Trim().Min(2).Max(50).Set(func(u *User, v string) { u.Name = v }),
-	f.Email("email", "邮箱").Trim().Set(func(u *User, v string) { u.Email = v }),
-	f.Int("age").Min(18).Max(120).Set(func(u *User, v int) { u.Age = v }),
-).Strict()
+var userSchema = shape.New[User](
+	shape.String("Name").Trim().NotEmpty().MaxLength(50),
+	shape.Int("Age").Min(18).Max(120),
+	shape.Slice("Tags", shape.String().Trim().NotEmpty()).
+		NotEmpty().
+		Unique(),
+)
 
-user, err := shape.Parse(userSchema, `{"name":" Pong ","email":"pong@example.com","age":30}`)
+func main() {
+	user, err := userSchema.ParseJSON([]byte(`{
+		"name": " Pong ",
+		"age": 20,
+		"tags": [" go ", "shape"]
+	}`))
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("%#v\n", user)
+	// main.User{Name:"Pong", Age:20, Tags:[]string{"go", "shape"}}
+}
 ```
 
-`shape.Parse` accepts `string` or `[]byte` JSON. For already-decoded Go values,
-call `schema.Parse` instead. HTTP bodies: `ParseReaderLimitContext(ctx, schema, r.Body, 1<<20)`.
+Transformation steps keep the order in which methods are called, and validation
+rules do the same. A schema JSON operation completes all transformation
+steps before it starts validation, so `NotEmpty` sees the trimmed string.
 
-Runnable samples: `[examples/](examples/)`.
+## One schema, three operations
 
-## Objects and fields
-
-`Fields[T]()` covers common scalars (`Str`, `Email`, `Int`, `Bool`, `Int64`,
-`Float64`, `Time`, `Duration`). Optional second argument is a display label for
-messages. Use `Field(...)` for nested or custom schemas.
-
-Fields are required by default. `Optional()`, `Default(v)` (immutable values
-only), and `DefaultFunc` cover missing input. Unknown keys are stripped unless
-you call `Strict()`.
+Use the same schema with typed Go values or JSON:
 
 ```go
-users := shape.Slice(userSchema).Min(1) // []User
+raw := User{Name: " Pong ", Age: 20, Tags: []string{" go "}}
+
+user, err := userSchema.Transform(raw)
+err = userSchema.Validate(user)
+
+user, err = userSchema.ParseJSON([]byte(`{
+	"name": " Pong ",
+	"age": 20,
+	"tags": [" go "]
+}`))
 ```
 
-### Struct tags (optional)
+The responsibilities are deliberately separate:
 
-Tags are a convenience for simple DTOs. Prefer explicit `Object` / `Fields`
-above; see [`examples/structtag`](examples/structtag) for `MustStruct` and
-`Bind`. Tag names match fluent methods in lowercase (`Trim` → `trim`, …).
-Successful `MustStruct` builds are cached by type.
+- `Transform` returns a transformed copy and does not validate it.
+- `Validate` checks a typed value and collects all issues.
+- `ValidateFirst` checks a typed value and stops at the first issue.
+- `ParseJSON` decodes one JSON value, transforms it, validates it, and returns it.
+
+All operations also have context-aware forms.
+
+## Struct tags
+
+Tags are a shorter alternative for straightforward request structs:
 
 ```go
 type CreateUserRequest struct {
-	Name  string `json:"name" shape:"trim,min=2,max=50,label='姓名'"`
-	Email string `json:"email" shape:"trim,email,label='邮箱'"`
-	Age   int    `json:"age" shape:"min=18"`
+	Name string `json:"name" shape:"trim,notempty,maxlength=50"`
+	Age  int    `json:"age" shape:"min=18,max=120"`
 }
 
-var createUser = shape.MustStruct[CreateUserRequest]().Strict()
-
-user, err := shape.ParseReaderLimitContext(ctx, createUser, r.Body, 1<<20)
-// or: err := shape.BindReaderLimitContext(ctx, &req, r.Body, 1<<20)
+func decodeRequest(data []byte) (CreateUserRequest, error) {
+	var request CreateUserRequest
+	err := shape.BindJSON(&request, data)
+	return request, err
+}
 ```
 
-`optional` or `json:",omitempty"` marks a field optional. On `time.Duration` /
-`time.Time`, `coerce` maps to `CoerceDuration` / `CoerceTime` (e.g. `"3s"`).
-Complex rules (`Transform`, `Union`, cross-field `Refine`) stay in code.
+`BindJSON` changes the destination only after decoding, transformation, and
+validation all succeed. Use `shape.Struct[CreateUserRequest]()` when the tagged
+schema needs to be stored or reused.
 
-## Collections and composition
+Tagged schemas can add cross-field behavior with
+`shape.Struct[T]().Apply(...).Refine(...)`. Use explicit `shape.New[T](...)`
+schemas when field behavior should be written in Go rather than tags.
 
-Build larger schemas by wrapping smaller ones. The element/value schema comes
-first; size or shape rules chain afterward.
+## Validation without a schema
 
-**List — `Slice`** (same element type, output `[]T`):
+The `validate` package works independently:
 
 ```go
-tags := shape.Slice(shape.String().Trim().Min(1)).Min(1).Max(10)
-// JSON: ["go","shape"]  →  []string{"go","shape"}
+username := validate.String().
+	NotEmpty().
+	MinLength(3).
+	Pattern(`^[a-z0-9_]+$`)
 
-users := shape.Slice(userSchema).Min(1)
-// JSON: [{...},{...}]  →  []User
+err := username.Validate("pong")
 ```
 
-**Map — `Map(key, value)`** → `map[K]V` (key schema first, value schema second).
-JSON objects always arrive with string keys; the key schema parses each one:
+It provides validators for strings, numbers, booleans, times, durations,
+pointers, slices, maps, and custom values.
+
+## Transformation without a schema
+
+The `transform` package also works independently:
 
 ```go
-labels := shape.Map(shape.String(), shape.String().Min(1))
-// map[string]string
+canonicalName := transform.String().
+	Trim().
+	ToLower()
 
-loose := shape.Map(shape.String(), shape.Any())
-// map[string]any
-
-ids := shape.Map(shape.String().ToLower(), shape.Int())
-// {"User":1} → map[string]int{"user":1}
-
-ports := shape.Map(
-	shape.Transform(shape.String().Trim(), strconv.Atoi),
-	shape.Bool(),
-)
-// {"8080":true} → map[int]bool{8080:true}
+name, err := canonicalName.Transform(" Pong ")
+// name is "pong"
 ```
 
-**Change type — `Transform`** (A → B after a successful parse):
+Transformers never perform validation. Custom transformations use `Apply` or
+`ApplyContext`.
+
+## JSON options
+
+JSON decoding can reject unknown object fields and limit input size:
 
 ```go
-port := shape.Transform(shape.String().Trim(), strconv.Atoi)
-// JSON: "8080"  →  int(8080)
+options := shape.JSONOptions{
+	DisallowUnknownFields: true,
+	MaxBytes:              1 << 20,
+}
+
+user, err := userSchema.ParseJSON(data, options)
 ```
 
-**Same type, extra rule — `Refine`**:
+Reader, context, Parse, and Bind variants are listed in the
+[API contract](docs/API.md).
+
+## Errors and languages
+
+Validation errors contain stable issue codes and paths:
 
 ```go
-even := shape.Int().Refine(func(n int) error {
-	if n%2 != 0 {
-		return shape.NewIssue("not_even", "must be even")
-	}
-	return nil
-})
-```
-
-**One of several shapes:**
-
-```go
-// First match wins (like JSON Schema anyOf)
-contact := shape.Union(shape.String().Email(), shape.UUID())
-
-// Exactly one alternative must match (like oneOf)
-id := shape.OneOf(shape.String().Email(), shape.UUID())
-```
-
-**JSON `null` — `Nullable`** (output `*T`; missing null vs value stay distinct):
-
-```go
-nickname := shape.Nullable(shape.String().Trim())
-// null → (*string)(nil)    "Ada" → &"Ada"
-```
-
-Less common: `Tuple` (fixed-length positions into a struct) and `Lazy`
-(recursion). Details and limits are in [architecture](docs/ARCHITECTURE.md).
-
-## Errors and locale
-
-`err.Error()` is enough for logs and most handlers. Use `errors.As` only when
-you need the structured `Issues` list (for example a JSON API body):
-
-```go
-if err != nil {
-	fmt.Println(err) // validation failed: name: ...
-
-	var validation *shape.ValidationError
-	if errors.As(err, &validation) {
-		for _, issue := range validation.Issues {
-			fmt.Println(issue.Code, issue.Path, issue.Message)
-		}
+var validationError *validate.Error
+if errors.As(err, &validationError) {
+	for _, issue := range validationError.Issues {
+		fmt.Println(issue.Code, issue.Path.String(), issue.Message)
 	}
 }
 ```
 
-Prefer `issue.Code` and `issue.Path` over parsing message text. Catalogs live
-under `messages/` (`en`, `zh-CN`, …). Set a process default with
-`SetLanguage("zh-CN")`, or per call with `WithLocale(ctx, "zh-CN")`.
+Built-in messages support `validate.English` and
+`validate.SimplifiedChinese`. A locale can be attached to a context with
+`validate.WithLocale`.
 
-## Coercion
+## Static checking
 
-Strict constructors do not convert types. Use explicit helpers when you want
-that:
-
-```go
-shape.CoerceInt().Min(1).Max(65535)
-shape.CoerceBool()
-shape.CoerceTime()
-shape.CoerceDuration()
-```
-
-## JSON Schema and OpenAPI
-
-```go
-import (
-	"github.com/rhevorn/shape/jsonschema"
-	"github.com/rhevorn/shape/openapi"
-)
-
-document, err := jsonschema.Export(userSchema)
-body, err := openapi.JSONRequestBody(userSchema, true)
-```
-
-Attach export-only metadata with `shape.Annotate(schema).Title(...).Description(...)`.
-Unsupported operations (custom refine/transform) return `UnsupportedSchemaError`.
-
-## Feature map
-
-
-| Area               | Builders                                                                                                 |
-| ------------------ | -------------------------------------------------------------------------------------------------------- |
-| Scalars            | `String`, `Bool`, `Int`, `Int64`, `Float64`, `Number[T]`, `Any`, `Time`, `Duration`, `URL`, `UUID`, `IP` |
-| Objects            | `Object`, `Fields`, `Field`, `Struct` / `MustStruct`, `Optional`, `Default`, `DefaultFunc`, `Strict` / `Strip` |
-| Collections        | `Slice`, `Map(key, value)`, `Tuple`                                                                     |
-| Choice / recursion | `Enum`, `Literal`, `Union`, `OneOf`, `Nullable`, `Lazy`                                                  |
-| Pipeline           | `Transform`, `Refine`, `RefineContext`, `Label`, `Annotate`                                              |
-| Input              | `Parse`, `ParseContext`, `ParseReader`, `ParseReaderLimit` (+ Context), `Bind` / `BindReaderLimit` (+ Context) |
-
-
-## Design
-
-- Compile-time types via generics; fluent `Object`/`Fields` stay first-class
-- Optional `MustStruct` tags for simple DTOs (construction-time reflection only)
-- Explicit normalize / coerce / transform
-- Path-aware structured errors
-- Immutable schemas, safe to reuse concurrently
-- No reflection on strict primitive parse paths
-- Stdlib-only core
-
-## Development
+Go checks fluent method names, generic types, callback signatures, and argument
+types. The optional `shapevet` analyzer additionally checks statically visible
+struct tags and explicit schema field names:
 
 ```sh
-make check
-make test-race
-make fuzz-smoke
+go install github.com/rhevorn/shape/tools/shapevet@latest
+go vet -vettool="$(which shapevet)" ./...
 ```
 
-See [architecture](docs/ARCHITECTURE.md), [security](SECURITY.md), and
-[contributing](CONTRIBUTING.md).
+`shapevet` is optional. Schema construction still rejects invalid definitions
+at runtime when the analyzer is not installed.
+
+## Documentation
+
+- [Complete usage guide](docs/USAGE.md)
+- [Public API and behavior contract](docs/API.md)
+- [Struct tag reference](docs/TAGS.md)
+- [Architecture and compatibility contract](docs/ARCHITECTURE.md)
+- [Runnable examples](examples)
+
+JSON Schema Draft 2020-12 and OpenAPI 3.1 adapters are available in the
+`jsonschema` and `openapi` packages. See the [export example](examples/shape/export).
+
+## GitHub topics
+
+`go`, `golang`, `validation`, `validator`, `schema-validation`,
+`data-validation`, `struct-tags`, `json-validation`, `data-normalization`,
+`type-safe`
 
 ## License
 
