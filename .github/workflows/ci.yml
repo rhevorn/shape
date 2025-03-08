@@ -20,6 +20,7 @@ jobs:
           go-version: ${{ matrix.go-version }}
           cache: true
       - run: make check
+      - run: make shapevet-test
       - run: make test-race
 
   fuzz:

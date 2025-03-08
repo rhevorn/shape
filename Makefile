@@ -1,6 +1,9 @@
-.PHONY: bench check fmt fuzz-smoke release-check test test-race vet
+.PHONY: bench check fmt fuzz-smoke release-check shapevet-test test test-race vet
 
 check: fmt vet test
+
+shapevet-test:
+	go test ./tools/shapevet/...
 
 fmt:
 	@test -z "$$(gofmt -l .)" || { gofmt -d .; exit 1; }
@@ -15,18 +18,11 @@ vet:
 	go vet ./...
 
 fuzz-smoke:
-	go test -run '^$$' -fuzz '^FuzzStringSchema$$' -fuzztime 2s
-	go test -run '^$$' -fuzz '^FuzzIntJSON$$' -fuzztime 2s
-	go test -run '^$$' -fuzz '^FuzzGenericNumberJSON$$' -fuzztime 2s
-	go test -run '^$$' -fuzz '^FuzzObject$$' -fuzztime 2s
-	go test -run '^$$' -fuzz '^FuzzParse$$' -fuzztime 2s
-	go test -run '^$$' -fuzz '^FuzzTupleJSON$$' -fuzztime 2s
-	go test -run '^$$' -fuzz '^FuzzMapJSON$$' -fuzztime 2s
-	go test -run '^$$' -fuzz '^FuzzLazyJSON$$' -fuzztime 2s
-	go test -run '^$$' -fuzz '^FuzzJSONSchemaExport$$' -fuzztime 2s
-	go test -run '^$$' -fuzz '^FuzzParseReaderLimit$$' -fuzztime 2s
+	go test ./transform -run '^$$' -fuzz '^FuzzStringTransformer$$' -fuzztime 2s
+	go test ./types -run '^$$' -fuzz '^FuzzDurationJSON$$' -fuzztime 2s
+	go test . -run '^$$' -fuzz '^FuzzTaggedSchemaJSON$$' -fuzztime 2s
 
 bench:
 	go test -run '^$$' -bench . -benchmem ./...
 
-release-check: check test-race fuzz-smoke bench
+release-check: check shapevet-test test-race fuzz-smoke bench
