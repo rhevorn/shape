@@ -25,15 +25,13 @@ const (
 const DefaultMaxIssues = 100
 
 type Issue struct {
-	Code    string `json:"code"`
-	Path    Path   `json:"path"`
-	Message string `json:"message"`
-	// MessageID identifies Shape's built-in message template. It is omitted
-	// from JSON and lets Localize render the same issue in another language.
-	MessageID string `json:"-"`
+	Code      string `json:"code"`
+	Path      Path   `json:"path"`
+	Message   string `json:"message"`
 	Label     string `json:"label,omitempty"`
 	Expected  any    `json:"expected,omitempty"`
 	Received  any    `json:"received,omitempty"`
+	messageID string
 }
 
 func (i Issue) Error() string {
@@ -57,7 +55,7 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("validation failed with %d issues; first issue: %s", len(e.Issues), e.Issues[0].Error())
 }
 func issue(code, key string, expected, received any) error {
-	return &Error{Issues: []Issue{{Code: code, MessageID: key, Expected: expected, Received: received}}}
+	return &Error{Issues: []Issue{{Code: code, messageID: key, Expected: expected, Received: received}}}
 }
 
 func customIssue(err error) []Issue {
@@ -78,9 +76,9 @@ func finish(ctx context.Context, issues []Issue) error {
 	if len(issues) == 0 {
 		return nil
 	}
-	lang := LocaleFromContext(ctx)
+	lang := languageFromContext(ctx)
 	for i := range issues {
-		issues[i] = localizeIssue(issues[i], lang)
+		issues[i] = renderIssue(issues[i], lang)
 	}
 	return &Error{Issues: issues}
 }
@@ -92,7 +90,7 @@ func appendIssues(dst []Issue, additions []Issue, first bool) ([]Issue, bool) {
 	remaining := DefaultMaxIssues - len(dst)
 	if remaining <= 0 {
 		dst[DefaultMaxIssues-1] = Issue{
-			Code: CodeTooManyIssues, MessageID: "too_many_issues", Expected: DefaultMaxIssues,
+			Code: CodeTooManyIssues, messageID: "too_many_issues", Expected: DefaultMaxIssues,
 		}
 		return dst, true
 	}
@@ -100,7 +98,7 @@ func appendIssues(dst []Issue, additions []Issue, first bool) ([]Issue, bool) {
 		if remaining > 1 {
 			dst = append(dst, additions[:remaining-1]...)
 		}
-		dst = append(dst, Issue{Code: CodeTooManyIssues, MessageID: "too_many_issues", Expected: DefaultMaxIssues})
+		dst = append(dst, Issue{Code: CodeTooManyIssues, messageID: "too_many_issues", Expected: DefaultMaxIssues})
 		return dst, true
 	}
 	dst = append(dst, additions...)

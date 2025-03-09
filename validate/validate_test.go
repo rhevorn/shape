@@ -9,16 +9,18 @@ import (
 )
 
 func TestLanguageConstants(t *testing.T) {
-	previous := validate.CurrentLanguage()
-	defer validate.SetLanguage(previous)
+	defer validate.SetLanguage(validate.English)
 
 	validate.SetLanguage(validate.SimplifiedChinese)
-	if got := validate.CurrentLanguage(); got != validate.SimplifiedChinese {
-		t.Fatalf("language = %v", got)
+	err := validate.String().NotEmpty().Validate("")
+	var got *validate.Error
+	if !errors.As(err, &got) || got.Issues[0].Message != "不能为空" {
+		t.Fatalf("global language error = %#v", err)
 	}
 	ctx := validate.WithLocale(context.Background(), validate.English)
-	if got := validate.LocaleFromContext(ctx); got != validate.English {
-		t.Fatalf("context language = %v", got)
+	err = validate.String().NotEmpty().ValidateContext(ctx, "")
+	if !errors.As(err, &got) || got.Issues[0].Message != "must not be empty" {
+		t.Fatalf("context language error = %#v", err)
 	}
 
 	defer func() {
@@ -96,20 +98,24 @@ func TestMapValidateFirstDoesNotRunValueAfterKeyFailure(t *testing.T) {
 	}
 }
 
-func TestLocalizeCanRewriteBuiltInButNotCustomMessage(t *testing.T) {
+func TestLanguageIsAppliedWhenErrorIsCreated(t *testing.T) {
+	defer validate.SetLanguage(validate.English)
+	validate.SetLanguage(validate.SimplifiedChinese)
+
 	err := validate.String().NotEmpty().Refine(func(string) error {
 		return errors.New("business message")
 	}).Validate("")
-	localized := validate.Localize(err, validate.SimplifiedChinese)
 	var got *validate.Error
-	if !errors.As(localized, &got) || len(got.Issues) != 2 {
-		t.Fatalf("error = %#v", localized)
+	if !errors.As(err, &got) || len(got.Issues) != 2 {
+		t.Fatalf("error = %#v", err)
 	}
 	if got.Issues[0].Message != "不能为空" || got.Issues[1].Message != "business message" {
 		t.Fatalf("issues = %#v", got.Issues)
 	}
-	english := validate.Localize(localized, validate.English)
-	if !errors.As(english, &got) || got.Issues[0].Message != "must not be empty" {
-		t.Fatalf("english = %#v", english)
+
+	ctx := validate.WithLocale(context.Background(), validate.English)
+	err = validate.String().NotEmpty().ValidateContext(ctx, "")
+	if !errors.As(err, &got) || got.Issues[0].Message != "must not be empty" {
+		t.Fatalf("context error = %#v", err)
 	}
 }
