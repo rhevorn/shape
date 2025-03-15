@@ -36,3 +36,7 @@ func (t SliceTransformer[T]) Transform(v []T) ([]T, error) {
 func (t SliceTransformer[T]) TransformContext(ctx context.Context, v []T) ([]T, error) {
 	return t.value.TransformContext(ctx, v)
 }
+
+func (t SliceTransformer[T]) transformOwnedContext(ctx context.Context, v []T) ([]T, error) {
+	return t.value.transformOwnedContext(ctx, v)
+}

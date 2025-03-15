@@ -21,11 +21,15 @@ func (t ValueTransformer[T]) TransformContext(ctx context.Context, v T) (T, erro
 		panic("transform: nil context")
 	}
 	var zero T
-	copy, err := cloneContext(ctx, v)
+	owned, err := cloneContext(ctx, v)
 	if err != nil {
 		return zero, err
 	}
-	v = copy
+	return t.transformOwnedContext(ctx, owned)
+}
+
+func (t ValueTransformer[T]) transformOwnedContext(ctx context.Context, v T) (T, error) {
+	var zero T
 	for _, step := range t.steps {
 		if err := ctx.Err(); err != nil {
 			return zero, err
@@ -76,13 +80,5 @@ func (t ValueTransformer[T]) ApplyContext(fns ...func(context.Context, T) (T, er
 }
 
 func (t ValueTransformer[T]) Then(values ...Transformer[T]) Transformer[T] {
-	items := make([]Transformer[T], 0, len(values)+1)
-	items = append(items, t)
-	for _, value := range values {
-		if value == nil {
-			panic("transform: nil transformer")
-		}
-		items = append(items, value)
-	}
-	return sequence[T]{items}
+	return sequenceFrom[T](t, values...)
 }

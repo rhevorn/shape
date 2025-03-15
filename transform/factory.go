@@ -39,11 +39,12 @@ func Pointer[T any](inner Transformer[T]) PointerTransformer[T] {
 		if value == nil {
 			return nil, nil
 		}
-		out, err := inner.TransformContext(ctx, *value)
+		out, err := runOwned(ctx, inner, *value)
 		if err != nil {
 			return nil, err
 		}
-		return &out, nil
+		*value = out
+		return value, nil
 	})}
 }
 
@@ -55,18 +56,17 @@ func Slice[T any](inner Transformer[T]) SliceTransformer[T] {
 		if value == nil {
 			return nil, nil
 		}
-		out := make([]T, len(value))
 		for i, item := range value {
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
-			transformed, err := inner.TransformContext(ctx, item)
+			transformed, err := runOwned(ctx, inner, item)
 			if err != nil {
 				return nil, transformpath.Index(err, i)
 			}
-			out[i] = transformed
+			value[i] = transformed
 		}
-		return out, nil
+		return value, nil
 	})}
 }
 
@@ -88,11 +88,11 @@ func Map[K MapKey, V any](key Transformer[K], value Transformer[V]) MapTransform
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
-			newKey, err := key.TransformContext(ctx, item)
+			newKey, err := runOwned(ctx, key, item)
 			if err != nil {
 				return nil, transformpath.Key(err, item)
 			}
-			newValue, err := value.TransformContext(ctx, input[item])
+			newValue, err := runOwned(ctx, value, input[item])
 			if err != nil {
 				return nil, transformpath.Key(err, item)
 			}

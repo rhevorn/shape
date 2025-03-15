@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"time"
 )
 
 func clone[T any](v T) (T, error) { return cloneContext(context.Background(), v) }
@@ -22,6 +23,9 @@ func cloneReflect(ctx context.Context, v reflect.Value, depth int) (reflect.Valu
 	if depth >= 64 {
 		return reflect.Value{}, errors.New("transform: copy depth exceeded")
 	}
+	if immutableCloneType(v.Type()) {
+		return v, nil
+	}
 	out := reflect.New(v.Type()).Elem()
 	switch v.Kind() {
 	case reflect.Pointer:
@@ -39,6 +43,10 @@ func cloneReflect(ctx context.Context, v reflect.Value, depth int) (reflect.Valu
 			return out, nil
 		}
 		out = reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+		if immutableCloneType(v.Type().Elem()) {
+			reflect.Copy(out, v)
+			return out, nil
+		}
 		for i := 0; i < v.Len(); i++ {
 			x, err := cloneReflect(ctx, v.Index(i), depth+1)
 			if err != nil {
@@ -95,4 +103,25 @@ func cloneReflect(ctx context.Context, v reflect.Value, depth int) (reflect.Valu
 		out.Set(v)
 	}
 	return out, nil
+}
+
+func immutableCloneType(t reflect.Type) bool {
+	if t == reflect.TypeFor[time.Time]() {
+		return true
+	}
+	switch t.Kind() {
+	case reflect.Struct:
+		for i := 0; i < t.NumField(); i++ {
+			if !immutableCloneType(t.Field(i).Type) {
+				return false
+			}
+		}
+		return true
+	case reflect.Array:
+		return immutableCloneType(t.Elem())
+	case reflect.Pointer, reflect.Slice, reflect.Map, reflect.Interface, reflect.Func, reflect.Chan, reflect.UnsafePointer:
+		return false
+	default:
+		return true
+	}
 }

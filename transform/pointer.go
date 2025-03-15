@@ -36,3 +36,7 @@ func (t PointerTransformer[T]) Transform(v *T) (*T, error) {
 func (t PointerTransformer[T]) TransformContext(ctx context.Context, v *T) (*T, error) {
 	return t.value.TransformContext(ctx, v)
 }
+
+func (t PointerTransformer[T]) transformOwnedContext(ctx context.Context, v *T) (*T, error) {
+	return t.value.transformOwnedContext(ctx, v)
+}

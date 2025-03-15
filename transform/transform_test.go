@@ -28,6 +28,33 @@ func TestFuncAndThen(t *testing.T) {
 		t.Fatalf("err=%v", err)
 	}
 }
+
+func TestThenUsesOneWorkingCopy(t *testing.T) {
+	var firstStorage *int
+	var secondStorage *int
+	first := transform.Value[[]int]().Apply(func(value []int) ([]int, error) {
+		firstStorage = &value[0]
+		value[0]++
+		return value, nil
+	})
+	second := transform.Value[[]int]().Apply(func(value []int) ([]int, error) {
+		secondStorage = &value[0]
+		value[0]++
+		return value, nil
+	})
+
+	input := []int{1}
+	out, err := first.Then(second).Transform(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if input[0] != 1 || out[0] != 3 {
+		t.Fatalf("input=%v output=%v", input, out)
+	}
+	if firstStorage == &input[0] || firstStorage != secondStorage {
+		t.Fatalf("Then did not reuse one detached working copy: input=%p first=%p second=%p", &input[0], firstStorage, secondStorage)
+	}
+}
 func TestCollectionsDoNotMutate(t *testing.T) {
 	in := []string{" A "}
 	out, err := transform.Slice(transform.String().Trim()).Transform(in)

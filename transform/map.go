@@ -38,3 +38,7 @@ func (t MapTransformer[K, V]) Transform(v map[K]V) (map[K]V, error) {
 func (t MapTransformer[K, V]) TransformContext(ctx context.Context, v map[K]V) (map[K]V, error) {
 	return t.value.TransformContext(ctx, v)
 }
+
+func (t MapTransformer[K, V]) transformOwnedContext(ctx context.Context, v map[K]V) (map[K]V, error) {
+	return t.value.transformOwnedContext(ctx, v)
+}
