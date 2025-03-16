@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/rhevorn/shape/internal/spec"
 	"net"
 	"net/mail"
 	"net/url"
@@ -13,6 +12,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/rhevorn/shape/internal/spec"
+	"github.com/rhevorn/shape/internal/validationlocale"
+	"github.com/rhevorn/shape/internal/validationmsg"
 	"github.com/rhevorn/shape/validate"
 )
 
@@ -111,15 +113,20 @@ func ruleFailure(name string, expected, received any) error {
 	return &ruleError{code: code, key: key, expected: expected, received: received}
 }
 
-func ruleIssue(err error, path validate.Path, label string) (validate.Issue, bool) {
+func ruleIssue(ctx context.Context, err error, path validate.Path, label string) (validate.Issue, bool) {
 	var failure *ruleError
 	if !errors.As(err, &failure) {
 		return validate.Issue{}, false
 	}
 	return validate.Issue{
 		Code: failure.code, Path: cloneValidatePath(path), Label: label,
-		MessageID: failure.key,
-		Expected:  failure.expected, Received: failure.received,
+		Message: validationmsg.Render(
+			validationlocale.Get(ctx) == uint8(validate.SimplifiedChinese),
+			failure.key,
+			label,
+			failure.expected,
+		),
+		Expected: failure.expected, Received: failure.received,
 	}, true
 }
 

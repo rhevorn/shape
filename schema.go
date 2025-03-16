@@ -8,12 +8,14 @@ import (
 	"reflect"
 
 	"github.com/rhevorn/shape/internal/transformpath"
+	"github.com/rhevorn/shape/internal/validationlocale"
+	"github.com/rhevorn/shape/internal/validationmsg"
 	"github.com/rhevorn/shape/validate"
 )
 
-// Schema is the high-level contract produced by New or Struct. Transformation
-// and validation remain independently callable; JSON methods compose decode,
-// transform, and validation in that order.
+// Schema describes transformation, validation, and JSON decoding for T.
+// Transformation and validation remain independently callable; JSON methods
+// compose decode, transform, and validation in that order.
 type Schema[T any] interface {
 	Transform(T) (T, error)
 	TransformContext(context.Context, T) (T, error)
@@ -95,6 +97,14 @@ func (s structSchema[T]) Transform(value T) (T, error) {
 }
 
 func (s structSchema[T]) TransformContext(ctx context.Context, value T) (T, error) {
+	return s.transformContext(ctx, value, false)
+}
+
+func (s structSchema[T]) transformDecodedContext(ctx context.Context, value T) (T, error) {
+	return s.transformContext(ctx, value, true)
+}
+
+func (s structSchema[T]) transformContext(ctx context.Context, value T, owned bool) (T, error) {
 	var zero T
 	if ctx == nil {
 		panic("shape: nil context")
@@ -102,7 +112,7 @@ func (s structSchema[T]) TransformContext(ctx context.Context, value T) (T, erro
 	if s.p == nil {
 		return zero, errors.New("shape: uninitialized schema; use shape.Struct")
 	}
-	out, err := transformPlan(ctx, s.p, reflect.ValueOf(&value).Elem(), nil, 0)
+	out, err := transformPlanMode(ctx, s.p, reflect.ValueOf(&value).Elem(), nil, 0, owned)
 	if err != nil {
 		return zero, err
 	}
@@ -140,10 +150,10 @@ func (s structSchema[T]) validate(ctx context.Context, value T, first bool) erro
 	if len(issues) == 0 {
 		return nil
 	}
-	return validate.Localize(&validate.Error{Issues: issues}, validate.LocaleFromContext(ctx))
+	return &validate.Error{Issues: issues}
 }
 
-func transformPlan(ctx context.Context, p *valuePlan, value reflect.Value, path validate.Path, depth int) (reflect.Value, error) {
+func transformPlanMode(ctx context.Context, p *valuePlan, value reflect.Value, path validate.Path, depth int, owned bool) (reflect.Value, error) {
 	if err := ctx.Err(); err != nil {
 		return reflect.Value{}, err
 	}
@@ -180,9 +190,13 @@ func transformPlan(ctx context.Context, p *valuePlan, value reflect.Value, path 
 		if value.IsNil() || p.element == nil {
 			return value, nil
 		}
-		inner, err := transformPlan(ctx, p.element, value.Elem(), path, depth+1)
+		inner, err := transformPlanMode(ctx, p.element, value.Elem(), path, depth+1, owned)
 		if err != nil {
 			return reflect.Value{}, err
+		}
+		if owned {
+			value.Elem().Set(inner)
+			return value, nil
 		}
 		out := reflect.New(value.Type().Elem())
 		out.Elem().Set(inner)
@@ -191,11 +205,14 @@ func transformPlan(ctx context.Context, p *valuePlan, value reflect.Value, path 
 		if p.fields == nil {
 			return value, nil
 		}
-		out := reflect.New(value.Type()).Elem()
-		out.Set(value)
+		out := value
+		if !owned {
+			out = reflect.New(value.Type()).Elem()
+			out.Set(value)
+		}
 		for _, field := range p.fields {
 			fieldPath := appendValidatePath(path, validate.FieldPath(field.name))
-			item, err := transformPlan(ctx, field.plan, value.Field(field.index), fieldPath, depth+1)
+			item, err := transformPlanMode(ctx, field.plan, value.Field(field.index), fieldPath, depth+1, owned)
 			if err != nil {
 				return reflect.Value{}, err
 			}
@@ -206,9 +223,12 @@ func transformPlan(ctx context.Context, p *valuePlan, value reflect.Value, path 
 		if value.IsNil() || p.element == nil {
 			return value, nil
 		}
-		out := reflect.MakeSlice(value.Type(), value.Len(), value.Len())
+		out := value
+		if !owned {
+			out = reflect.MakeSlice(value.Type(), value.Len(), value.Len())
+		}
 		for i := 0; i < value.Len(); i++ {
-			item, err := transformPlan(ctx, p.element, value.Index(i), appendValidatePath(path, validate.IndexPath(i)), depth+1)
+			item, err := transformPlanMode(ctx, p.element, value.Index(i), appendValidatePath(path, validate.IndexPath(i)), depth+1, owned)
 			if err != nil {
 				return reflect.Value{}, err
 			}
@@ -226,7 +246,10 @@ func transformPlan(ctx context.Context, p *valuePlan, value reflect.Value, path 
 		out := reflect.MakeMapWithSize(value.Type(), value.Len())
 		for _, key := range keys {
 			itemPath := appendValidatePath(path, validate.FieldPath(fmt.Sprint(key.Interface())))
-			item, err := transformPlan(ctx, p.element, value.MapIndex(key), itemPath, depth+1)
+			mapValue := value.MapIndex(key)
+			valueInput := reflect.New(mapValue.Type()).Elem()
+			valueInput.Set(mapValue)
+			item, err := transformPlanMode(ctx, p.element, valueInput, itemPath, depth+1, owned)
 			if err != nil {
 				return reflect.Value{}, err
 			}
@@ -243,16 +266,17 @@ func validatePlan(ctx context.Context, p *valuePlan, value reflect.Value, path v
 		return false, err
 	}
 	if depth >= defaultMaxRecursiveDepth {
-		return appendSchemaIssue(issues, validate.Issue{
+		return appendSchemaIssue(ctx, issues, validate.Issue{
 			Code: validate.CodeTooDeep, Path: cloneValidatePath(path),
-			MessageID: "too_deep",
-			Expected:  defaultMaxRecursiveDepth, Received: depth,
+			Message:  validationMessage(ctx, "too_deep", "", defaultMaxRecursiveDepth),
+			Expected: defaultMaxRecursiveDepth, Received: depth,
 		}, first), nil
 	}
 	if !finite(value) {
-		if appendSchemaIssue(issues, validate.Issue{
+		if appendSchemaIssue(ctx, issues, validate.Issue{
 			Code: validate.CodeInvalidNumber, Path: cloneValidatePath(path),
-			MessageID: "number.finite", Received: value.Interface(), Label: p.label,
+			Message:  validationMessage(ctx, "number.finite", p.label, nil),
+			Received: value.Interface(), Label: p.label,
 		}, first) {
 			return true, nil
 		}
@@ -272,14 +296,14 @@ func validatePlan(ctx context.Context, p *valuePlan, value reflect.Value, path v
 		if err == nil {
 			continue
 		}
-		issue, ok := ruleIssue(err, path, p.label)
+		issue, ok := ruleIssue(ctx, err, path, p.label)
 		if !ok {
 			issue = validate.Issue{
 				Code: validate.CodeCustom, Path: cloneValidatePath(path),
 				Message: err.Error(), Label: p.label,
 			}
 		}
-		if appendSchemaIssue(issues, issue, first) {
+		if appendSchemaIssue(ctx, issues, issue, first) {
 			return true, nil
 		}
 	}
@@ -322,17 +346,21 @@ func validatePlan(ctx context.Context, p *valuePlan, value reflect.Value, path v
 	return false, nil
 }
 
-func appendSchemaIssue(issues *[]validate.Issue, issue validate.Issue, first bool) bool {
+func appendSchemaIssue(ctx context.Context, issues *[]validate.Issue, issue validate.Issue, first bool) bool {
 	if len(*issues) >= validate.DefaultMaxIssues {
 		(*issues)[validate.DefaultMaxIssues-1] = validate.Issue{
-			Code:      validate.CodeTooManyIssues,
-			MessageID: "too_many_issues",
-			Expected:  validate.DefaultMaxIssues,
+			Code:     validate.CodeTooManyIssues,
+			Message:  validationMessage(ctx, "too_many_issues", "", validate.DefaultMaxIssues),
+			Expected: validate.DefaultMaxIssues,
 		}
 		return true
 	}
 	*issues = append(*issues, issue)
 	return first
+}
+
+func validationMessage(ctx context.Context, id, label string, expected any) string {
+	return validationmsg.Render(validationlocale.Get(ctx) == uint8(validate.SimplifiedChinese), id, label, expected)
 }
 
 func appendValidatePath(path validate.Path, segment validate.PathSegment) validate.Path {

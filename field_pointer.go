@@ -2,6 +2,7 @@ package shape
 
 import (
 	"context"
+	"io"
 
 	"github.com/rhevorn/shape/transform"
 	"github.com/rhevorn/shape/validate"
@@ -55,4 +56,29 @@ func (f PointerSpec[T]) RefineContext(values ...func(context.Context, *T) error)
 func (f PointerSpec[T]) Label(label string) PointerSpec[T] {
 	f.validator = f.validator.Label(label)
 	return f
+}
+
+func (f PointerSpec[T]) ParseJSON(source []byte, options ...JSONOptions) (*T, error) {
+	return parseJSON(f, source, options...)
+}
+func (f PointerSpec[T]) ParseJSONContext(ctx context.Context, source []byte, options ...JSONOptions) (*T, error) {
+	return parseJSONContext(ctx, f, source, options...)
+}
+func (f PointerSpec[T]) ParseJSONReader(reader io.Reader, options ...JSONOptions) (*T, error) {
+	return parseJSONReader(f, reader, options...)
+}
+func (f PointerSpec[T]) ParseJSONReaderContext(ctx context.Context, reader io.Reader, options ...JSONOptions) (*T, error) {
+	return parseJSONReaderContext(ctx, f, reader, options...)
+}
+func (f PointerSpec[T]) BindJSON(target **T, source []byte, options ...JSONOptions) error {
+	return bindJSON(f, target, source, options...)
+}
+func (f PointerSpec[T]) BindJSONContext(ctx context.Context, target **T, source []byte, options ...JSONOptions) error {
+	return bindJSONContext(ctx, f, target, source, options...)
+}
+func (f PointerSpec[T]) BindJSONReader(target **T, reader io.Reader, options ...JSONOptions) error {
+	return bindJSONReader(f, target, reader, options...)
+}
+func (f PointerSpec[T]) BindJSONReaderContext(ctx context.Context, target **T, reader io.Reader, options ...JSONOptions) error {
+	return bindJSONReaderContext(ctx, f, target, reader, options...)
 }

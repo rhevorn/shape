@@ -148,7 +148,7 @@ func cloneValue(ctx context.Context, v reflect.Value, depth int, strict bool) (r
 	if depth >= defaultMaxRecursiveDepth {
 		return reflect.Value{}, errors.New("shape: copy depth exceeded (cyclic or deeply nested value)")
 	}
-	if v.Type() == reflect.TypeFor[time.Time]() {
+	if immutableType(v.Type()) {
 		return v, nil
 	}
 	out := reflect.New(v.Type()).Elem()
@@ -168,6 +168,10 @@ func cloneValue(ctx context.Context, v reflect.Value, depth int, strict bool) (r
 			return out, nil
 		}
 		out = reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+		if immutableType(v.Type().Elem()) {
+			reflect.Copy(out, v)
+			return out, nil
+		}
 		for i := 0; i < v.Len(); i++ {
 			c, err := cloneValue(ctx, v.Index(i), depth+1, strict)
 			if err != nil {
@@ -227,6 +231,9 @@ func cloneValue(ctx context.Context, v reflect.Value, depth int, strict bool) (r
 	return out, nil
 }
 func immutableType(t reflect.Type) bool {
+	if t == reflect.TypeFor[time.Time]() {
+		return true
+	}
 	switch t.Kind() {
 	case reflect.Struct:
 		for i := 0; i < t.NumField(); i++ {

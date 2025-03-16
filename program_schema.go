@@ -41,7 +41,7 @@ func compileProgramFields(owner reflect.Type, specs []FieldSpec) []programField 
 			panic(fmt.Sprintf("shape: field %s is not exported", definition.name))
 		}
 		if field.Type != definition.typ {
-			panic(fmt.Sprintf("shape: field %s has type %v, contract has type %v", definition.name, field.Type, definition.typ))
+			panic(fmt.Sprintf("shape: field %s has type %v, schema has type %v", definition.name, field.Type, definition.typ))
 		}
 		jsonName := strings.Split(field.Tag.Get("json"), ",")[0]
 		if jsonName == "-" {
@@ -134,7 +134,7 @@ func (v programValidator[T]) run(ctx context.Context, value T, first bool) error
 		fieldIssues := validationIssues(err)
 		for _, issue := range fieldIssues {
 			issue.Path = append(validate.Path{validate.FieldPath(field.name)}, issue.Path...)
-			if appendSchemaIssue(&issues, issue, first) {
+			if appendSchemaIssue(ctx, &issues, issue, first) {
 				return &validate.Error{Issues: issues}
 			}
 		}

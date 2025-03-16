@@ -12,21 +12,20 @@ import (
 type StructSpec[T any] struct {
 	transformer transform.Transformer[T]
 	validator   validate.Validator[T]
+	transforms  []wholeTransformStep[T]
 }
 
 var _ Schema[struct{}] = StructSpec[struct{}]{}
 
 // Apply appends one or more whole-struct transforms after all field transforms.
 func (s StructSpec[T]) Apply(steps ...func(T) (T, error)) StructSpec[T] {
-	after := transform.Value[T]().Apply(steps...)
-	s.transformer = transform.Value[T]().Then(s.transformer, after)
+	s.transforms = appendWholeApply(s.transforms, steps...)
 	return s
 }
 
 // ApplyContext is the context-aware form of Apply.
 func (s StructSpec[T]) ApplyContext(steps ...func(context.Context, T) (T, error)) StructSpec[T] {
-	after := transform.Value[T]().ApplyContext(steps...)
-	s.transformer = transform.Value[T]().Then(s.transformer, after)
+	s.transforms = appendWholeApplyContext(s.transforms, steps...)
 	return s
 }
 
@@ -49,9 +48,30 @@ func (s StructSpec[T]) Transform(value T) (T, error) {
 }
 
 func (s StructSpec[T]) TransformContext(ctx context.Context, value T) (T, error) {
+	return s.transformContext(ctx, value, false)
+}
+
+func (s StructSpec[T]) transformDecodedContext(ctx context.Context, value T) (T, error) {
+	return s.transformContext(ctx, value, true)
+}
+
+func (s StructSpec[T]) transformContext(ctx context.Context, value T, owned bool) (T, error) {
+	var zero T
 	out, err := s.transformer.TransformContext(ctx, value)
 	if err != nil {
-		var zero T
+		return zero, normalizeTransformError(ctx, err)
+	}
+	if len(s.transforms) == 0 {
+		return out, nil
+	}
+	if !owned {
+		out, err = cloneWholeValue(ctx, out)
+		if err != nil {
+			return zero, normalizeTransformError(ctx, err)
+		}
+	}
+	out, err = runWholeTransforms(ctx, s.transforms, out)
+	if err != nil {
 		return zero, normalizeTransformError(ctx, err)
 	}
 	return out, nil

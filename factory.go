@@ -28,8 +28,8 @@ func New[T any](fields ...FieldSpec) StructSpec[T] {
 // json and shape tags. Invalid program configuration panics during construction.
 func Struct[T any]() TaggedSpec[T] { return taggedSchema[T]() }
 
-// Value creates a field contract for any type. Omit name when using it as a
-// Pointer, Slice, or Map element contract.
+// Value creates a Schema for any type. Omit name when using it as a Pointer,
+// Slice, or Map element Schema.
 func Value[T any](name ...string) ValueSpec[T] {
 	return ValueSpec[T]{name: oneFieldName(name), transformer: transform.Value[T](), validator: validate.Value[T]()}
 }
@@ -51,37 +51,37 @@ func Duration(name ...string) NumberSpec[types.Duration] {
 func Bool(name ...string) ValueSpec[bool]      { return Value[bool](name...) }
 func Time(name ...string) ValueSpec[time.Time] { return Value[time.Time](name...) }
 
-func Pointer[T any](name string, inner Contract[T]) PointerSpec[T] {
+func Pointer[T any](name string, inner Schema[T]) PointerSpec[T] {
 	return pointerSpec(name, inner)
 }
 
-func pointerSpec[T any](name string, inner Contract[T]) PointerSpec[T] {
-	requireContract(inner)
+func pointerSpec[T any](name string, inner Schema[T]) PointerSpec[T] {
+	requireSchema(inner)
 	return PointerSpec[T]{
 		name: name, transformer: transform.Pointer[T](inner), validator: validate.Pointer[T](inner),
 	}
 }
 
-func Slice[T any](name string, inner Contract[T]) SliceSpec[T] {
+func Slice[T any](name string, inner Schema[T]) SliceSpec[T] {
 	return sliceSpec(name, inner)
 }
 
-func sliceSpec[T any](name string, inner Contract[T]) SliceSpec[T] {
-	requireContract(inner)
+func sliceSpec[T any](name string, inner Schema[T]) SliceSpec[T] {
+	requireSchema(inner)
 	return SliceSpec[T]{
 		name: name, transformer: transform.Slice[T](inner), validator: validate.Slice[T](inner),
 	}
 }
 
-func Map[K MapKey, V any](name string, key Contract[K], value Contract[V]) MapSpec[K, V] {
-	requireContract(key)
-	requireContract(value)
+func Map[K MapKey, V any](name string, key Schema[K], value Schema[V]) MapSpec[K, V] {
+	requireSchema(key)
+	requireSchema(value)
 	return MapSpec[K, V]{
 		name: name, transformer: transform.Map[K, V](key, value), validator: validate.Map[K, V](key, value),
 	}
 }
 
-// Field uses another Schema as the contract for a nested struct field.
+// Field uses another Schema for a nested field.
 func Field[T any](name string, schema Schema[T]) FieldSpec {
 	if schema == nil {
 		panic("shape: nil field schema")

@@ -63,6 +63,7 @@ func compilePublicAPI(ctx context.Context, reader io.Reader, source []byte) {
 	_ = stringSpec.ValidateContext(ctx, "")
 	_ = stringSpec.ValidateFirst("")
 	_ = stringSpec.ValidateFirstContext(ctx, "")
+	var _ shape.Schema[string] = stringSpec
 
 	numberSpec := shape.Number[uint16]().
 		IfZero(1).
@@ -78,6 +79,7 @@ func compilePublicAPI(ctx context.Context, reader io.Reader, source []byte) {
 	_ = numberSpec.Slice()
 	_, _ = numberSpec.Transform(1)
 	_ = numberSpec.Validate(1)
+	var _ shape.Schema[uint16] = numberSpec
 
 	valueSpec := shape.Value[contractMetadata]().
 		IfZero(contractMetadata{}).
@@ -90,6 +92,7 @@ func compilePublicAPI(ctx context.Context, reader io.Reader, source []byte) {
 	_ = valueSpec.Slice()
 	_, _ = valueSpec.Transform(contractMetadata{})
 	_ = valueSpec.Validate(contractMetadata{})
+	var _ shape.Schema[contractMetadata] = valueSpec
 
 	fallback := "fallback"
 	pointerSpec := shape.Pointer("Nickname", shape.String()).
@@ -102,6 +105,7 @@ func compilePublicAPI(ctx context.Context, reader io.Reader, source []byte) {
 		Label("pointer")
 	_, _ = pointerSpec.Transform(nil)
 	_ = pointerSpec.Validate(nil)
+	var _ shape.Schema[*string] = pointerSpec
 
 	sliceSpec := shape.Slice("Tags", shape.String()).
 		IfNull([]string{}).
@@ -113,6 +117,7 @@ func compilePublicAPI(ctx context.Context, reader io.Reader, source []byte) {
 		Label("slice")
 	_, _ = sliceSpec.Transform(nil)
 	_ = sliceSpec.Validate(nil)
+	var _ shape.Schema[[]string] = sliceSpec
 
 	mapSpec := shape.Map("Scores", shape.String(), shape.Int()).
 		IfNull(map[string]int{}).
@@ -124,6 +129,7 @@ func compilePublicAPI(ctx context.Context, reader io.Reader, source []byte) {
 		Label("map")
 	_, _ = mapSpec.Transform(nil)
 	_ = mapSpec.Validate(nil)
+	var _ shape.Schema[map[string]int] = mapSpec
 
 	profileSchema := shape.New[contractProfile](shape.String("Bio"))
 	schema := shape.New[contractUser](

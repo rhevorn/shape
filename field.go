@@ -2,6 +2,7 @@ package shape
 
 import (
 	"context"
+	"io"
 	"reflect"
 
 	"github.com/rhevorn/shape/transform"
@@ -21,13 +22,6 @@ type MapKey interface {
 	~string |
 		~int | ~int8 | ~int16 | ~int32 | ~int64 |
 		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
-}
-
-// Contract is the common transform-and-validate contract accepted by Pointer,
-// Slice, and Map. Specs and Schema values both implement it.
-type Contract[T any] interface {
-	transform.Transformer[T]
-	validate.Validator[T]
 }
 
 // FieldSpec is an explicit field definition accepted by New. Its unexported
@@ -82,9 +76,9 @@ func oneFieldName(names []string) string {
 	return names[0]
 }
 
-func requireContract[T any](contract Contract[T]) {
-	if contract == nil {
-		panic("shape: nil contract")
+func requireSchema[T any](schema Schema[T]) {
+	if schema == nil {
+		panic("shape: nil schema")
 	}
 }
 
@@ -136,3 +130,28 @@ func (f ValueSpec[T]) Label(label string) ValueSpec[T] {
 }
 func (f ValueSpec[T]) Pointer() PointerSpec[T] { return pointerSpec(f.name, f) }
 func (f ValueSpec[T]) Slice() SliceSpec[T]     { return sliceSpec(f.name, f) }
+
+func (f ValueSpec[T]) ParseJSON(source []byte, options ...JSONOptions) (T, error) {
+	return parseJSON(f, source, options...)
+}
+func (f ValueSpec[T]) ParseJSONContext(ctx context.Context, source []byte, options ...JSONOptions) (T, error) {
+	return parseJSONContext(ctx, f, source, options...)
+}
+func (f ValueSpec[T]) ParseJSONReader(reader io.Reader, options ...JSONOptions) (T, error) {
+	return parseJSONReader(f, reader, options...)
+}
+func (f ValueSpec[T]) ParseJSONReaderContext(ctx context.Context, reader io.Reader, options ...JSONOptions) (T, error) {
+	return parseJSONReaderContext(ctx, f, reader, options...)
+}
+func (f ValueSpec[T]) BindJSON(target *T, source []byte, options ...JSONOptions) error {
+	return bindJSON(f, target, source, options...)
+}
+func (f ValueSpec[T]) BindJSONContext(ctx context.Context, target *T, source []byte, options ...JSONOptions) error {
+	return bindJSONContext(ctx, f, target, source, options...)
+}
+func (f ValueSpec[T]) BindJSONReader(target *T, reader io.Reader, options ...JSONOptions) error {
+	return bindJSONReader(f, target, reader, options...)
+}
+func (f ValueSpec[T]) BindJSONReaderContext(ctx context.Context, target *T, reader io.Reader, options ...JSONOptions) error {
+	return bindJSONReaderContext(ctx, f, target, reader, options...)
+}

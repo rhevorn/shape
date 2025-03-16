@@ -12,6 +12,10 @@ import (
 // ErrJSONTooLarge reports that JSON input exceeded JSONOptions.MaxBytes.
 var ErrJSONTooLarge = errors.New("shape: JSON input too large")
 
+type decodedTransformer[T any] interface {
+	transformDecodedContext(context.Context, T) (T, error)
+}
+
 // JSONOptions controls the standard JSON decoding stage. MaxBytes zero means
 // unlimited; a positive value rejects larger input with ErrJSONTooLarge.
 type JSONOptions struct {
@@ -79,7 +83,13 @@ func parseJSONReaderContext[T any](ctx context.Context, schema Schema[T], reader
 	if e := ctx.Err(); e != nil {
 		return zero, e
 	}
-	out, err := schema.TransformContext(ctx, candidate)
+	var out T
+	var err error
+	if decoded, ok := schema.(decodedTransformer[T]); ok {
+		out, err = decoded.transformDecodedContext(ctx, candidate)
+	} else {
+		out, err = schema.TransformContext(ctx, candidate)
+	}
 	if ctx.Err() != nil {
 		return zero, ctx.Err()
 	}

@@ -4,32 +4,30 @@ import (
 	"context"
 	"io"
 
-	"github.com/rhevorn/shape/transform"
 	"github.com/rhevorn/shape/validate"
 )
 
 // TaggedSpec is the immutable tagged struct Schema returned by Struct. Apply
 // and Refine add whole-struct behavior after the compiled field behavior.
 type TaggedSpec[T any] struct {
-	base        structSchema[T]
-	transformer transform.Transformer[T]
-	validator   validate.Validator[T]
-	custom      bool
+	base       structSchema[T]
+	validator  validate.Validator[T]
+	transforms []wholeTransformStep[T]
+	custom     bool
 }
 
 var _ Schema[struct{}] = TaggedSpec[struct{}]{}
 
 func newTaggedSpec[T any](plan *valuePlan) TaggedSpec[T] {
 	base := structSchema[T]{p: plan}
-	return TaggedSpec[T]{base: base, transformer: base, validator: base}
+	return TaggedSpec[T]{base: base, validator: base}
 }
 
 func (s TaggedSpec[T]) Apply(steps ...func(T) (T, error)) TaggedSpec[T] {
 	if len(steps) == 0 {
 		return s
 	}
-	after := transform.Value[T]().Apply(steps...)
-	s.transformer = transform.Value[T]().Then(s.transformer, after)
+	s.transforms = appendWholeApply(s.transforms, steps...)
 	s.custom = true
 	return s
 }
@@ -38,8 +36,7 @@ func (s TaggedSpec[T]) ApplyContext(steps ...func(context.Context, T) (T, error)
 	if len(steps) == 0 {
 		return s
 	}
-	after := transform.Value[T]().ApplyContext(steps...)
-	s.transformer = transform.Value[T]().Then(s.transformer, after)
+	s.transforms = appendWholeApplyContext(s.transforms, steps...)
 	s.custom = true
 	return s
 }
@@ -69,9 +66,26 @@ func (s TaggedSpec[T]) Transform(value T) (T, error) {
 }
 
 func (s TaggedSpec[T]) TransformContext(ctx context.Context, value T) (T, error) {
-	out, err := s.transformer.TransformContext(ctx, value)
+	var zero T
+	out, err := s.base.TransformContext(ctx, value)
 	if err != nil {
-		var zero T
+		return zero, normalizeTransformError(ctx, err)
+	}
+	out, err = runWholeTransforms(ctx, s.transforms, out)
+	if err != nil {
+		return zero, normalizeTransformError(ctx, err)
+	}
+	return out, nil
+}
+
+func (s TaggedSpec[T]) transformDecodedContext(ctx context.Context, value T) (T, error) {
+	var zero T
+	out, err := s.base.transformDecodedContext(ctx, value)
+	if err != nil {
+		return zero, normalizeTransformError(ctx, err)
+	}
+	out, err = runWholeTransforms(ctx, s.transforms, out)
+	if err != nil {
 		return zero, normalizeTransformError(ctx, err)
 	}
 	return out, nil

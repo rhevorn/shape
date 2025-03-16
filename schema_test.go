@@ -34,6 +34,24 @@ func TestSchemaKeepsTransformAndValidateIndependent(t *testing.T) {
 	}
 }
 
+func TestTaggedSchemaDoesNotMutateNestedInput(t *testing.T) {
+	type Item struct {
+		Name string `json:"name" shape:"trim"`
+	}
+	type Request struct {
+		Items []Item `json:"items"`
+	}
+	schema := shape.Struct[Request]()
+	input := Request{Items: []Item{{Name: " Pong "}}}
+	out, err := schema.Transform(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if input.Items[0].Name != " Pong " || out.Items[0].Name != "Pong" {
+		t.Fatalf("input=%#v output=%#v", input, out)
+	}
+}
+
 func TestExplicitSchemaParseJSON(t *testing.T) {
 	type User struct {
 		Name string `json:"name"`
@@ -64,6 +82,37 @@ func TestExplicitSchemaParseJSON(t *testing.T) {
 	}
 	if _, err := schema.ParseJSON([]byte(`{"name":" admin ","age":20}`)); err == nil {
 		t.Fatal("ParseJSON() accepted whole-struct refine failure")
+	}
+}
+
+func TestEveryRootSpecIsAJSONSchema(t *testing.T) {
+	text, err := shape.String().Trim().NotEmpty().ParseJSON([]byte(`" Pong "`))
+	if err != nil || text != "Pong" {
+		t.Fatalf("String ParseJSON() = %q, %v", text, err)
+	}
+
+	number, err := shape.Int().Positive().ParseJSON([]byte(`123`))
+	if err != nil || number != 123 {
+		t.Fatalf("Int ParseJSON() = %d, %v", number, err)
+	}
+	if _, err := shape.Int().ParseJSON([]byte(`"123"`)); err == nil {
+		t.Fatal("Int ParseJSON() coerced a JSON string")
+	}
+
+	items, err := shape.String().Trim().NotEmpty().Slice().ParseJSON([]byte(`[" a ","b"]`))
+	if err != nil || len(items) != 2 || items[0] != "a" || items[1] != "b" {
+		t.Fatalf("Slice ParseJSON() = %#v, %v", items, err)
+	}
+
+	values, err := shape.Map("", shape.String().Trim(), shape.Int().Positive()).ParseJSON([]byte(`{" a ":1}`))
+	if err != nil || len(values) != 1 || values["a"] != 1 {
+		t.Fatalf("Map ParseJSON() = %#v, %v", values, err)
+	}
+
+	fallback := "guest"
+	pointer, err := shape.String().Trim().Pointer().IfNull(&fallback).ParseJSON([]byte(`null`))
+	if err != nil || pointer == nil || *pointer != "guest" {
+		t.Fatalf("Pointer ParseJSON() = %#v, %v", pointer, err)
 	}
 }
 
@@ -334,20 +383,67 @@ func TestWholeStructTransformErrorUsesStableType(t *testing.T) {
 	}
 }
 
-func TestTaggedIssuesCanBeRelocalized(t *testing.T) {
+func TestWholeStructApplyUsesOneWorkingCopy(t *testing.T) {
+	type Large struct {
+		Values []int
+	}
+
+	var firstStorage *int
+	var secondStorage *int
+	base := shape.New[Large]().Apply(func(value Large) (Large, error) {
+		firstStorage = &value.Values[0]
+		value.Values[0]++
+		return value, nil
+	})
+	schema := base.Apply(func(value Large) (Large, error) {
+		secondStorage = &value.Values[0]
+		value.Values[0]++
+		return value, nil
+	})
+
+	input := Large{Values: []int{1}}
+	out, err := schema.Transform(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if input.Values[0] != 1 || out.Values[0] != 3 {
+		t.Fatalf("input=%#v output=%#v", input, out)
+	}
+	if firstStorage == &input.Values[0] || firstStorage != secondStorage {
+		t.Fatalf("Apply callbacks did not share one detached working copy: input=%p first=%p second=%p", &input.Values[0], firstStorage, secondStorage)
+	}
+
+	baseOut, err := base.Transform(input)
+	if err != nil || baseOut.Values[0] != 2 {
+		t.Fatalf("base Schema was mutated by fluent append: %#v, %v", baseOut, err)
+	}
+}
+
+func TestFailedWholeStructApplyDoesNotMutateInput(t *testing.T) {
+	type Large struct{ Values []int }
+	boom := errors.New("boom")
+	schema := shape.New[Large]().Apply(func(value Large) (Large, error) {
+		value.Values[0] = 99
+		return value, boom
+	})
+	input := Large{Values: []int{1}}
+	if _, err := schema.Transform(input); !errors.Is(err, boom) {
+		t.Fatalf("Transform() error = %v", err)
+	}
+	if input.Values[0] != 1 {
+		t.Fatalf("failed Transform mutated input: %#v", input)
+	}
+}
+
+func TestTaggedIssuesUseContextLanguage(t *testing.T) {
 	type Request struct {
 		Name string `json:"name" shape:"label=姓名,notempty"`
 	}
-	err := shape.Struct[Request]().Validate(Request{})
-
-	localized := validate.Localize(err, validate.SimplifiedChinese)
+	ctx := validate.WithLocale(context.Background(), validate.SimplifiedChinese)
+	err := shape.Struct[Request]().ValidateContext(ctx, Request{})
 	var got *validate.Error
-	if !errors.As(localized, &got) || len(got.Issues) != 1 || got.Issues[0].Message != "姓名不能为空" {
-		t.Fatalf("localized error = %#v", localized)
-	}
-	english := validate.Localize(localized, validate.English)
-	if !errors.As(english, &got) || got.Issues[0].Message != "姓名 must not be empty" {
-		t.Fatalf("English error = %#v", english)
+	if !errors.As(err, &got) || len(got.Issues) != 1 || got.Issues[0].Message != "姓名不能为空" {
+		t.Fatalf("error = %#v", err)
 	}
 }
 
