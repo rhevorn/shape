@@ -105,12 +105,18 @@ func checkConstructionCall(pass *analysis.Pass, call *ast.CallExpr) {
 	if target == nil {
 		return
 	}
+	if _, generic := types.Unalias(target).(*types.TypeParam); generic {
+		return // The concrete instantiation remains runtime-checked.
+	}
 	if err := checkStructType(target, map[types.Type]bool{}); err != nil {
 		pass.Reportf(call.Pos(), "invalid Shape struct schema: %v", err)
 	}
 }
 
 func checkExplicitSchema(pass *analysis.Pass, call *ast.CallExpr, target types.Type) {
+	if _, generic := types.Unalias(target).(*types.TypeParam); generic {
+		return // Field names cannot be resolved until instantiation.
+	}
 	if classify(target) == kTime {
 		pass.Reportf(call.Pos(), "invalid Shape explicit schema: target must be an ordinary value struct")
 		return
@@ -162,12 +168,12 @@ func checkExplicitSchema(pass *analysis.Pass, call *ast.CallExpr, target types.T
 			pass.Reportf(factory.Args[0].Pos(), "invalid Shape explicit field: field %s is excluded from JSON", name)
 			continue
 		}
-		contract := transformInputType(pass.TypesInfo.TypeOf(argument))
+		schemaType := transformInputType(pass.TypesInfo.TypeOf(argument))
 		if calledName(pass, factory.Fun) == "Field" && len(factory.Args) > 1 {
-			contract = transformInputType(pass.TypesInfo.TypeOf(factory.Args[1]))
+			schemaType = transformInputType(pass.TypesInfo.TypeOf(factory.Args[1]))
 		}
-		if contract != nil && !types.Identical(field.Type(), contract) {
-			pass.Reportf(factory.Pos(), "invalid Shape explicit field: field %s has type %s, contract has type %s", name, field.Type(), contract)
+		if schemaType != nil && !types.Identical(field.Type(), schemaType) {
+			pass.Reportf(factory.Pos(), "invalid Shape explicit field: field %s has type %s, schema has type %s", name, field.Type(), schemaType)
 		}
 	}
 }

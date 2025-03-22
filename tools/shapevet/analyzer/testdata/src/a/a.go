@@ -64,7 +64,7 @@ func build() {
 		shape.Int("Age").Min(18),
 	)
 	_ = shape.New[Explicit](shape.String("Missing")) // want "target has no direct field Missing"
-	_ = shape.New[Explicit](shape.Int("Name"))       // want "field Name has type string, contract has type int"
+	_ = shape.New[Explicit](shape.Int("Name"))       // want "field Name has type string, schema has type int"
 	_ = shape.New[Explicit](
 		shape.String("Name"),
 		shape.String("Name"), // want "duplicate field Name"
@@ -74,4 +74,8 @@ func build() {
 	_ = shape.New[Explicit](shape.String("Name", "Extra")) // want "field factory accepts at most one name"
 	_ = shape.New[time.Time]()                             // want "target must be an ordinary value struct"
 	_ = shape.Struct[time.Time]()                          // want "target must be an ordinary value struct"
+}
+
+func genericBind[T any](target *T, data []byte) error {
+	return shape.BindJSON(target, data)
 }
