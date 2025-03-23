@@ -10,8 +10,8 @@ Include the affected API, required schema configuration, impact, and a minimal
 reproduction when it is safe to share. Do not open a public issue before a fix
 or coordinated disclosure is ready.
 
-The standard-library-only runtime packages, bundled adapters, parsers, validation resource
-bounds, generated JSON Schema/OpenAPI semantics, and concurrency guarantees are
-in scope. Security properties of caller callbacks, application authorization,
-server timeouts, rate limits, and downstream schema consumers remain the
-application's responsibility.
+The standard-library-only runtime packages, bundled adapters, parsers,
+validation resource bounds, generated JSON Schema/OpenAPI semantics, and
+concurrency guarantees are in scope. Security properties of caller callbacks,
+application authorization, server timeouts, rate limits, and downstream schema
+consumers remain the application's responsibility.

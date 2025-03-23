@@ -1,14 +1,15 @@
 # Shape usage guide
 
 The recommended entry point is the root `shape` package. Use it to define a
-complete struct contract that can transform typed values, validate typed values,
-parse JSON, and atomically bind JSON.
+Schema that can transform typed values, validate typed values, parse JSON, and
+atomically bind JSON. Scalars, pointers, slices, maps, and structs use the same
+`Schema[T]` interface.
 
 The lower-level `validate` and `transform` packages are independent building
 blocks. Use them directly when no struct Schema or JSON orchestration is needed.
 
 ```text
-shape       complete struct contract: Transform + Validate + JSON
+shape       Schema[T]: Transform + Validate + JSON for any supported T
 validate    inspect T and return errors; never changes T
 transform   convert T to a new T; never validates T
 ```
@@ -54,7 +55,7 @@ var schema = shape.New[User](
 ```
 
 Construction checks that every configured field exists, is exported, has the
-same Go type as its contract, is not repeated, and is not excluded with
+same Go type as its Schema, is not repeated, and is not excluded with
 `json:"-"`. Invalid configuration panics immediately, which makes package-level
 declarations fail during initialization.
 
@@ -125,7 +126,25 @@ err = userSchema.BindJSONReaderContext(ctx, &user, reader)
 
 Mutation targets intentionally appear before input sources.
 
-### 2.4 Scalar fields
+### 2.4 Scalar and standalone Schemas
+
+Every root Spec is a complete `Schema[T]`; it does not need to be placed inside
+`shape.New`. A standalone scalar or composite supports the same transform,
+validation, ParseJSON, and BindJSON operations:
+
+```go
+nameSchema := shape.String().Trim().NotEmpty()
+name, err := nameSchema.ParseJSON([]byte(`" Pong "`))
+// name == "Pong"
+
+scoreSchema := shape.Int().NonNegative().Slice().NotEmpty()
+scores, err := scoreSchema.ParseJSON([]byte(`[1, 2, 3]`))
+```
+
+Decoding follows `encoding/json` and never performs implicit coercion. JSON
+number `123` can decode into `int`; JSON string `"123"` cannot.
+
+The same factories define fields when given a Go field name:
 
 ```go
 type Settings struct {
@@ -240,7 +259,7 @@ shape.Map("Scores", shape.String(), shape.Int()).IfNull(map[string]int{})
 
 It changes nil only. A non-nil empty slice/map stays empty.
 
-For scalar element contracts, the common pointer/slice forms also have fluent
+For scalar element Schemas, the common pointer/slice forms also have fluent
 shortcuts:
 
 ```go
@@ -274,9 +293,9 @@ var schema = shape.New[Request](
 )
 ```
 
-- Pointer rules run on the pointer. A non-nil value then runs the inner contract.
-- Slice rules run on the slice. The inner contract runs in ascending index order.
-- Map rules run on the map. Key and value contracts run in deterministic key order.
+- Pointer rules run on the pointer. A non-nil value then runs the inner Schema.
+- Slice rules run on the slice. The inner Schema runs in ascending index order.
+- Map rules run on the map. Key and value Schemas run in deterministic key order.
 - `NotEmpty` rejects nil as well as an empty collection/pointer.
 - `NotNull` rejects nil but accepts an empty slice/map.
 - Map keys are string or integer types. Transformed duplicate keys return an error.
@@ -395,7 +414,7 @@ are traversed automatically. See [TAGS.md](TAGS.md) for the exact grammar and
 type matrix.
 
 Prefer explicit `shape.New[T]` when custom callbacks, cross-field behavior, or a
-contract independent of struct tags is required.
+Schema independent of struct tags is required.
 
 ## 4. JSON behavior
 
@@ -613,7 +632,8 @@ checks. `shapevet` is optional and is not a runtime dependency.
 ## 10. Choosing an API
 
 ```text
-Complete JSON struct contract, reusable        shape.New[T]
+Explicit reusable struct Schema                shape.New[T]
+Scalar or composite Schema                     shape.String / Int / Pointer / Slice / Map
 Simple fixed DTO tags                          shape.BindJSON / shape.Struct[T]
 Validate an existing typed value only          validate
 Transform an existing typed value only         transform
@@ -622,5 +642,5 @@ Generate JSON Schema/OpenAPI from tags          jsonschema / openapi
 ```
 
 See [API.md](API.md) for the frozen method inventory and exact compatibility
-contract, [ARCHITECTURE.md](ARCHITECTURE.md) for implementation boundaries, and
+guarantees, [ARCHITECTURE.md](ARCHITECTURE.md) for implementation boundaries, and
 [the examples](../examples) for runnable programs.

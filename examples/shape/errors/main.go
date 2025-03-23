@@ -22,14 +22,11 @@ var requestSchema = shape.New[Request](
 func main() {
 	validate.SetLanguage(validate.English)
 	english := requestSchema.Validate(Request{})
-	chinese := validate.Localize(english, validate.SimplifiedChinese)
-	fmt.Println("current language:", validate.CurrentLanguage())
-	fmt.Println("localized copy:", chinese)
+	fmt.Println("global language error:", english)
 
 	ctx := validate.WithLocale(context.Background(), validate.SimplifiedChinese)
 	err := requestSchema.ValidateContext(ctx, Request{})
-	err = validate.LocalizeContext(ctx, err)
-	fmt.Println("context language:", validate.LocaleFromContext(ctx))
+	fmt.Println("context language error:", err)
 
 	var validationError *validate.Error
 	if errors.As(err, &validationError) {

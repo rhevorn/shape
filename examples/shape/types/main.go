@@ -42,11 +42,17 @@ var settingsSchema = shape.New[Settings](
 )
 
 func main() {
+	name, err := shape.String().Trim().NotEmpty().ParseJSON([]byte(`" Pong "`))
+	fmt.Printf("name: %q error=%v\n", name, err)
+
+	scores, err := shape.Int().NonNegative().Slice().ParseJSON([]byte(`[1, 2, 3]`))
+	fmt.Printf("scores: %#v error=%v\n", scores, err)
+
 	value := Settings{
 		Enabled: true, Attempts: 3, Ratio: 0.5,
 		Created: time.Now(), Timeout: shapetypes.Duration(time.Minute),
 	}
-	value, err := settingsSchema.Transform(value)
+	value, err = settingsSchema.Transform(value)
 	if err == nil {
 		err = settingsSchema.Validate(value)
 	}

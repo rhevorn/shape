@@ -1,10 +1,10 @@
 # Struct tag reference
 
 `shape:"..."` configures tag-driven `shape.BindJSON*` and the reusable Schema
-returned by `shape.Struct[T]()`. This file is the complete tag contract.
+returned by `shape.Struct[T]()`. This file is the complete tag specification.
 
 Tags are the convenience form for static DTO behavior. The recommended primary
-API is the explicit `shape.New[T](...)` contract described in [USAGE.md](USAGE.md).
+API is the explicit `shape.New[T](...)` Schema described in [USAGE.md](USAGE.md).
 Both forms use the same Transform → Validate phases.
 
 ## 1. Basic form
@@ -162,4 +162,4 @@ go vet -vettool="$(which shapevet)" ./...
 There are no tags named `optional`, `default`, `skipnull`, `nullable`,
 `notblank`, `coerce`, `refine`, `dive`, `union`, or `recursive`.
 
-The frozen public API and behavior contract is in [API.md](API.md).
+The frozen public API and behavior guarantees are in [API.md](API.md).

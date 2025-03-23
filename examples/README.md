@@ -12,7 +12,7 @@ go run ./examples/shape/explicit
 | Example | Demonstrates |
 | --- | --- |
 | [shape/explicit](shape/explicit) | Explicit fields, composites, nested Schema, `Apply`, `Refine`, and `ParseJSON` |
-| [shape/types](shape/types) | Every scalar factory, named numbers, `time.Time`, `types.Duration`, and `Value[T]` |
+| [shape/types](shape/types) | Standalone scalar/composite Schemas, every scalar factory, named numbers, `time.Time`, `types.Duration`, and `Value[T]` |
 | [shape/tags](shape/tags) | Cached `Struct[T]` and inferred tag binding |
 | [shape/json](shape/json) | Reader input, strict JSON, byte limits, and atomic Bind |
 | [shape/errors](shape/errors) | Aggregate/fail-fast issues, paths, labels, and locale |
@@ -33,5 +33,5 @@ go run ./examples/shape/explicit
 | [http](http) | Request cancellation, reader limits, and strict JSON |
 
 The independent examples intentionally run without importing the root package.
-The root `shape` package combines both capabilities for complete JSON struct
-contracts.
+The root `shape` package combines both capabilities in a reusable `Schema[T]`
+for scalars, composites, and structs.

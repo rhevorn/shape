@@ -1,4 +1,4 @@
-# Architecture and compatibility contract
+# Architecture and compatibility
 
 This document fixes the package boundaries, execution model, ownership rules,
 and compatibility policy for public releases. The exact exported inventory is
@@ -6,7 +6,7 @@ in [API.md](API.md).
 
 ## 1. Design goals
 
-Shape optimizes for contracts that are readable at the call site:
+Shape optimizes for Schemas that are readable at the call site:
 
 ```go
 var userSchema = shape.New[User](
@@ -36,9 +36,9 @@ transform.Transformer[T]
     never validates T
 
 shape.Schema[T]
-    combines both capabilities for an ordinary struct
+    combines both capabilities for any supported T
     owns JSON decode and atomic bind
-    adds paths for fields and nested values
+    adds paths for structs and nested values
 
 types.Duration
     defines a human-readable JSON duration representation
@@ -49,7 +49,7 @@ jsonschema / openapi
 ```
 
 The `validate` and `transform` packages do not import the root package. The root
-package depends on both. Adapters depend on the root Schema contract.
+package depends on both. Adapters depend on the root Schema interface.
 
 ## 3. Two Schema construction paths
 
@@ -157,6 +157,16 @@ package variables and reused concurrently.
 Built-in transforms do not mutate caller-owned pointer pointees, slice backing
 arrays, or maps. They return new outer storage. Fallback values are snapshotted
 at construction and copied for calls where the graph can be copied safely.
+
+A transform pipeline detaches mutable input once and passes ownership of that
+private working value through its built-in steps. `Then` is flattened, and
+Pointer/Slice/Map traversal reuses owned storage instead of copying it at every
+level. Multiple whole-struct `Apply` calls also share one detached working copy.
+Fresh values produced by JSON decoding use an internal owned path, so the
+runtime does not add a defensive copy where mutation is already isolated.
+
+An `Apply` callback receives the private working value. Mutable storage returned
+by that callback is treated as owned by the rest of the pipeline.
 
 No partial value is returned after transform failure. Bind never changes the
 target after a decode, transform, validation, size-limit, or context failure.

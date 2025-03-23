@@ -1,4 +1,4 @@
-# Public API and behavior contract
+# Public API and compatibility guarantees
 
 This document defines the public surface intended to remain source-compatible
 after the first release. New methods and rule types may be added in minor
@@ -7,7 +7,8 @@ or changing null/zero semantics requires a major version.
 
 ## 1. Root package: `shape`
 
-The root package is the recommended API for complete struct contracts.
+The root package is the recommended API for reusable Schemas. Every root Spec
+is a `Schema[T]`, whether `T` is a scalar, pointer, slice, map, or struct.
 
 ### Construction
 
@@ -36,37 +37,26 @@ Float64(name ...string) NumberSpec[float64]
 Time(name ...string) ValueSpec[time.Time]
 Duration(name ...string) NumberSpec[types.Duration]
 
-Pointer[T](name string, inner Contract[T]) PointerSpec[T]
-Slice[T](name string, inner Contract[T]) SliceSpec[T]
-Map[K MapKey, V any](name string, key Contract[K], value Contract[V]) MapSpec[K, V]
+Pointer[T](name string, inner Schema[T]) PointerSpec[T]
+Slice[T](name string, inner Schema[T]) SliceSpec[T]
+Map[K MapKey, V any](name string, key Schema[K], value Schema[V]) MapSpec[K, V]
 Field[T](name string, schema Schema[T]) FieldSpec
 ```
 
 Names are Go field names. A name may be omitted from scalar factories when the
-result is used as a Pointer/Slice/Map inner contract. `New` rejects unnamed,
+result is used as a Pointer/Slice/Map inner Schema or as a standalone Schema.
+`New` rejects unnamed,
 missing, unexported, duplicate, type-mismatched, and `json:"-"` fields.
 
 `Numeric` includes named forms of all integers except `uintptr` and
 `float32`/`float64`. Complex numbers are excluded. `MapKey` includes named
 string, signed-integer, and unsigned-integer types; `uintptr` is excluded.
 
-### Field methods
+### Spec methods
 
-Every Spec implements `Contract[T]`, so it has:
-
-```go
-type Contract[T any] interface {
-    transform.Transformer[T]
-    validate.Validator[T]
-}
-
-Transform(T) (T, error)
-TransformContext(context.Context, T) (T, error)
-Validate(T) error
-ValidateContext(context.Context, T) error
-ValidateFirst(T) error
-ValidateFirstContext(context.Context, T) error
-```
+Every root Spec implements `Schema[T]`. It therefore supports independent
+`Transform`, `Validate`, and `ValidateFirst` calls as well as the complete JSON
+method family documented below.
 
 `ValueSpec[T]`:
 
@@ -150,6 +140,10 @@ type Schema[T any] interface {
     BindJSONReaderContext(context.Context, *T, io.Reader, ...JSONOptions) error
 }
 ```
+
+JSON decoding is strict and follows `encoding/json`. For example,
+`shape.Int().ParseJSON([]byte("123"))` succeeds, while a JSON string containing
+`"123"` is not coerced to an integer.
 
 Package-level tag Bind shortcuts:
 
@@ -251,7 +245,6 @@ type Issue struct {
     Code string
     Path Path
     Message string
-    MessageID string // built-in localization key; omitted from JSON
     Label string
     Expected any
     Received any
@@ -290,12 +283,12 @@ const English Language
 const SimplifiedChinese Language
 
 SetLanguage(Language)
-CurrentLanguage() Language
 WithLocale(context.Context, Language) context.Context
-LocaleFromContext(context.Context) Language
-Localize(error, Language) error
-LocalizeContext(context.Context, error) error
 ```
+
+Built-in messages use the global language, or the `WithLocale` language for a
+context-aware call, when the error is created. Existing errors are not
+translated afterward. Custom `Refine` messages are returned unchanged.
 
 ## 3. Package `transform`
 

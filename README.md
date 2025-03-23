@@ -93,6 +93,19 @@ The responsibilities are deliberately separate:
 
 All operations also have context-aware forms.
 
+Schemas are not limited to structs. Every root Spec implements the same
+`Schema[T]` interface:
+
+```go
+name, err := shape.String().Trim().NotEmpty().ParseJSON([]byte(`" Pong "`))
+// name == "Pong"
+
+scores, err := shape.Int().NonNegative().Slice().ParseJSON([]byte(`[1, 2, 3]`))
+```
+
+JSON decoding remains strict: `shape.Int().ParseJSON([]byte("\"123\""))` returns
+a type error rather than coercing the string to an integer.
+
 ## Struct tags
 
 Tags are a shorter alternative for straightforward request structs:
@@ -164,7 +177,7 @@ user, err := userSchema.ParseJSON(data, options)
 ```
 
 Reader, context, Parse, and Bind variants are listed in the
-[API contract](docs/API.md).
+[API guarantees](docs/API.md).
 
 ## Errors and languages
 
@@ -200,9 +213,9 @@ at runtime when the analyzer is not installed.
 ## Documentation
 
 - [Complete usage guide](docs/USAGE.md)
-- [Public API and behavior contract](docs/API.md)
+- [Public API and compatibility guarantees](docs/API.md)
 - [Struct tag reference](docs/TAGS.md)
-- [Architecture and compatibility contract](docs/ARCHITECTURE.md)
+- [Architecture and compatibility](docs/ARCHITECTURE.md)
 - [Runnable examples](examples)
 
 JSON Schema Draft 2020-12 and OpenAPI 3.1 adapters are available in the
