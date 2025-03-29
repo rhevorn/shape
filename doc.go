@@ -1,10 +1,10 @@
 // Package shape defines typed transformation, validation, and JSON Schemas.
 //
-// New defines an explicit Schema from typed field Schemas. BindJSON derives
-// a cached Schema from a target struct's tags. Both paths compose encoding/json
-// decoding, transformation, and validation in that order, and Bind methods
-// update targets only after the operation succeeds.
+// New defines an explicit Schema from typed field Specs. Struct compiles a
+// cached Schema from struct tags. Schema itself is Transform + Validate only.
+// StructSpec and TaggedSpec also implement JSONSchema for ParseJSON.
+// Package-level ParseJSON works with any Schema; BindJSON is the tag-driven
+// shortcut that needs no Schema variable and writes through a pointer.
 //
-// Scalar and composite Specs are also Schemas and can be used directly. Use
-// the validate and transform subpackages when only one capability is needed.
+// Use the validate and transform subpackages when only one capability is needed.
 package shape

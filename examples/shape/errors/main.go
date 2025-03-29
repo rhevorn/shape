@@ -20,11 +20,11 @@ var requestSchema = shape.New[Request](
 )
 
 func main() {
-	validate.SetLanguage(validate.English)
-	english := requestSchema.Validate(Request{})
-	fmt.Println("global language error:", english)
+	validate.SetLanguage(validate.SimplifiedChinese)
+	chinese := requestSchema.Validate(Request{})
+	fmt.Println("global language error:", chinese)
 
-	ctx := validate.WithLocale(context.Background(), validate.SimplifiedChinese)
+	ctx := validate.WithLocale(context.Background(), validate.English)
 	err := requestSchema.ValidateContext(ctx, Request{})
 	fmt.Println("context language error:", err)
 

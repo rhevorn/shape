@@ -30,9 +30,8 @@ func main() {
 	)
 	fmt.Printf("parsed: %#v error=%v\n", request, err)
 
-	target := Request{Name: "unchanged", Age: 99}
-	err = requestSchema.BindJSON(&target, []byte(`{"name":"new","age":10}`), strictJSON)
-	fmt.Printf("failed bind keeps target: %#v error=%v\n", target, err)
+	_, err = requestSchema.ParseJSON([]byte(`{"name":"new","age":10}`), strictJSON)
+	fmt.Printf("failed parse: error=%v\n", err)
 
 	_, err = requestSchema.ParseJSONReader(strings.NewReader(`{"name":"Pong","age":20}`), shape.JSONOptions{MaxBytes: 4})
 	fmt.Println("too large:", errors.Is(err, shape.ErrJSONTooLarge))

@@ -20,9 +20,21 @@ const (
 	CodeTooDeep       = "too_deep"
 	CodeTooManyIssues = "too_many_issues"
 	CodeCustom        = "custom"
+	// CodeUniqueLimit marks the deep-uniqueness resource bound, not a
+	// data-validity verdict: the collection is valid but too large to compare
+	// pairwise. It is deliberately distinct from CodeTooBig so a consumer
+	// cannot confuse it with a Max length violation.
+	CodeUniqueLimit = "unique_limit"
 )
 
 const DefaultMaxIssues = 100
+
+// MaxDeepUniqueItems bounds the quadratic deep-equality path in Unique, which
+// is taken when elements are not safely comparable with == (pointers,
+// interfaces, and any type containing them). Collections above this size that
+// need deep comparison report CodeUniqueLimit instead of being compared.
+// Comparable collections use a hash set and are not bounded by this.
+const MaxDeepUniqueItems = 1024
 
 type Issue struct {
 	Code      string `json:"code"`

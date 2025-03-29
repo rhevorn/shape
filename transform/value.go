@@ -3,6 +3,8 @@ package transform
 import (
 	"context"
 	"reflect"
+
+	"github.com/rhevorn/shape/internal/reflectclone"
 )
 
 type ValueTransformer[T any] struct{ steps []step[T] }
@@ -52,7 +54,9 @@ func (t ValueTransformer[T]) IfZero(fallback T) ValueTransformer[T] {
 		panic("transform: invalid IfZero value: " + err.Error())
 	}
 	return t.append(func(ctx context.Context, v T) (T, error) {
-		if !reflect.ValueOf(&v).Elem().IsZero() {
+		// reflectclone.IsZero, not reflect.Value.IsZero: the two disagree for a
+		// zero time.Time carrying a non-nil Location.
+		if !reflectclone.IsZero(reflect.ValueOf(&v).Elem()) {
 			return v, nil
 		}
 		return cloneContext(ctx, snapshot)

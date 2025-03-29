@@ -50,7 +50,7 @@ func run(pass *analysis.Pass) (any, error) {
 				continue
 			}
 			typ := pass.TypesInfo.TypeOf(field.Type)
-			if typ == nil {
+			if typ == nil || mentionsTypeParam(typ) {
 				continue
 			}
 			if err = check(typ, items); err != nil {
@@ -372,10 +372,16 @@ func checkSupportedGraph(t types.Type, active map[types.Type]bool) error {
 		}
 		return checkSupportedGraph(element, active)
 	case *types.Named:
-		if classify(value) == kTime || classify(value) == kDuration || classify(value) == kString || classify(value) == kBool || classify(value) == kNumber {
+		switch classify(value) {
+		case kTime, kDuration, kString, kBool, kNumber:
 			return nil
+		case kStruct:
+			return checkStructType(value, active)
+		default:
+			// A named slice or map is an ordinary value the runtime walks by
+			// kind, so check its element graph rather than demanding a struct.
+			return checkSupportedGraph(value.Underlying(), active)
 		}
-		return checkStructType(value, active)
 	}
 	switch value := t.Underlying().(type) {
 	case *types.Struct:
@@ -383,8 +389,7 @@ func checkSupportedGraph(t types.Type, active map[types.Type]bool) error {
 	case *types.Slice:
 		return checkSupportedGraph(value.Elem(), active)
 	case *types.Map:
-		keyKind := classify(value.Key())
-		if keyKind != kString && keyKind != kNumber {
+		if !isMapKey(value.Key()) {
 			return errText("map key must be string or integer")
 		}
 		return checkSupportedGraph(value.Elem(), active)
@@ -453,6 +458,51 @@ func classify(t types.Type) kind {
 	}
 	return kUnsupported
 }
+
+// isMapKey reports whether t is a type the runtime accepts as a map key.
+// classify folds integers and floats into kNumber, but the runtime's MapKey
+// constraint admits only string and integer kinds, so a float key must be
+// rejected here or the linter passes a declaration that panics at construction.
+func isMapKey(t types.Type) bool {
+	basic, ok := types.Unalias(t).Underlying().(*types.Basic)
+	if !ok {
+		return false
+	}
+	info := basic.Info()
+	if info&types.IsString != 0 {
+		return true
+	}
+	return info&types.IsInteger != 0 && basic.Kind() != types.Uintptr
+}
+
+// mentionsTypeParam reports whether t is, or is built from, a type parameter.
+// A tag on such a field can only be judged at the instantiated construction
+// call, so the declaration scan skips it; the call-site path already does.
+func mentionsTypeParam(t types.Type) bool {
+	switch value := types.Unalias(t).(type) {
+	case *types.TypeParam:
+		return true
+	case *types.Pointer:
+		return mentionsTypeParam(value.Elem())
+	case *types.Slice:
+		return mentionsTypeParam(value.Elem())
+	case *types.Array:
+		return mentionsTypeParam(value.Elem())
+	case *types.Chan:
+		return mentionsTypeParam(value.Elem())
+	case *types.Map:
+		return mentionsTypeParam(value.Key()) || mentionsTypeParam(value.Elem())
+	case *types.Named:
+		args := value.TypeArgs()
+		for i := 0; i < args.Len(); i++ {
+			if mentionsTypeParam(args.At(i)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func element(t types.Type) types.Type {
 	t = types.Unalias(t)
 	if p, ok := t.(*types.Pointer); ok {
@@ -617,6 +667,12 @@ func checkValue(typ types.Type, target kind, item taglang.Item) error {
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 		if part == "" {
+			// An empty candidate is a legitimate oneof value for a string
+			// (oneof='' and oneof=a||b both compile at runtime). It is never
+			// valid for a numeric range or a duration.
+			if target == kString && item.Name == "oneof" {
+				continue
+			}
 			return errText("empty list value")
 		}
 		if target == kDuration {

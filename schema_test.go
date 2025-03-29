@@ -3,8 +3,11 @@ package shape_test
 import (
 	"context"
 	"errors"
+	"math"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rhevorn/shape"
 	"github.com/rhevorn/shape/validate"
@@ -85,32 +88,32 @@ func TestExplicitSchemaParseJSON(t *testing.T) {
 	}
 }
 
-func TestEveryRootSpecIsAJSONSchema(t *testing.T) {
-	text, err := shape.String().Trim().NotEmpty().ParseJSON([]byte(`" Pong "`))
+func TestPackageParseJSONAcceptsAnySchema(t *testing.T) {
+	text, err := shape.ParseJSON(shape.String().Trim().NotEmpty(), []byte(`" Pong "`))
 	if err != nil || text != "Pong" {
 		t.Fatalf("String ParseJSON() = %q, %v", text, err)
 	}
 
-	number, err := shape.Int().Positive().ParseJSON([]byte(`123`))
+	number, err := shape.ParseJSON(shape.Int().Positive(), []byte(`123`))
 	if err != nil || number != 123 {
 		t.Fatalf("Int ParseJSON() = %d, %v", number, err)
 	}
-	if _, err := shape.Int().ParseJSON([]byte(`"123"`)); err == nil {
+	if _, err := shape.ParseJSON(shape.Int(), []byte(`"123"`)); err == nil {
 		t.Fatal("Int ParseJSON() coerced a JSON string")
 	}
 
-	items, err := shape.String().Trim().NotEmpty().Slice().ParseJSON([]byte(`[" a ","b"]`))
+	items, err := shape.ParseJSON(shape.String().Trim().NotEmpty().Slice(), []byte(`[" a ","b"]`))
 	if err != nil || len(items) != 2 || items[0] != "a" || items[1] != "b" {
 		t.Fatalf("Slice ParseJSON() = %#v, %v", items, err)
 	}
 
-	values, err := shape.Map("", shape.String().Trim(), shape.Int().Positive()).ParseJSON([]byte(`{" a ":1}`))
+	values, err := shape.ParseJSON(shape.Map("", shape.String().Trim(), shape.Int().Positive()), []byte(`{" a ":1}`))
 	if err != nil || len(values) != 1 || values["a"] != 1 {
 		t.Fatalf("Map ParseJSON() = %#v, %v", values, err)
 	}
 
 	fallback := "guest"
-	pointer, err := shape.String().Trim().Pointer().IfNull(&fallback).ParseJSON([]byte(`null`))
+	pointer, err := shape.ParseJSON(shape.String().Trim().Pointer().IfNull(&fallback), []byte(`null`))
 	if err != nil || pointer == nil || *pointer != "guest" {
 		t.Fatalf("Pointer ParseJSON() = %#v, %v", pointer, err)
 	}
@@ -278,12 +281,12 @@ func TestSchemaNullFallbackAndAtomicBind(t *testing.T) {
 	}
 
 	target := Config{Name: "keep"}
-	err = schema.BindJSON(&target, []byte(`{"name":"   "}`))
+	err = shape.BindJSON(&target, []byte(`{"name":"   "}`))
 	if err == nil || target.Name != "keep" {
 		t.Fatalf("BindJSON must be atomic: target=%#v err=%v", target, err)
 	}
 
-	err = schema.BindJSON(&target, []byte(`{"name":" next "}`))
+	err = shape.BindJSON(&target, []byte(`{"name":" next "}`))
 	if err != nil || target.Name != "next" {
 		t.Fatalf("BindJSON() target=%#v err=%v", target, err)
 	}
@@ -369,6 +372,134 @@ func TestExplicitTransformErrorsKeepCompletePath(t *testing.T) {
 	}
 }
 
+// A nested Schema returns its own *TransformError, and the collection wrapper
+// sits outside it. Normalization must recover the index/key from the wrapper
+// before matching the public type, or the element index disappears from the
+// path while Validate still reports it.
+func TestNestedSchemaTransformErrorKeepsCollectionIndex(t *testing.T) {
+	type Item struct {
+		Sku string `json:"sku"`
+	}
+	type Order struct {
+		Items []Item          `json:"items"`
+		ByKey map[string]Item `json:"byKey"`
+	}
+	boom := errors.New("bad sku")
+	item := shape.New[Item](shape.String("Sku").Apply(func(value string) (string, error) {
+		if value == "bad" {
+			return "", boom
+		}
+		return value, nil
+	}))
+	order := shape.New[Order](
+		shape.Slice("Items", item),
+		shape.Map("ByKey", shape.String(), item),
+	)
+
+	for _, tc := range []struct {
+		name  string
+		value Order
+		want  string
+	}{
+		{"slice element", Order{Items: []Item{{Sku: "ok"}, {Sku: "bad"}}}, "items[1].sku"},
+		{"map value", Order{ByKey: map[string]Item{"k": {Sku: "bad"}}}, "byKey.k.sku"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := order.Transform(tc.value)
+			var transformError *shape.TransformError
+			if !errors.As(err, &transformError) {
+				t.Fatalf("Transform() error = %T %v", err, err)
+			}
+			if got := transformError.Path.String(); got != tc.want {
+				t.Fatalf("Path = %q, want %q (err = %v)", got, tc.want, err)
+			}
+			if !errors.Is(err, boom) {
+				t.Fatalf("errors.Is(err, boom) = false: %v", err)
+			}
+		})
+	}
+}
+
+// Validate and Transform must agree on the path of the same failing element.
+func TestNestedSchemaTransformAndValidateAgreeOnPath(t *testing.T) {
+	type Item struct {
+		Sku string `json:"sku" shape:"notempty"`
+	}
+	type Order struct {
+		Items []Item `json:"items"`
+	}
+	order := shape.Struct[Order]()
+	value := Order{Items: []Item{{Sku: "ok"}, {Sku: ""}}}
+
+	verr := order.Validate(value)
+	var validationError *validate.Error
+	if !errors.As(verr, &validationError) || len(validationError.Issues) != 1 {
+		t.Fatalf("Validate() error = %v", verr)
+	}
+	if got := validationError.Issues[0].Path.String(); got != "items[1].sku" {
+		t.Fatalf("Validate path = %q", got)
+	}
+}
+
+// The spec path must inherit the time-aware zero test too; only the tagged
+// path used zeroValue.
+func TestTimeSpecIfZeroTreatsAZeroTimeAsZero(t *testing.T) {
+	type Doc struct {
+		When time.Time `json:"when"`
+	}
+	zero := time.Time{}.Local()
+	if !zero.IsZero() || reflect.ValueOf(zero).IsZero() {
+		t.Skip("this platform does not distinguish the two zero checks")
+	}
+	fallback := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	out, err := shape.New[Doc](shape.Time("When").IfZero(fallback)).Transform(Doc{When: zero})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.When.Equal(fallback) {
+		t.Fatalf("When = %v, want the fallback %v", out.When, fallback)
+	}
+}
+
+// The tagged compiler already rejects two fields sharing a JSON name; the
+// explicit path accepted them, making one field unreachable from JSON.
+func TestExplicitSchemaRejectsDuplicateJSONNames(t *testing.T) {
+	type Coll struct {
+		First  string
+		Second string `json:"First"`
+	}
+	defer func() {
+		if recover() == nil {
+			t.Fatal("duplicate JSON names were accepted")
+		}
+	}()
+	_ = shape.New[Coll](shape.String("First"), shape.String("Second"))
+}
+
+// label is an outer tag while rules on a pointer field attach to the element
+// plan, so `label=...,min=...` used to lose the label on *T but not on T.
+func TestPointerFieldKeepsItsLabel(t *testing.T) {
+	type Doc struct {
+		Age  *int `json:"age" shape:"label=Age,min=18"`
+		Size int  `json:"size" shape:"label=Size,min=18"`
+	}
+
+	age := 1
+	err := shape.Struct[Doc]().Validate(Doc{Age: &age, Size: 1})
+	var validationError *validate.Error
+	if !errors.As(err, &validationError) || len(validationError.Issues) != 2 {
+		t.Fatalf("issues = %#v", err)
+	}
+	for _, issue := range validationError.Issues {
+		if issue.Label == "" {
+			t.Fatalf("issue %q lost its label: %#v", issue.Path.String(), issue)
+		}
+	}
+	if got := validationError.Issues[0].Label; got != "Age" {
+		t.Fatalf("pointer field label = %q, want %q", got, "Age")
+	}
+}
+
 func TestWholeStructTransformErrorUsesStableType(t *testing.T) {
 	type Request struct{ Name string }
 	boom := errors.New("whole transform")
@@ -419,19 +550,72 @@ func TestWholeStructApplyUsesOneWorkingCopy(t *testing.T) {
 	}
 }
 
+// Both Schema paths must protect caller-owned storage when a whole-struct
+// Apply fails. The tagged plan only detaches the fields it compiles, so
+// storage held by json:"-" (and unexported) fields — which a nested Apply
+// reaches through promoted or exported selectors — stayed shared with the
+// caller.
 func TestFailedWholeStructApplyDoesNotMutateInput(t *testing.T) {
-	type Large struct{ Values []int }
 	boom := errors.New("boom")
-	schema := shape.New[Large]().Apply(func(value Large) (Large, error) {
-		value.Values[0] = 99
-		return value, boom
+
+	t.Run("explicit", func(t *testing.T) {
+		type Large struct{ Values []int }
+		schema := shape.New[Large]().Apply(func(value Large) (Large, error) {
+			value.Values[0] = 99
+			return value, boom
+		})
+		input := Large{Values: []int{1}}
+		if _, err := schema.Transform(input); !errors.Is(err, boom) {
+			t.Fatalf("Transform() error = %v", err)
+		}
+		if input.Values[0] != 1 {
+			t.Fatalf("failed Transform mutated input: %#v", input)
+		}
 	})
-	input := Large{Values: []int{1}}
-	if _, err := schema.Transform(input); !errors.Is(err, boom) {
-		t.Fatalf("Transform() error = %v", err)
+
+	t.Run("tagged", func(t *testing.T) {
+		type Large struct {
+			Kept   string `json:"kept"`
+			Values []int  `json:"-"`
+		}
+		schema := shape.Struct[Large]().Apply(func(value Large) (Large, error) {
+			value.Values[0] = 99
+			return value, boom
+		})
+		input := Large{Values: []int{1}}
+		if _, err := schema.Transform(input); !errors.Is(err, boom) {
+			t.Fatalf("Transform() error = %v", err)
+		}
+		if input.Values[0] != 1 {
+			t.Fatalf("failed Transform mutated input: %#v", input)
+		}
+	})
+}
+
+// A non-finite float must be rejected the same way whether the field was
+// declared with the Float64 spec, the generic Value spec, or a shape tag.
+func TestValueFloatAgreesWithNumberOnNonFinite(t *testing.T) {
+	type Ratio struct {
+		R float64 `json:"r"`
 	}
-	if input.Values[0] != 1 {
-		t.Fatalf("failed Transform mutated input: %#v", input)
+	for _, tc := range []struct {
+		name   string
+		schema shape.Schema[Ratio]
+	}{
+		{"Value[float64]", shape.New[Ratio](shape.Value[float64]("R"))},
+		{"Float64", shape.New[Ratio](shape.Float64("R"))},
+		{"tagged", shape.Struct[Ratio]()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.schema.Validate(Ratio{R: math.NaN()})
+			var validationError *validate.Error
+			if !errors.As(err, &validationError) || len(validationError.Issues) != 1 {
+				t.Fatalf("NaN was accepted: %v", err)
+			}
+			if code := validationError.Issues[0].Code; code != validate.CodeInvalidNumber {
+				t.Fatalf("Code = %q, want %q", code, validate.CodeInvalidNumber)
+			}
+		})
 	}
 }
 

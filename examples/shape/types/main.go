@@ -42,10 +42,10 @@ var settingsSchema = shape.New[Settings](
 )
 
 func main() {
-	name, err := shape.String().Trim().NotEmpty().ParseJSON([]byte(`" Pong "`))
+	name, err := shape.ParseJSON(shape.String().Trim().NotEmpty(), []byte(`" Pong "`))
 	fmt.Printf("name: %q error=%v\n", name, err)
 
-	scores, err := shape.Int().NonNegative().Slice().ParseJSON([]byte(`[1, 2, 3]`))
+	scores, err := shape.ParseJSON(shape.Int().NonNegative().Slice(), []byte(`[1, 2, 3]`))
 	fmt.Printf("scores: %#v error=%v\n", scores, err)
 
 	value := Settings{

@@ -163,17 +163,19 @@ func compilePublicAPI(ctx context.Context, reader io.Reader, source []byte) {
 	_ = schemaInterface.ValidateContext(ctx, contractUser{})
 	_ = schemaInterface.ValidateFirst(contractUser{})
 	_ = schemaInterface.ValidateFirstContext(ctx, contractUser{})
-	_, _ = schemaInterface.ParseJSON(source)
-	_, _ = schemaInterface.ParseJSONContext(ctx, source)
-	_, _ = schemaInterface.ParseJSONReader(reader)
-	_, _ = schemaInterface.ParseJSONReaderContext(ctx, reader)
+
+	var jsonSchema shape.JSONSchema[contractUser] = schema
+	_, _ = jsonSchema.ParseJSON(source)
+	_, _ = jsonSchema.ParseJSONContext(ctx, source)
+	_, _ = jsonSchema.ParseJSONReader(reader)
+	_, _ = jsonSchema.ParseJSONReaderContext(ctx, reader)
+
+	_, _ = shape.ParseJSON(shape.String().Trim(), source)
+	_, _ = shape.ParseJSONContext(ctx, shape.Int().Positive(), source)
+	_, _ = shape.ParseJSONReader(shape.String().Slice(), reader)
+	_, _ = shape.ParseJSONReaderContext(ctx, shape.Int().Slice(), reader)
 
 	var target contractUser
-	_ = schemaInterface.BindJSON(&target, source)
-	_ = schemaInterface.BindJSONContext(ctx, &target, source)
-	_ = schemaInterface.BindJSONReader(&target, reader)
-	_ = schemaInterface.BindJSONReaderContext(ctx, &target, reader)
-
 	_ = shape.Struct[contractUser]()
 	_ = shape.BindJSON(&target, source)
 	_ = shape.BindJSONContext(ctx, &target, source)

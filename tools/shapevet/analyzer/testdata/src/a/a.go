@@ -49,6 +49,36 @@ type Explicit struct {
 	Hidden string `json:"-"`
 }
 
+// Linter/runtime agreement fixtures. Every declaration below compiles and
+// runs, so the analyzer must stay silent; a stray diagnostic with no want
+// comment fails the test.
+type NamedSlice []string
+
+type NamedMap map[string]int
+
+type Graph struct {
+	Tags   NamedSlice `json:"tags"`
+	Scores NamedMap   `json:"scores"`
+}
+
+// An empty oneof candidate is a legitimate value for a string.
+type EmptyCandidate struct {
+	OnlyEmpty string `shape:"oneof=''"`
+	Hole      string `shape:"oneof=a||b"`
+}
+
+// A float map key compiles but panics at construction, so it must be reported
+// exactly where the runtime rejects it.
+type FloatKey struct {
+	Ratings map[float64]int `json:"ratings"`
+}
+
+// A tag on a type-parameter field can only be judged once the type is
+// instantiated, so the declaration scan must leave it alone.
+type Box[T any] struct {
+	Value T `json:"value" shape:"min=1"`
+}
+
 func build() {
 	_ = shape.Struct[Good]()
 	_ = shape.Struct[Unsupported]()    // want "unsupported field type"
@@ -56,6 +86,9 @@ func build() {
 	_ = shape.Struct[PointerToSlice]() // want "unsupported pointer field type"
 	_ = shape.Struct[Embedded]()       // want "anonymous fields are unsupported"
 	_ = shape.Struct[Recursive]()      // want "recursive type is unsupported"
+	_ = shape.Struct[FloatKey]()       // want "map key must be string or integer"
+	_ = shape.Struct[Graph]()
+	_ = shape.Struct[EmptyCandidate]()
 	var bind Unsupported
 	_ = shape.BindJSON(&bind, nil) // want "unsupported field type"
 

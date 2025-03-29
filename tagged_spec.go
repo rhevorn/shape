@@ -17,6 +17,7 @@ type TaggedSpec[T any] struct {
 }
 
 var _ Schema[struct{}] = TaggedSpec[struct{}]{}
+var _ JSONSchema[struct{}] = TaggedSpec[struct{}]{}
 
 func newTaggedSpec[T any](plan *valuePlan) TaggedSpec[T] {
 	base := structSchema[T]{p: plan}
@@ -66,29 +67,22 @@ func (s TaggedSpec[T]) Transform(value T) (T, error) {
 }
 
 func (s TaggedSpec[T]) TransformContext(ctx context.Context, value T) (T, error) {
+	return s.transformContext(ctx, value, false)
+}
+
+// transformDecodedContext is the owned entry point: the value came straight
+// from JSON decoding, so it is already a private copy.
+func (s TaggedSpec[T]) transformDecodedContext(ctx context.Context, value T) (T, error) {
+	return s.transformContext(ctx, value, true)
+}
+
+func (s TaggedSpec[T]) transformContext(ctx context.Context, value T, owned bool) (T, error) {
 	var zero T
 	out, err := s.base.TransformContext(ctx, value)
 	if err != nil {
 		return zero, normalizeTransformError(ctx, err)
 	}
-	out, err = runWholeTransforms(ctx, s.transforms, out)
-	if err != nil {
-		return zero, normalizeTransformError(ctx, err)
-	}
-	return out, nil
-}
-
-func (s TaggedSpec[T]) transformDecodedContext(ctx context.Context, value T) (T, error) {
-	var zero T
-	out, err := s.base.transformDecodedContext(ctx, value)
-	if err != nil {
-		return zero, normalizeTransformError(ctx, err)
-	}
-	out, err = runWholeTransforms(ctx, s.transforms, out)
-	if err != nil {
-		return zero, normalizeTransformError(ctx, err)
-	}
-	return out, nil
+	return applyWholeTransforms(ctx, s.transforms, out, owned)
 }
 
 func (s TaggedSpec[T]) Validate(value T) error { return s.validator.Validate(value) }
@@ -101,28 +95,16 @@ func (s TaggedSpec[T]) ValidateFirstContext(ctx context.Context, value T) error 
 }
 
 func (s TaggedSpec[T]) ParseJSON(source []byte, options ...JSONOptions) (T, error) {
-	return parseJSON(s, source, options...)
+	return ParseJSON(s, source, options...)
 }
 func (s TaggedSpec[T]) ParseJSONContext(ctx context.Context, source []byte, options ...JSONOptions) (T, error) {
-	return parseJSONContext(ctx, s, source, options...)
+	return ParseJSONContext(ctx, s, source, options...)
 }
 func (s TaggedSpec[T]) ParseJSONReader(reader io.Reader, options ...JSONOptions) (T, error) {
-	return parseJSONReader(s, reader, options...)
+	return ParseJSONReader(s, reader, options...)
 }
 func (s TaggedSpec[T]) ParseJSONReaderContext(ctx context.Context, reader io.Reader, options ...JSONOptions) (T, error) {
-	return parseJSONReaderContext(ctx, s, reader, options...)
-}
-func (s TaggedSpec[T]) BindJSON(target *T, source []byte, options ...JSONOptions) error {
-	return bindJSON(s, target, source, options...)
-}
-func (s TaggedSpec[T]) BindJSONContext(ctx context.Context, target *T, source []byte, options ...JSONOptions) error {
-	return bindJSONContext(ctx, s, target, source, options...)
-}
-func (s TaggedSpec[T]) BindJSONReader(target *T, reader io.Reader, options ...JSONOptions) error {
-	return bindJSONReader(s, target, reader, options...)
-}
-func (s TaggedSpec[T]) BindJSONReaderContext(ctx context.Context, target *T, reader io.Reader, options ...JSONOptions) error {
-	return bindJSONReaderContext(ctx, s, target, reader, options...)
+	return ParseJSONReaderContext(ctx, s, reader, options...)
 }
 
 func (s TaggedSpec[T]) exportPlan() (*valuePlan, error) {

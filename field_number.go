@@ -2,7 +2,6 @@ package shape
 
 import (
 	"context"
-	"io"
 
 	"github.com/rhevorn/shape/transform"
 	"github.com/rhevorn/shape/validate"
@@ -74,28 +73,3 @@ func (f NumberSpec[N]) Label(label string) NumberSpec[N] {
 }
 func (f NumberSpec[N]) Pointer() PointerSpec[N] { return pointerSpec(f.name, f) }
 func (f NumberSpec[N]) Slice() SliceSpec[N]     { return sliceSpec(f.name, f) }
-
-func (f NumberSpec[N]) ParseJSON(source []byte, options ...JSONOptions) (N, error) {
-	return parseJSON(f, source, options...)
-}
-func (f NumberSpec[N]) ParseJSONContext(ctx context.Context, source []byte, options ...JSONOptions) (N, error) {
-	return parseJSONContext(ctx, f, source, options...)
-}
-func (f NumberSpec[N]) ParseJSONReader(reader io.Reader, options ...JSONOptions) (N, error) {
-	return parseJSONReader(f, reader, options...)
-}
-func (f NumberSpec[N]) ParseJSONReaderContext(ctx context.Context, reader io.Reader, options ...JSONOptions) (N, error) {
-	return parseJSONReaderContext(ctx, f, reader, options...)
-}
-func (f NumberSpec[N]) BindJSON(target *N, source []byte, options ...JSONOptions) error {
-	return bindJSON(f, target, source, options...)
-}
-func (f NumberSpec[N]) BindJSONContext(ctx context.Context, target *N, source []byte, options ...JSONOptions) error {
-	return bindJSONContext(ctx, f, target, source, options...)
-}
-func (f NumberSpec[N]) BindJSONReader(target *N, reader io.Reader, options ...JSONOptions) error {
-	return bindJSONReader(f, target, reader, options...)
-}
-func (f NumberSpec[N]) BindJSONReaderContext(ctx context.Context, target *N, reader io.Reader, options ...JSONOptions) error {
-	return bindJSONReaderContext(ctx, f, target, reader, options...)
-}

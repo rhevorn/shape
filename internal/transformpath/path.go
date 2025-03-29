@@ -2,7 +2,10 @@
 // package boundary without exposing an intermediate error type to users.
 package transformpath
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 type Segment struct {
 	Key     string
@@ -41,11 +44,15 @@ func prefix(err error, segment Segment) error {
 	if err == nil {
 		return nil
 	}
-	if nested, ok := err.(*Error); ok && nested != nil {
+	// errors.As, not a bare type assertion: user code may wrap the error with
+	// %w, and the inner segments must survive that. err is kept whole so the
+	// user's wrapper still renders its own message.
+	var nested *Error
+	if errors.As(err, &nested) && nested != nil {
 		segments := make([]Segment, 0, len(nested.Segments)+1)
 		segments = append(segments, segment)
 		segments = append(segments, nested.Segments...)
-		return &Error{Segments: segments, Err: nested.Err}
+		return &Error{Segments: segments, Err: err}
 	}
 	return &Error{Segments: []Segment{segment}, Err: err}
 }

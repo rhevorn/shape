@@ -7,11 +7,13 @@ import (
 	"math"
 	"math/big"
 	"reflect"
-	"time"
 
+	"github.com/rhevorn/shape/internal/reflectclone"
 	"github.com/rhevorn/shape/internal/spec"
 )
 
+// defaultMaxRecursiveDepth bounds plan traversal. It is separate from
+// reflectclone.MaxDepth, which bounds copies of a single value.
 const defaultMaxRecursiveDepth = 64
 
 type compiledRule func(context.Context, reflect.Value) error
@@ -46,12 +48,7 @@ type valuePlan struct {
 }
 
 func copyPlan(p *valuePlan) *valuePlan { n := *p; return &n }
-func zeroValue(v reflect.Value) bool {
-	if v.Type() == reflect.TypeFor[time.Time]() {
-		return v.Interface().(time.Time).IsZero()
-	}
-	return v.IsZero()
-}
+func zeroValue(v reflect.Value) bool   { return reflectclone.IsZero(v) }
 func finite(v reflect.Value) bool {
 	if v.Kind() == reflect.Float32 || v.Kind() == reflect.Float64 {
 		x := v.Float()
@@ -121,7 +118,7 @@ func addOptions(p *valuePlan, options ...spec.Option) *valuePlan {
 		if !finite(v) {
 			panic("shape: fallback must be finite")
 		}
-		snapshot, err := cloneValue(context.Background(), v, 0, true)
+		snapshot, err := cloneValue(context.Background(), v, true)
 		if err != nil {
 			panic("shape: invalid fallback: " + err.Error())
 		}
@@ -141,111 +138,20 @@ func addRules(p *valuePlan, rules ...spec.Rule) *valuePlan {
 	}
 	return p
 }
-func cloneValue(ctx context.Context, v reflect.Value, depth int, strict bool) (reflect.Value, error) {
-	if err := ctx.Err(); err != nil {
+
+// cloneValue delegates to the shared implementation so the root package and
+// transform cannot drift apart on what "detached copy" means.
+func cloneValue(ctx context.Context, v reflect.Value, strict bool) (reflect.Value, error) {
+	out, err := reflectclone.Clone(ctx, v, strict)
+	switch {
+	case err == nil:
+		return out, nil
+	case errors.Is(err, reflectclone.ErrDepthExceeded):
+		return reflect.Value{}, errors.New("shape: copy depth exceeded (cyclic or deeply nested value)")
+	case errors.Is(err, reflectclone.ErrUnsupportedType):
+		return reflect.Value{}, fmt.Errorf("shape: unsupported default type: %v", err)
+	default:
 		return reflect.Value{}, err
 	}
-	if depth >= defaultMaxRecursiveDepth {
-		return reflect.Value{}, errors.New("shape: copy depth exceeded (cyclic or deeply nested value)")
-	}
-	if immutableType(v.Type()) {
-		return v, nil
-	}
-	out := reflect.New(v.Type()).Elem()
-	switch v.Kind() {
-	case reflect.Pointer:
-		if v.IsNil() {
-			return out, nil
-		}
-		c, err := cloneValue(ctx, v.Elem(), depth+1, strict)
-		if err != nil {
-			return out, err
-		}
-		out.Set(reflect.New(v.Type().Elem()))
-		out.Elem().Set(c)
-	case reflect.Slice:
-		if v.IsNil() {
-			return out, nil
-		}
-		out = reflect.MakeSlice(v.Type(), v.Len(), v.Len())
-		if immutableType(v.Type().Elem()) {
-			reflect.Copy(out, v)
-			return out, nil
-		}
-		for i := 0; i < v.Len(); i++ {
-			c, err := cloneValue(ctx, v.Index(i), depth+1, strict)
-			if err != nil {
-				return out, err
-			}
-			out.Index(i).Set(c)
-		}
-	case reflect.Map:
-		if v.IsNil() {
-			return out, nil
-		}
-		out = reflect.MakeMapWithSize(v.Type(), v.Len())
-		iter := v.MapRange()
-		for iter.Next() {
-			k, err := cloneValue(ctx, iter.Key(), depth+1, strict)
-			if err != nil {
-				return out, err
-			}
-			c, err := cloneValue(ctx, iter.Value(), depth+1, strict)
-			if err != nil {
-				return out, err
-			}
-			out.SetMapIndex(k, c)
-		}
-	case reflect.Struct:
-		out.Set(v)
-		for i := 0; i < v.NumField(); i++ {
-			f := v.Field(i)
-			if !out.Field(i).CanSet() || v.Type().Field(i).PkgPath != "" {
-				if strict && !immutableType(f.Type()) {
-					return out, errors.New("unexported mutable default field")
-				}
-				continue
-			}
-			c, err := cloneValue(ctx, f, depth+1, strict)
-			if err != nil {
-				return out, err
-			}
-			out.Field(i).Set(c)
-		}
-	case reflect.Interface, reflect.Func, reflect.Chan, reflect.UnsafePointer:
-		if strict {
-			return out, errors.New("unsupported default type: " + v.Type().String())
-		}
-		out.Set(v)
-	case reflect.Array:
-		for i := 0; i < v.Len(); i++ {
-			c, err := cloneValue(ctx, v.Index(i), depth+1, strict)
-			if err != nil {
-				return out, err
-			}
-			out.Index(i).Set(c)
-		}
-	default:
-		out.Set(v)
-	}
-	return out, nil
 }
-func immutableType(t reflect.Type) bool {
-	if t == reflect.TypeFor[time.Time]() {
-		return true
-	}
-	switch t.Kind() {
-	case reflect.Struct:
-		for i := 0; i < t.NumField(); i++ {
-			if !immutableType(t.Field(i).Type) {
-				return false
-			}
-		}
-		return true
-	case reflect.Array:
-		return immutableType(t.Elem())
-	case reflect.Pointer, reflect.Slice, reflect.Map, reflect.Interface, reflect.Func, reflect.Chan, reflect.UnsafePointer:
-		return false
-	}
-	return true
-}
+func immutableType(t reflect.Type) bool { return reflectclone.ImmutableType(t) }

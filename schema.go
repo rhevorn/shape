@@ -13,9 +13,10 @@ import (
 	"github.com/rhevorn/shape/validate"
 )
 
-// Schema describes transformation, validation, and JSON decoding for T.
-// Transformation and validation remain independently callable; JSON methods
-// compose decode, transform, and validation in that order.
+// Schema describes transformation and validation for T.
+// Transformation and validation remain independently callable.
+// JSON decode lives on StructSpec/TaggedSpec (JSONSchema) and package-level
+// ParseJSON*; tag-driven BindJSON* is package-level only.
 type Schema[T any] interface {
 	Transform(T) (T, error)
 	TransformContext(context.Context, T) (T, error)
@@ -23,15 +24,19 @@ type Schema[T any] interface {
 	ValidateContext(context.Context, T) error
 	ValidateFirst(T) error
 	ValidateFirstContext(context.Context, T) error
+}
+
+// JSONSchema is the struct Schema surface that owns ParseJSON.
+// Scalar and composite Specs implement Schema only; use package-level ParseJSON*
+// when a non-struct Schema is the JSON root. For tag-driven in-place bind, use
+// package-level BindJSON* — it needs no Schema variable.
+type JSONSchema[T any] interface {
+	Schema[T]
 
 	ParseJSON([]byte, ...JSONOptions) (T, error)
 	ParseJSONContext(context.Context, []byte, ...JSONOptions) (T, error)
 	ParseJSONReader(io.Reader, ...JSONOptions) (T, error)
 	ParseJSONReaderContext(context.Context, io.Reader, ...JSONOptions) (T, error)
-	BindJSON(*T, []byte, ...JSONOptions) error
-	BindJSONContext(context.Context, *T, []byte, ...JSONOptions) error
-	BindJSONReader(*T, io.Reader, ...JSONOptions) error
-	BindJSONReaderContext(context.Context, *T, io.Reader, ...JSONOptions) error
 }
 
 // TransformError reports the struct field or collection element whose tag
@@ -65,12 +70,12 @@ func normalizeTransformError(ctx context.Context, err error) error {
 	if ctx != nil && ctx.Err() != nil {
 		return ctx.Err()
 	}
-	var public *TransformError
-	if errors.As(err, &public) && public != nil {
-		return public
-	}
+	// The internal collection segments must be recovered BEFORE probing
+	// *TransformError. A nested Schema already returns a *TransformError, and
+	// the collection wrapper sits outside it, so probing the public type first
+	// would match through the wrapper and silently drop the index/key.
 	var internal *transformpath.Error
-	if errors.As(err, &internal) && internal != nil {
+	if errors.As(err, &internal) && internal != nil && len(internal.Segments) > 0 {
 		path := make(validate.Path, 0, len(internal.Segments))
 		for _, segment := range internal.Segments {
 			if segment.IsIndex {
@@ -79,7 +84,15 @@ func normalizeTransformError(ctx context.Context, err error) error {
 				path = append(path, validate.FieldPath(segment.Key))
 			}
 		}
+		var nested *TransformError
+		if errors.As(internal.Err, &nested) && nested != nil {
+			return &TransformError{Path: append(path, nested.Path...), Err: nested.Err}
+		}
 		return &TransformError{Path: path, Err: internal.Err}
+	}
+	var public *TransformError
+	if errors.As(err, &public) && public != nil {
+		return public
 	}
 	return &TransformError{Err: err}
 }
@@ -169,7 +182,7 @@ func transformPlanMode(ctx context.Context, p *valuePlan, value reflect.Value, p
 		switch step.kind {
 		case valueStepOption:
 			if (step.option == "ifzero" && zeroValue(value)) || (step.option == "ifnull" && value.IsNil()) {
-				value, err = cloneValue(ctx, step.fallback, 0, true)
+				value, err = cloneValue(ctx, step.fallback, true)
 				if err != nil {
 					return reflect.Value{}, &TransformError{Path: cloneValidatePath(path), Err: err}
 				}

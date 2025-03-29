@@ -1,9 +1,11 @@
 package transform_test
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/rhevorn/shape/transform"
 )
@@ -80,6 +82,89 @@ func TestValueFuncCannotMutateInputSlice(t *testing.T) {
 	}).Transform(in)
 	if err != nil || in[0] != 1 || out[0] != 2 {
 		t.Fatalf("in=%v out=%v err=%v", in, out, err)
+	}
+}
+
+// A private slice or map used to stay aliased to the caller's storage, because
+// the clone skipped fields it could not Set. The promoted-field case needs no
+// unexported access at all to reach that storage from a callback.
+func TestCloneDetachesUnexportedFields(t *testing.T) {
+	t.Run("promoted field over embedded private storage", func(t *testing.T) {
+		type Doc struct {
+			named
+			Public []int
+		}
+		input := Doc{named: named{Items: []string{"orig"}}, Public: []int{1}}
+		if _, err := transform.Value[Doc]().Apply(func(v Doc) (Doc, error) {
+			v.Items[0] = "mutated"
+			return v, nil
+		}).Transform(input); err != nil {
+			t.Fatal(err)
+		}
+		if input.Items[0] != "orig" {
+			t.Fatalf("caller storage reached through a promoted field: %#v", input.Items)
+		}
+	})
+
+	t.Run("direct private field", func(t *testing.T) {
+		input := private{Public: []int{1}, hidden: []int{7}}
+		if _, err := transform.Value[private]().Apply(func(v private) (private, error) {
+			v.hidden[0] = 99
+			return v, nil
+		}).Transform(input); err != nil {
+			t.Fatal(err)
+		}
+		if input.hidden[0] != 7 {
+			t.Fatalf("private backing array was shared with the caller: %#v", input.hidden)
+		}
+	})
+}
+
+type named struct{ Items []string }
+
+type private struct {
+	Public []int
+	hidden []int
+}
+
+// reflect.Value.IsZero and time.Time.IsZero disagree for a zero instant that
+// carries a non-nil Location, so the fallback used to be skipped.
+func TestIfZeroTreatsAZeroTimeAsZero(t *testing.T) {
+	zero := time.Time{}.Local()
+	if !zero.IsZero() || reflect.ValueOf(zero).IsZero() {
+		t.Skip("this platform does not distinguish the two zero checks")
+	}
+	fallback := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	got, err := transform.Time().IfZero(fallback).Transform(zero)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Equal(fallback) {
+		t.Fatalf("IfZero returned %v, want the fallback %v", got, fallback)
+	}
+}
+
+// cachedTransformer is a foreign Transformer: it makes no promise about where
+// the value it returns lives.
+type cachedTransformer struct{ cached []int }
+
+func (c cachedTransformer) Transform([]int) ([]int, error) { return c.cached, nil }
+func (c cachedTransformer) TransformContext(context.Context, []int) ([]int, error) {
+	return c.cached, nil
+}
+
+// A foreign transformer's output must be detached before later steps treat it
+// as their private working value, or they mutate storage it still holds.
+func TestForeignTransformerOutputIsDetached(t *testing.T) {
+	foreign := cachedTransformer{cached: []int{1, 2, 3}}
+	_, err := transform.Value[[]int]().
+		Then(foreign, transform.Slice(transform.Int().Apply(func(v int) (int, error) { return v + 1, nil }))).
+		Transform([]int{9})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if foreign.cached[0] != 1 {
+		t.Fatalf("foreign transformer's own storage was mutated: %v", foreign.cached)
 	}
 }
 

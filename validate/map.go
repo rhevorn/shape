@@ -79,6 +79,9 @@ func (v MapValidator[K, V]) ValidateFirstContext(ctx context.Context, x map[K]V)
 	return v.runAll(ctx, x, true)
 }
 func (v MapValidator[K, V]) runAll(ctx context.Context, x map[K]V, first bool) error {
+	if v.key == nil || v.value == nil {
+		panic("validate: MapValidator must be built with validate.Map")
+	}
 	var issues []Issue
 	if err := v.base.run(ctx, x, first); err != nil {
 		issues = customIssue(err)
@@ -99,7 +102,7 @@ func (v MapValidator[K, V]) runAll(ctx context.Context, x map[K]V, first bool) e
 		keyErr := runValidator(ctx, v.key, k, first)
 		if keyErr != nil {
 			var stop bool
-			issues, stop = appendIssues(issues, prefix(withLabel(customIssue(keyErr), v.base.label), segment), first)
+			issues, stop = appendIssues(issues, prefix(withLabel(customIssue(keyErr), labelOr(v.base.label, "key")), segment), first)
 			if stop {
 				return finish(ctx, issues)
 			}
@@ -107,7 +110,7 @@ func (v MapValidator[K, V]) runAll(ctx context.Context, x map[K]V, first bool) e
 		valueErr := runValidator(ctx, v.value, x[k], first)
 		if valueErr != nil {
 			var stop bool
-			issues, stop = appendIssues(issues, prefix(withLabel(customIssue(valueErr), v.base.label), segment), first)
+			issues, stop = appendIssues(issues, prefix(withLabel(customIssue(valueErr), labelOr(v.base.label, "value")), segment), first)
 			if stop {
 				return finish(ctx, issues)
 			}
@@ -134,9 +137,21 @@ func (v MapValidator[K, V]) RefineContext(fns ...func(context.Context, map[K]V) 
 	}
 	return v
 }
-func (v MapValidator[K, V]) And(vs ...Validator[map[K]V]) Validator[map[K]V] {
-	return joinValidators[map[K]V](v, vs...)
+func (v MapValidator[K, V]) And(vs ...Validator[map[K]V]) MapValidator[K, V] {
+	v.base = v.base.andAll(vs...)
+	return v
 }
+
+// labelOr supplies a default label so a map key failure and a map value
+// failure for the same entry can be told apart. Both share one path segment
+// (the key), so without this the two issues are byte-identical.
+func labelOr(label, fallback string) string {
+	if label != "" {
+		return label
+	}
+	return fallback
+}
+
 func (v MapValidator[K, V]) Label(s string) MapValidator[K, V] {
 	v.base = v.base.clone()
 	v.base.label = s

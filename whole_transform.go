@@ -55,9 +55,41 @@ func runWholeTransforms[T any](ctx context.Context, steps []wholeTransformStep[T
 	return value, nil
 }
 
+// applyWholeTransforms runs the whole-struct steps that follow a base
+// transform, detaching the value first unless the caller already handed us a
+// private copy.
+//
+// This is the single policy both Schema types use. They used to implement it
+// separately, which is how the tagged path came to skip the detach step: its
+// compiled plan only covers the fields it walks, so json:"-" and unexported
+// storage reaches a whole-struct Apply still aliased to the caller.
+func applyWholeTransforms[T any](
+	ctx context.Context,
+	transforms []wholeTransformStep[T],
+	value T,
+	owned bool,
+) (T, error) {
+	var zero T
+	if len(transforms) == 0 {
+		return value, nil
+	}
+	if !owned {
+		detached, err := cloneWholeValue(ctx, value)
+		if err != nil {
+			return zero, normalizeTransformError(ctx, err)
+		}
+		value = detached
+	}
+	out, err := runWholeTransforms(ctx, transforms, value)
+	if err != nil {
+		return zero, normalizeTransformError(ctx, err)
+	}
+	return out, nil
+}
+
 func cloneWholeValue[T any](ctx context.Context, value T) (T, error) {
 	var zero T
-	out, err := cloneValue(ctx, reflect.ValueOf(&value).Elem(), 0, false)
+	out, err := cloneValue(ctx, reflect.ValueOf(&value).Elem(), false)
 	if err != nil {
 		return zero, err
 	}

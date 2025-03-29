@@ -160,7 +160,10 @@ func (v StringValidator) RefineContext(fns ...func(context.Context, string) erro
 	}
 	return v
 }
-func (v StringValidator) And(vs ...Validator[string]) Validator[string] { return v.base.And(vs...) }
+func (v StringValidator) And(vs ...Validator[string]) StringValidator {
+	v.base = v.base.andAll(vs...)
+	return v
+}
 func (v StringValidator) Label(s string) StringValidator {
 	v.base = v.base.clone()
 	v.base.label = s

@@ -17,7 +17,15 @@ func runOwned[T any](ctx context.Context, transformer Transformer[T], value T) (
 	if owned, ok := transformer.(ownedTransformer[T]); ok {
 		return owned.transformOwnedContext(ctx, value)
 	}
-	return transformer.TransformContext(ctx, value)
+	// A foreign transformer detaches its input (its TransformContext clones)
+	// but promises nothing about what it returns: it may hand back storage it
+	// still holds. The rest of the pipeline treats the result as private, so
+	// detach it here rather than let an alias escape.
+	out, err := transformer.TransformContext(ctx, value)
+	if err != nil {
+		return out, err
+	}
+	return cloneContext(ctx, out)
 }
 
 type sequence[T any] struct{ values []Transformer[T] }

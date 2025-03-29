@@ -107,7 +107,7 @@ func ruleFailure(name string, expected, received any) error {
 	case "unique":
 		key = "unique"
 	case "unique_limit":
-		code = validate.CodeTooBig
+		code = validate.CodeUniqueLimit
 		key = "unique_limit"
 	}
 	return &ruleError{code: code, key: key, expected: expected, received: received}
@@ -383,8 +383,8 @@ func compileRule(t reflect.Type, r spec.Rule) compiledRule {
 		return func(ctx context.Context, v reflect.Value) error {
 			// Bound quadratic deep comparisons; comparable values use a hash set.
 			fastComparable := deepEqualMatchesComparable(t.Elem())
-			if !fastComparable && v.Len() > defaultMaxDeepUniqueItems {
-				return ruleFailure("unique_limit", defaultMaxDeepUniqueItems, v.Len())
+			if !fastComparable && v.Len() > validate.MaxDeepUniqueItems {
+				return ruleFailure("unique_limit", validate.MaxDeepUniqueItems, v.Len())
 			}
 			seen := make(map[any]bool)
 			for i := 0; i < v.Len(); i++ {
@@ -395,7 +395,7 @@ func compileRule(t reflect.Type, r spec.Rule) compiledRule {
 				if fastComparable {
 					k := a.Interface()
 					if seen[k] {
-						return ruleFailure("unique", "unique", k)
+						return ruleFailure("unique", nil, k)
 					}
 					seen[k] = true
 					continue
@@ -405,7 +405,7 @@ func compileRule(t reflect.Type, r spec.Rule) compiledRule {
 						return e
 					}
 					if reflect.DeepEqual(a.Interface(), v.Index(j).Interface()) {
-						return ruleFailure("unique", "unique", a.Interface())
+						return ruleFailure("unique", nil, a.Interface())
 					}
 				}
 			}
@@ -442,5 +442,3 @@ func deepEqualMatchesComparable(t reflect.Type) bool {
 }
 
 var uuidPattern = regexp.MustCompile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
-
-const defaultMaxDeepUniqueItems = 1024

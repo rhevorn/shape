@@ -82,7 +82,14 @@ func (b base[T]) RefineContext(fns ...func(context.Context, T) error) Validator[
 	}
 	return b
 }
-func (b base[T]) And(vs ...Validator[T]) Validator[T] {
+
+// andAll appends sibling validators to a clone of the receiver, so the
+// receiver's own checks and label apply to every issue the result produces.
+//
+// It replaces joinValidators, which built a fresh zero base and therefore
+// dropped the label: Slice/Map/Pointer lost it while String/Number/Value kept
+// it, for the same call shape.
+func (b base[T]) andAll(vs ...Validator[T]) base[T] {
 	b = b.clone()
 	for _, v := range vs {
 		if v == nil {
@@ -92,23 +99,9 @@ func (b base[T]) And(vs ...Validator[T]) Validator[T] {
 	}
 	return b
 }
-func (b base[T]) Label(label string) Validator[T] { b = b.clone(); b.label = label; return b }
-
 func runValidator[T any](ctx context.Context, v Validator[T], value T, first bool) error {
 	if first {
 		return v.ValidateFirstContext(ctx, value)
 	}
 	return v.ValidateContext(ctx, value)
-}
-
-func joinValidators[T any](current Validator[T], values ...Validator[T]) Validator[T] {
-	b := base[T]{and: make([]Validator[T], 0, len(values)+1)}
-	b.and = append(b.and, current)
-	for _, value := range values {
-		if value == nil {
-			panic("validate: nil validator")
-		}
-		b.and = append(b.and, value)
-	}
-	return b
 }

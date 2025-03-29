@@ -4,124 +4,29 @@ import (
 	"context"
 	"errors"
 	"reflect"
-	"time"
+
+	"github.com/rhevorn/shape/internal/reflectclone"
 )
 
 func clone[T any](v T) (T, error) { return cloneContext(context.Background(), v) }
+
+// cloneContext detaches v from caller-owned storage. Built-in steps receive
+// this private working value and may mutate it in place.
+//
+// The implementation lives in internal/reflectclone so the root package and
+// transform cannot drift apart on what "detached" means.
 func cloneContext[T any](ctx context.Context, v T) (T, error) {
 	var zero T
-	out, err := cloneReflect(ctx, reflect.ValueOf(&v).Elem(), 0)
+	out, err := reflectclone.Clone(ctx, reflect.ValueOf(&v).Elem(), false)
 	if err != nil {
-		return zero, err
+		return zero, cloneError(err)
 	}
 	return out.Interface().(T), nil
 }
-func cloneReflect(ctx context.Context, v reflect.Value, depth int) (reflect.Value, error) {
-	if err := ctx.Err(); err != nil {
-		return reflect.Value{}, err
-	}
-	if depth >= 64 {
-		return reflect.Value{}, errors.New("transform: copy depth exceeded")
-	}
-	if immutableCloneType(v.Type()) {
-		return v, nil
-	}
-	out := reflect.New(v.Type()).Elem()
-	switch v.Kind() {
-	case reflect.Pointer:
-		if v.IsNil() {
-			return out, nil
-		}
-		x, err := cloneReflect(ctx, v.Elem(), depth+1)
-		if err != nil {
-			return out, err
-		}
-		out.Set(reflect.New(v.Type().Elem()))
-		out.Elem().Set(x)
-	case reflect.Slice:
-		if v.IsNil() {
-			return out, nil
-		}
-		out = reflect.MakeSlice(v.Type(), v.Len(), v.Len())
-		if immutableCloneType(v.Type().Elem()) {
-			reflect.Copy(out, v)
-			return out, nil
-		}
-		for i := 0; i < v.Len(); i++ {
-			x, err := cloneReflect(ctx, v.Index(i), depth+1)
-			if err != nil {
-				return out, err
-			}
-			out.Index(i).Set(x)
-		}
-	case reflect.Map:
-		if v.IsNil() {
-			return out, nil
-		}
-		out = reflect.MakeMapWithSize(v.Type(), v.Len())
-		it := v.MapRange()
-		for it.Next() {
-			k, err := cloneReflect(ctx, it.Key(), depth+1)
-			if err != nil {
-				return out, err
-			}
-			x, err := cloneReflect(ctx, it.Value(), depth+1)
-			if err != nil {
-				return out, err
-			}
-			out.SetMapIndex(k, x)
-		}
-	case reflect.Struct:
-		out.Set(v)
-		for i := 0; i < v.NumField(); i++ {
-			if out.Field(i).CanSet() && v.Type().Field(i).PkgPath == "" {
-				x, err := cloneReflect(ctx, v.Field(i), depth+1)
-				if err != nil {
-					return out, err
-				}
-				out.Field(i).Set(x)
-			}
-		}
-	case reflect.Interface:
-		if v.IsNil() {
-			return out, nil
-		}
-		x, err := cloneReflect(ctx, v.Elem(), depth+1)
-		if err != nil {
-			return out, err
-		}
-		out.Set(x)
-	case reflect.Array:
-		for i := 0; i < v.Len(); i++ {
-			x, err := cloneReflect(ctx, v.Index(i), depth+1)
-			if err != nil {
-				return out, err
-			}
-			out.Index(i).Set(x)
-		}
-	default:
-		out.Set(v)
-	}
-	return out, nil
-}
 
-func immutableCloneType(t reflect.Type) bool {
-	if t == reflect.TypeFor[time.Time]() {
-		return true
+func cloneError(err error) error {
+	if errors.Is(err, reflectclone.ErrDepthExceeded) {
+		return errors.New("transform: copy depth exceeded")
 	}
-	switch t.Kind() {
-	case reflect.Struct:
-		for i := 0; i < t.NumField(); i++ {
-			if !immutableCloneType(t.Field(i).Type) {
-				return false
-			}
-		}
-		return true
-	case reflect.Array:
-		return immutableCloneType(t.Elem())
-	case reflect.Pointer, reflect.Slice, reflect.Map, reflect.Interface, reflect.Func, reflect.Chan, reflect.UnsafePointer:
-		return false
-	default:
-		return true
-	}
+	return err
 }

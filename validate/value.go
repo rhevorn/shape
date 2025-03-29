@@ -23,7 +23,10 @@ func (v ValueValidator[T]) RefineContext(fns ...func(context.Context, T) error) 
 	}
 	return v
 }
-func (v ValueValidator[T]) And(vs ...Validator[T]) Validator[T] { return v.base.And(vs...) }
+func (v ValueValidator[T]) And(vs ...Validator[T]) ValueValidator[T] {
+	v.base = v.base.andAll(vs...)
+	return v
+}
 func (v ValueValidator[T]) Label(s string) ValueValidator[T] {
 	v.base = v.base.clone()
 	v.base.label = s

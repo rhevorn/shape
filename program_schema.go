@@ -21,6 +21,7 @@ type programField struct {
 func compileProgramFields(owner reflect.Type, specs []FieldSpec) []programField {
 	fields := make([]programField, 0, len(specs))
 	seen := make(map[string]struct{}, len(specs))
+	seenJSON := make(map[string]struct{}, len(specs))
 	for _, spec := range specs {
 		if spec == nil {
 			panic("shape: nil field")
@@ -50,6 +51,13 @@ func compileProgramFields(owner reflect.Type, specs []FieldSpec) []programField 
 		if jsonName == "" {
 			jsonName = field.Name
 		}
+		// Two Go fields mapping to one JSON key would make the first
+		// unreachable from JSON and give both the same issue path. The tagged
+		// compiler already rejects this; the explicit path must too.
+		if _, ok := seenJSON[jsonName]; ok {
+			panic("shape: duplicate JSON field name " + jsonName)
+		}
+		seenJSON[jsonName] = struct{}{}
 		fields = append(fields, programField{
 			index: field.Index[0], name: jsonName,
 			transform: definition.transform, validateAll: definition.validateAll, validateOne: definition.validateOne,

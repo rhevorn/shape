@@ -23,19 +23,25 @@ type JSONOptions struct {
 	MaxBytes              int64
 }
 
-func parseJSON[T any](schema Schema[T], source []byte, options ...JSONOptions) (T, error) {
-	return parseJSONContext(context.Background(), schema, source, options...)
+// ParseJSON decodes, transforms, and validates one JSON value with schema.
+// Use this for scalar or composite Schema roots. Prefer StructSpec/TaggedSpec
+// methods when the Schema is already a named struct Schema.
+func ParseJSON[T any](schema Schema[T], source []byte, options ...JSONOptions) (T, error) {
+	return ParseJSONContext(context.Background(), schema, source, options...)
 }
 
-func parseJSONContext[T any](ctx context.Context, schema Schema[T], source []byte, options ...JSONOptions) (T, error) {
-	return parseJSONReaderContext(ctx, schema, bytes.NewReader(source), options...)
+// ParseJSONContext is ParseJSON with cancellation and per-request locale.
+func ParseJSONContext[T any](ctx context.Context, schema Schema[T], source []byte, options ...JSONOptions) (T, error) {
+	return ParseJSONReaderContext(ctx, schema, bytes.NewReader(source), options...)
 }
 
-func parseJSONReader[T any](schema Schema[T], reader io.Reader, options ...JSONOptions) (T, error) {
-	return parseJSONReaderContext(context.Background(), schema, reader, options...)
+// ParseJSONReader decodes, transforms, and validates one value from reader.
+func ParseJSONReader[T any](schema Schema[T], reader io.Reader, options ...JSONOptions) (T, error) {
+	return ParseJSONReaderContext(context.Background(), schema, reader, options...)
 }
 
-func parseJSONReaderContext[T any](ctx context.Context, schema Schema[T], reader io.Reader, options ...JSONOptions) (T, error) {
+// ParseJSONReaderContext is the context-aware reader form of ParseJSON.
+func ParseJSONReaderContext[T any](ctx context.Context, schema Schema[T], reader io.Reader, options ...JSONOptions) (T, error) {
 	var zero T
 	if ctx == nil {
 		panic("shape: nil context")
@@ -113,7 +119,7 @@ func bindJSONContext[T any](ctx context.Context, schema Schema[T], target *T, so
 	if target == nil {
 		return errors.New("shape: nil bind target")
 	}
-	out, err := schema.ParseJSONContext(ctx, source, options...)
+	out, err := ParseJSONContext(ctx, schema, source, options...)
 	if err != nil {
 		return err
 	}
@@ -135,7 +141,7 @@ func bindJSONReaderContext[T any](ctx context.Context, schema Schema[T], target 
 	if target == nil {
 		return errors.New("shape: nil bind target")
 	}
-	out, err := schema.ParseJSONReaderContext(ctx, reader, options...)
+	out, err := ParseJSONReaderContext(ctx, schema, reader, options...)
 	if err != nil {
 		return err
 	}
@@ -148,43 +154,22 @@ func bindJSONReaderContext[T any](ctx context.Context, schema Schema[T], target 
 
 // ParseJSON decodes, transforms, and validates one JSON value.
 func (s structSchema[T]) ParseJSON(source []byte, options ...JSONOptions) (T, error) {
-	return parseJSON(s, source, options...)
+	return ParseJSON(s, source, options...)
 }
 
 // ParseJSONContext is ParseJSON with cancellation and per-request locale.
 func (s structSchema[T]) ParseJSONContext(ctx context.Context, source []byte, options ...JSONOptions) (T, error) {
-	return parseJSONContext(ctx, s, source, options...)
+	return ParseJSONContext(ctx, s, source, options...)
 }
 
 // ParseJSONReader decodes, transforms, and validates one value from reader.
 func (s structSchema[T]) ParseJSONReader(reader io.Reader, options ...JSONOptions) (T, error) {
-	return parseJSONReader(s, reader, options...)
+	return ParseJSONReader(s, reader, options...)
 }
 
 // ParseJSONReaderContext is the context-aware reader form.
 func (s structSchema[T]) ParseJSONReaderContext(ctx context.Context, reader io.Reader, options ...JSONOptions) (T, error) {
-	return parseJSONReaderContext(ctx, s, reader, options...)
-}
-
-// BindJSON atomically replaces target only after decode, transform, and
-// validation all succeed. The target comes first to make the mutation clear.
-func (s structSchema[T]) BindJSON(target *T, source []byte, options ...JSONOptions) error {
-	return bindJSON(s, target, source, options...)
-}
-
-// BindJSONContext is the context-aware form of BindJSON.
-func (s structSchema[T]) BindJSONContext(ctx context.Context, target *T, source []byte, options ...JSONOptions) error {
-	return bindJSONContext(ctx, s, target, source, options...)
-}
-
-// BindJSONReader atomically binds one JSON value read from reader.
-func (s structSchema[T]) BindJSONReader(target *T, reader io.Reader, options ...JSONOptions) error {
-	return bindJSONReader(s, target, reader, options...)
-}
-
-// BindJSONReaderContext is the context-aware reader bind form.
-func (s structSchema[T]) BindJSONReaderContext(ctx context.Context, target *T, reader io.Reader, options ...JSONOptions) error {
-	return bindJSONReaderContext(ctx, s, target, reader, options...)
+	return ParseJSONReaderContext(ctx, s, reader, options...)
 }
 
 type contextReader struct {

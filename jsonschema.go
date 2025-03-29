@@ -2,12 +2,14 @@ package shape
 
 import (
 	"context"
+	"encoding"
 	"encoding/json"
 	"fmt"
-	"github.com/rhevorn/shape/internal/spec"
-	"github.com/rhevorn/shape/validate"
 	"reflect"
 	"time"
+
+	"github.com/rhevorn/shape/internal/spec"
+	"github.com/rhevorn/shape/validate"
 )
 
 // UnsupportedSchemaError reports processing that JSON Schema cannot represent
@@ -31,7 +33,14 @@ func ExportDocument[T any](schema Schema[T]) (map[string]any, error) {
 	}
 	return exportPlan(p)
 }
-func exportPlan(p *valuePlan) (map[string]any, error) {
+func exportPlan(p *valuePlan) (map[string]any, error) { return exportPlanAt(p, false) }
+
+// exportPlanAt builds the document for p. pointee is true when p sits behind a
+// pointer: there a JSON null decodes to the pointer, not to p, so p must not
+// offer a null branch of its own. Deciding nullability from the pointee is what
+// used to emit an anyOf[..., null] that a pointer-level notnull/notempty
+// rejects at runtime, and what double-wrapped a plain optional pointer.
+func exportPlanAt(p *valuePlan, pointee bool) (map[string]any, error) {
 	if p == nil {
 		return nil, &UnsupportedSchemaError{Operation: "uninitialized schema"}
 	}
@@ -48,11 +57,11 @@ func exportPlan(p *valuePlan) (map[string]any, error) {
 		if len(p.descriptors) != 0 {
 			return nil, &UnsupportedSchemaError{Operation: "duration comparison rules"}
 		}
-		return applyExportRules(document, p)
+		return applyExportRules(document, p, pointee)
 	}
 	if t == reflect.TypeFor[time.Time]() {
 		document = map[string]any{"type": "string", "format": "date-time"}
-		return applyExportRules(document, p)
+		return applyExportRules(document, p, pointee)
 	}
 	if hasCustomJSON(t) {
 		return nil, &UnsupportedSchemaError{Operation: fmt.Sprintf("custom JSON representation for %v", t)}
@@ -78,7 +87,7 @@ func exportPlan(p *valuePlan) (map[string]any, error) {
 		if p.element == nil {
 			return nil, &UnsupportedSchemaError{Operation: "custom pointer element"}
 		}
-		inner, err := exportPlan(p.element)
+		inner, err := exportPlanAt(p.element, true)
 		if err != nil {
 			return nil, err
 		}
@@ -127,23 +136,36 @@ func exportPlan(p *valuePlan) (map[string]any, error) {
 	default:
 		return nil, &UnsupportedSchemaError{Operation: fmt.Sprintf("schema %v", t)}
 	}
-	return applyExportRules(document, p)
+	return applyExportRules(document, p, pointee)
 }
 
 var (
 	jsonMarshalerType   = reflect.TypeFor[json.Marshaler]()
 	jsonUnmarshalerType = reflect.TypeFor[json.Unmarshaler]()
+	textMarshalerType   = reflect.TypeFor[encoding.TextMarshaler]()
+	textUnmarshalerType = reflect.TypeFor[encoding.TextUnmarshaler]()
 )
 
+// hasCustomJSON reports whether encoding/json uses a user-supplied
+// representation for t. The text interfaces count: encoding/json consults
+// MarshalText/UnmarshalText as well as the JSON ones, so a type with only
+// MarshalText encodes as a string while the struct walk below would describe
+// its fields. Missing that was a silent omission rather than a refusal.
 func hasCustomJSON(t reflect.Type) bool {
-	if t.Implements(jsonMarshalerType) || t.Implements(jsonUnmarshalerType) {
+	if implementsJSONCodec(t) {
 		return true
 	}
-	return t.Kind() != reflect.Pointer &&
-		(reflect.PointerTo(t).Implements(jsonMarshalerType) || reflect.PointerTo(t).Implements(jsonUnmarshalerType))
+	return t.Kind() != reflect.Pointer && implementsJSONCodec(reflect.PointerTo(t))
 }
 
-func applyExportRules(document map[string]any, p *valuePlan) (map[string]any, error) {
+func implementsJSONCodec(t reflect.Type) bool {
+	return t.Implements(jsonMarshalerType) ||
+		t.Implements(jsonUnmarshalerType) ||
+		t.Implements(textMarshalerType) ||
+		t.Implements(textUnmarshalerType)
+}
+
+func applyExportRules(document map[string]any, p *valuePlan, pointee bool) (map[string]any, error) {
 	for _, descriptor := range p.descriptors {
 		var key string
 		var value any
@@ -151,6 +173,10 @@ func applyExportRules(document map[string]any, p *valuePlan) (map[string]any, er
 		switch name {
 		case "min":
 			if p.typ.Kind() == reflect.String {
+				// min is a numeric or collection rule; the compiler rejects it on
+				// a string, so reaching here means the rule set widened. Emitting
+				// a document under an empty key would be silent corruption.
+				return nil, &UnsupportedSchemaError{Operation: "rule min on " + p.typ.String()}
 			} else if p.typ.Kind() == reflect.Slice {
 				key = "minItems"
 			} else if p.typ.Kind() == reflect.Map {
@@ -233,7 +259,7 @@ func applyExportRules(document map[string]any, p *valuePlan) (map[string]any, er
 		}
 		document[key] = value
 	}
-	if planAcceptsZero(p) {
+	if !pointee && planAcceptsZero(p) {
 		return map[string]any{
 			"anyOf": []any{document, map[string]any{"type": "null"}},
 		}, nil

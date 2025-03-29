@@ -16,6 +16,7 @@ type StructSpec[T any] struct {
 }
 
 var _ Schema[struct{}] = StructSpec[struct{}]{}
+var _ JSONSchema[struct{}] = StructSpec[struct{}]{}
 
 // Apply appends one or more whole-struct transforms after all field transforms.
 func (s StructSpec[T]) Apply(steps ...func(T) (T, error)) StructSpec[T] {
@@ -61,20 +62,7 @@ func (s StructSpec[T]) transformContext(ctx context.Context, value T, owned bool
 	if err != nil {
 		return zero, normalizeTransformError(ctx, err)
 	}
-	if len(s.transforms) == 0 {
-		return out, nil
-	}
-	if !owned {
-		out, err = cloneWholeValue(ctx, out)
-		if err != nil {
-			return zero, normalizeTransformError(ctx, err)
-		}
-	}
-	out, err = runWholeTransforms(ctx, s.transforms, out)
-	if err != nil {
-		return zero, normalizeTransformError(ctx, err)
-	}
-	return out, nil
+	return applyWholeTransforms(ctx, s.transforms, out, owned)
 }
 
 func (s StructSpec[T]) Validate(value T) error {
@@ -94,33 +82,17 @@ func (s StructSpec[T]) ValidateFirstContext(ctx context.Context, value T) error 
 }
 
 func (s StructSpec[T]) ParseJSON(source []byte, options ...JSONOptions) (T, error) {
-	return parseJSON(s, source, options...)
+	return ParseJSON(s, source, options...)
 }
 
 func (s StructSpec[T]) ParseJSONContext(ctx context.Context, source []byte, options ...JSONOptions) (T, error) {
-	return parseJSONContext(ctx, s, source, options...)
+	return ParseJSONContext(ctx, s, source, options...)
 }
 
 func (s StructSpec[T]) ParseJSONReader(reader io.Reader, options ...JSONOptions) (T, error) {
-	return parseJSONReader(s, reader, options...)
+	return ParseJSONReader(s, reader, options...)
 }
 
 func (s StructSpec[T]) ParseJSONReaderContext(ctx context.Context, reader io.Reader, options ...JSONOptions) (T, error) {
-	return parseJSONReaderContext(ctx, s, reader, options...)
-}
-
-func (s StructSpec[T]) BindJSON(target *T, source []byte, options ...JSONOptions) error {
-	return bindJSON(s, target, source, options...)
-}
-
-func (s StructSpec[T]) BindJSONContext(ctx context.Context, target *T, source []byte, options ...JSONOptions) error {
-	return bindJSONContext(ctx, s, target, source, options...)
-}
-
-func (s StructSpec[T]) BindJSONReader(target *T, reader io.Reader, options ...JSONOptions) error {
-	return bindJSONReader(s, target, reader, options...)
-}
-
-func (s StructSpec[T]) BindJSONReaderContext(ctx context.Context, target *T, reader io.Reader, options ...JSONOptions) error {
-	return bindJSONReaderContext(ctx, s, target, reader, options...)
+	return ParseJSONReaderContext(ctx, s, reader, options...)
 }

@@ -35,6 +35,11 @@ func (v PointerValidator[T]) ValidateFirstContext(ctx context.Context, x *T) err
 	return v.runAll(ctx, x, true)
 }
 func (v PointerValidator[T]) runAll(ctx context.Context, x *T, first bool) error {
+	// Guard before the nil-pointer short circuit below: otherwise a zero-value
+	// validator reports success for nil and dereferences nil for anything else.
+	if v.inner == nil {
+		panic("validate: PointerValidator must be built with validate.Pointer")
+	}
 	var issues []Issue
 	if err := v.base.run(ctx, x, first); err != nil {
 		issues = customIssue(err)
@@ -73,8 +78,9 @@ func (v PointerValidator[T]) RefineContext(fns ...func(context.Context, *T) erro
 	}
 	return v
 }
-func (v PointerValidator[T]) And(vs ...Validator[*T]) Validator[*T] {
-	return joinValidators[*T](v, vs...)
+func (v PointerValidator[T]) And(vs ...Validator[*T]) PointerValidator[T] {
+	v.base = v.base.andAll(vs...)
+	return v
 }
 func (v PointerValidator[T]) Label(s string) PointerValidator[T] {
 	v.base = v.base.clone()

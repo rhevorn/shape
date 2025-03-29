@@ -183,6 +183,15 @@ func applyTag(p *valuePlan, text string) (out *valuePlan, err error) {
 			}
 		}
 	}
+	// label is an outer tag, so it lands on the pointer plan, while rules for a
+	// pointer field are attached to a copy of the element plan and rendering
+	// reads the label of the plan being walked. Without this, `label=X,min=1`
+	// silently loses its label on *T fields but not on T.
+	if p.typ.Kind() == reflect.Pointer && p.label != "" && p.element != nil && p.element.label == "" {
+		inner := copyPlan(p.element)
+		inner.label = p.label
+		p.element = inner
+	}
 	return p, nil
 }
 

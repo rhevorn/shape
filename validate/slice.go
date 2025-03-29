@@ -64,8 +64,8 @@ func (v SliceValidator[T]) Unique() SliceValidator[T] {
 	return v.add(func(ctx context.Context, x []T) error {
 		typ := reflect.TypeFor[T]()
 		fast := deepEqualMatchesComparable(typ)
-		if !fast && len(x) > 1024 {
-			return issue(CodeTooBig, "unique_limit", 1024, len(x))
+		if !fast && len(x) > MaxDeepUniqueItems {
+			return issue(CodeUniqueLimit, "unique_limit", MaxDeepUniqueItems, len(x))
 		}
 		if fast {
 			seen := make(map[any]struct{}, len(x))
@@ -124,6 +124,13 @@ func (v SliceValidator[T]) ValidateFirstContext(ctx context.Context, x []T) erro
 	return v.runAll(ctx, x, true)
 }
 func (v SliceValidator[T]) runAll(ctx context.Context, x []T, first bool) error {
+	// The zero value is writable from outside the package, so a nil inner is
+	// reachable. Report it as the configuration mistake it is instead of
+	// dereferencing nil — and do so regardless of the data, so the same
+	// validator cannot panic for one value and silently pass for another.
+	if v.inner == nil {
+		panic("validate: SliceValidator must be built with validate.Slice")
+	}
 	var issues []Issue
 	if err := v.base.run(ctx, x, first); err != nil {
 		issues = customIssue(err)
@@ -132,6 +139,9 @@ func (v SliceValidator[T]) runAll(ctx context.Context, x []T, first bool) error 
 		}
 	}
 	for i, item := range x {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		err := runValidator(ctx, v.inner, item, first)
 		if err != nil {
 			var stop bool
@@ -162,8 +172,9 @@ func (v SliceValidator[T]) RefineContext(fns ...func(context.Context, []T) error
 	}
 	return v
 }
-func (v SliceValidator[T]) And(vs ...Validator[[]T]) Validator[[]T] {
-	return joinValidators[[]T](v, vs...)
+func (v SliceValidator[T]) And(vs ...Validator[[]T]) SliceValidator[T] {
+	v.base = v.base.andAll(vs...)
+	return v
 }
 func (v SliceValidator[T]) Label(s string) SliceValidator[T] {
 	v.base = v.base.clone()

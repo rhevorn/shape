@@ -43,7 +43,11 @@ func (v NumberValidator[N]) Lte(n N) NumberValidator[N] {
 	})
 }
 func (v NumberValidator[N]) Between(a, b N) NumberValidator[N] {
-	if a > b {
+	// a != a is false for every integer kind and true only for a NaN float.
+	// Without it a NaN bound makes both comparisons below false, turning the
+	// rule into a silent no-op. Infinities stay legal: Between(0, +Inf) is a
+	// meaningful "no upper bound".
+	if a > b || a != a || b != b {
 		panic("validate: invalid range")
 	}
 	return v.add(func(_ context.Context, x N) error {
@@ -89,7 +93,10 @@ func (v NumberValidator[N]) RefineContext(fns ...func(context.Context, N) error)
 	}
 	return v
 }
-func (v NumberValidator[N]) And(vs ...Validator[N]) Validator[N] { return v.base.And(vs...) }
+func (v NumberValidator[N]) And(vs ...Validator[N]) NumberValidator[N] {
+	v.base = v.base.andAll(vs...)
+	return v
+}
 func (v NumberValidator[N]) Label(s string) NumberValidator[N] {
 	v.base = v.base.clone()
 	v.base.label = s

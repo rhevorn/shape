@@ -16,23 +16,28 @@ type MapKey interface {
 		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
 }
 
-func Value[T any]() ValueValidator[T] { return ValueValidator[T]{} }
+func Value[T any]() ValueValidator[T] { return ValueValidator[T]{base: finiteCheck(base[T]{})} }
 
 func String() StringValidator { return StringValidator{} }
 
-func Number[N Numeric]() NumberValidator[N] {
-	v := NumberValidator[N]{}
-	typ := reflect.TypeFor[N]()
-	if typ.Kind() == reflect.Float32 || typ.Kind() == reflect.Float64 {
-		v = v.add(func(_ context.Context, x N) error {
-			n := reflect.ValueOf(x).Float()
-			if math.IsNaN(n) || math.IsInf(n, 0) {
-				return issue(CodeInvalidNumber, "number.finite", nil, x)
-			}
-			return nil
-		})
+func Number[N Numeric]() NumberValidator[N] { return NumberValidator[N]{base: finiteCheck(base[N]{})} }
+
+// finiteCheck installs the non-finite rejection for float kinds. Value and
+// Number share it so a float reaching a schema is rejected identically whether
+// it was declared through Number[N] or through the generic Value[T] escape
+// hatch; the tagged path applies the same guard to every walked node.
+func finiteCheck[T any](v base[T]) base[T] {
+	kind := reflect.TypeFor[T]().Kind()
+	if kind != reflect.Float32 && kind != reflect.Float64 {
+		return v
 	}
-	return v
+	return v.add(func(_ context.Context, x T) error {
+		n := reflect.ValueOf(x).Float()
+		if math.IsNaN(n) || math.IsInf(n, 0) {
+			return issue(CodeInvalidNumber, "number.finite", nil, x)
+		}
+		return nil
+	})
 }
 
 func Int() NumberValidator[int]                 { return Number[int]() }
