@@ -3,12 +3,15 @@
 This document defines the public surface intended to remain source-compatible
 after the first release. New methods and rule types may be added in minor
 versions. Removing, renaming, changing signatures, changing documented order,
-or changing null/zero semantics requires a major version.
+or changing null/zero semantics requires a major version. See §6 for the full
+compatibility policy.
 
 ## 1. Root package: `shape`
 
 The root package is the recommended API for reusable Schemas. Every root Spec
-is a `Schema[T]`, whether `T` is a scalar, pointer, slice, map, or struct.
+is a `Schema[T]` (Transform + Validate). `StructSpec` and `TaggedSpec` also
+implement `JSONSchema[T]` for ParseJSON. Tag-driven in-place bind is only the
+package-level `BindJSON*` helpers.
 
 ### Construction
 
@@ -52,74 +55,149 @@ missing, unexported, duplicate, type-mismatched, and `json:"-"` fields.
 `float32`/`float64`. Complex numbers are excluded. `MapKey` includes named
 string, signed-integer, and unsigned-integer types; `uintptr` is excluded.
 
-### Spec methods
+### Spec methods by type
 
-Every root Spec implements `Schema[T]`. It therefore supports independent
-`Transform`, `Validate`, and `ValidateFirst` calls as well as the complete JSON
-method family documented below.
-
-`ValueSpec[T]`:
+Every Spec below implements `Schema[T]` run methods:
 
 ```text
-IfZero  Apply  ApplyContext  Refine  RefineContext  Label  Pointer  Slice
+Transform  TransformContext
+Validate  ValidateContext
+ValidateFirst  ValidateFirstContext
 ```
 
-`StringSpec`:
+`Apply` changes a value (`T → T`). `Refine` only checks (`T → error`).
+Fluent methods return a new Spec value; receivers are never mutated.
+Root Specs do **not** expose `validate.And` or `transform.Then` — those exist
+only in the subpackages.
+
+#### `StringSpec` — `shape.String`
 
 ```text
-IfZero  Trim  LTrim  RTrim  ToLower  ToUpper
-Apply  ApplyContext
-NotEmpty  MinLength  MaxLength  Len  OneOf  Pattern
-StartsWith  EndsWith  Contains  Email  URL  UUID  IP
-Refine  RefineContext  Label  Pointer  Slice
+Transform
+  IfZero  Trim  LTrim  RTrim  ToLower  ToUpper
+  Apply  ApplyContext
+
+Validate
+  NotEmpty  MinLength  MaxLength  Len
+  OneOf  Pattern  StartsWith  EndsWith  Contains
+  Email  URL  UUID  IP
+  Refine  RefineContext  Label
+
+Compose
+  Pointer  Slice
 ```
 
-`NumberSpec[N]`:
+`Trim`/`LTrim`/`RTrim` with no args trim Unicode whitespace; with args they trim
+runes from the provided character set. Length rules use Unicode rune count.
+
+#### `NumberSpec[N]` — `shape.Number` / `Int` / `Int64` / `Float64` / `Duration`
 
 ```text
-IfZero  Apply  ApplyContext
-Min  Max  Gt  Gte  Lt  Lte  Between  OneOf
-Positive  Negative  NonNegative
-Refine  RefineContext  Label  Pointer  Slice
+Transform
+  IfZero  Apply  ApplyContext
+
+Validate
+  Min  Max  Gt  Gte  Lt  Lte  Between  OneOf
+  Positive  Negative  NonNegative
+  Refine  RefineContext  Label
+
+Compose
+  Pointer  Slice
 ```
 
-`PointerSpec[T]`:
+`Min` is an alias of `Gte`; `Max` is an alias of `Lte`. Float validators reject
+NaN and ±Inf. `Duration` is `NumberSpec[types.Duration]`.
+
+#### `ValueSpec[T]` — `shape.Value` / `Bool` / `Time`
 
 ```text
-IfNull  Apply  ApplyContext  NotNull  NotEmpty
-Refine  RefineContext  Label
+Transform
+  IfZero  Apply  ApplyContext
+
+Validate
+  Refine  RefineContext  Label
+
+Compose
+  Pointer  Slice
 ```
 
-`SliceSpec[T]`:
+No built-in domain rules. `Bool` and `Time` are `ValueSpec` aliases.
+
+#### `PointerSpec[T]` — `shape.Pointer` or `.Pointer()`
 
 ```text
-IfNull  Apply  ApplyContext  NotNull  NotEmpty
-Min  Max  Len  Unique  Refine  RefineContext  Label
+Transform
+  IfNull  Apply  ApplyContext
+
+Validate
+  NotNull  NotEmpty
+  Refine  RefineContext  Label
 ```
 
-`MapSpec[K,V]`:
+Outer rules run on the pointer; a non-nil value then runs the inner Schema.
+On a pointer, `NotNull` and `NotEmpty` are synonyms (both reject only `nil`).
+
+#### `SliceSpec[T]` — `shape.Slice` or `.Slice()`
 
 ```text
-IfNull  Apply  ApplyContext  NotNull  NotEmpty
-Min  Max  Len  Refine  RefineContext  Label
+Transform
+  IfNull  Apply  ApplyContext
+
+Validate
+  NotNull  NotEmpty  Min  Max  Len  Unique
+  Refine  RefineContext  Label
 ```
 
-### Whole-struct methods
+Outer rules run on the slice; the inner Schema runs in ascending index order.
 
-Both `StructSpec[T]` and `TaggedSpec[T]` add whole-struct callbacks after field
-processing. Each method returns the same concrete Spec type:
+#### `MapSpec[K,V]` — `shape.Map`
 
-```go
-Apply(steps ...func(T) (T, error)) StructSpec[T]
-ApplyContext(steps ...func(context.Context, T) (T, error)) StructSpec[T]
-Refine(rules ...func(T) error) StructSpec[T]
-RefineContext(rules ...func(context.Context, T) error) StructSpec[T]
+```text
+Transform
+  IfNull  Apply  ApplyContext
+
+Validate
+  NotNull  NotEmpty  Min  Max  Len
+  Refine  RefineContext  Label
 ```
 
-Export rejects a tagged Spec after whole-struct callbacks are added because
-JSON Schema cannot execute those callbacks faithfully.
+No `Unique`. Outer rules run on the map; key and value Schemas run in
+deterministic key order.
 
-### Schema interface
+#### `StructSpec[T]` — `shape.New`
+
+```text
+Transform
+  Apply  ApplyContext
+
+Validate
+  Refine  RefineContext
+
+JSON (also JSONSchema[T])
+  ParseJSON  ParseJSONContext
+  ParseJSONReader  ParseJSONReaderContext
+```
+
+Whole-struct callbacks run after all field callbacks in the same phase.
+
+#### `TaggedSpec[T]` — `shape.Struct`
+
+```text
+Transform
+  Apply  ApplyContext
+
+Validate
+  Refine  RefineContext
+
+JSON (also JSONSchema[T])
+  ParseJSON  ParseJSONContext
+  ParseJSONReader  ParseJSONReaderContext
+```
+
+Same whole-struct callback timing as `StructSpec`. Adding `Apply`/`Refine`
+marks the Spec non-exportable for JSON Schema/OpenAPI.
+
+### Schema and JSONSchema
 
 ```go
 type Schema[T any] interface {
@@ -129,23 +207,35 @@ type Schema[T any] interface {
     ValidateContext(context.Context, T) error
     ValidateFirst(T) error
     ValidateFirstContext(context.Context, T) error
+}
+
+type JSONSchema[T any] interface {
+    Schema[T]
 
     ParseJSON([]byte, ...JSONOptions) (T, error)
     ParseJSONContext(context.Context, []byte, ...JSONOptions) (T, error)
     ParseJSONReader(io.Reader, ...JSONOptions) (T, error)
     ParseJSONReaderContext(context.Context, io.Reader, ...JSONOptions) (T, error)
-    BindJSON(*T, []byte, ...JSONOptions) error
-    BindJSONContext(context.Context, *T, []byte, ...JSONOptions) error
-    BindJSONReader(*T, io.Reader, ...JSONOptions) error
-    BindJSONReaderContext(context.Context, *T, io.Reader, ...JSONOptions) error
 }
 ```
 
-JSON decoding is strict and follows `encoding/json`. For example,
-`shape.Int().ParseJSON([]byte("123"))` succeeds, while a JSON string containing
-`"123"` is not coerced to an integer.
+`StructSpec` and `TaggedSpec` implement `JSONSchema`. Scalar and composite Specs
+implement `Schema` only.
 
-Package-level tag Bind shortcuts:
+Package-level Parse for any Schema root (including scalars and collections):
+
+```go
+ParseJSON[T](schema Schema[T], source []byte, options ...JSONOptions) (T, error)
+ParseJSONContext[T](ctx context.Context, schema Schema[T], source []byte, options ...JSONOptions) (T, error)
+ParseJSONReader[T](schema Schema[T], reader io.Reader, options ...JSONOptions) (T, error)
+ParseJSONReaderContext[T](ctx context.Context, schema Schema[T], reader io.Reader, options ...JSONOptions) (T, error)
+```
+
+JSON decoding is strict and follows `encoding/json`. For example,
+`shape.ParseJSON(shape.Int(), []byte("123"))` succeeds, while a JSON string
+containing `"123"` is not coerced to an integer.
+
+Package-level tag Bind (no Schema variable; mutation target first):
 
 ```go
 BindJSON[T](target *T, source []byte, options ...JSONOptions) error
@@ -154,8 +244,8 @@ BindJSONReader[T](target *T, reader io.Reader, options ...JSONOptions) error
 BindJSONReaderContext[T](ctx context.Context, target *T, reader io.Reader, options ...JSONOptions) error
 ```
 
-Mutation targets remain before input sources. Bind is atomic: it writes only on
-complete success.
+Bind derives a cached tagged Schema from `T`, runs the same decode → transform →
+validate pipeline, and writes `*target` only on complete success.
 
 ### JSON configuration
 
@@ -211,31 +301,59 @@ Value[T]  String  Bool  Number[N]  Int  Int64  Float64  Time  Duration
 Pointer  Slice  Map
 ```
 
-Common composition/customization:
+Every concrete validator also exposes run methods
+`Validate` / `ValidateContext` / `ValidateFirst` / `ValidateFirstContext`.
+
+#### `StringValidator`
+
+```text
+NotEmpty  MinLength  MaxLength  Len
+OneOf  Pattern  StartsWith  EndsWith  Contains
+Email  URL  UUID  IP
+Refine  RefineContext  And  Label
+```
+
+#### `NumberValidator[N]`
+
+```text
+Min  Max  Gt  Gte  Lt  Lte  Between  OneOf
+Positive  Negative  NonNegative
+Refine  RefineContext  And  Label
+```
+
+`Min` ≡ `Gte`, `Max` ≡ `Lte`.
+
+#### `ValueValidator[T]` — also `Bool` / `Time`
 
 ```text
 Refine  RefineContext  And  Label
 ```
 
-String rules:
+#### `PointerValidator[T]`
 
 ```text
-NotEmpty  MinLength  MaxLength  Len  OneOf  Pattern
-StartsWith  EndsWith  Contains  Email  URL  UUID  IP
+NotNull  NotEmpty
+Refine  RefineContext  And  Label
 ```
 
-Number rules:
+`NotNull` and `NotEmpty` are synonyms on pointers.
+
+#### `SliceValidator[T]`
 
 ```text
-Min  Max  Gt  Gte  Lt  Lte  Between  OneOf
-Positive  Negative  NonNegative
+NotNull  NotEmpty  Min  Max  Len  Unique
+Refine  RefineContext  And  Label
 ```
 
-Pointer rules: `NotNull`, `NotEmpty`.
+#### `MapValidator[K,V]`
 
-Slice rules: `NotNull`, `NotEmpty`, `Min`, `Max`, `Len`, `Unique`.
+```text
+NotNull  NotEmpty  Min  Max  Len
+Refine  RefineContext  And  Label
+```
 
-Map rules: `NotNull`, `NotEmpty`, `Min`, `Max`, `Len`.
+`And` returns the concrete family type, so further rule methods can follow it.
+A label set before `And` applies to the appended validators' issues too.
 
 Errors and paths:
 
@@ -272,8 +390,15 @@ Stable codes:
 ```text
 too_small  too_big  invalid_format  invalid_value  invalid_enum
 invalid_number  invalid_email  invalid_url  invalid_uuid  invalid_ip
-too_deep  too_many_issues  custom
+too_deep  too_many_issues  custom  unique_limit
 ```
+
+`unique_limit` is a resource bound, not a verdict about the data: `Unique`
+switches to pairwise deep comparison for element types that are not safely
+comparable with `==`, and a collection larger than `validate.MaxDeepUniqueItems`
+(1024) reports `unique_limit` instead of being compared. Keeping it distinct
+from `too_big` means a consumer cannot mistake it for a `Max` length violation.
+Comparable element types use a hash set and are not bounded by it.
 
 Locale API:
 
@@ -306,17 +431,50 @@ Value[T]  String  Bool  Number[N]  Int  Int64  Float64  Time  Duration
 Pointer  Slice  Map
 ```
 
-Value/scalar methods: `IfZero`, `Apply`, `ApplyContext`, `Then`.
+Every concrete transformer also exposes
+`Transform` / `TransformContext`.
 
-String additionally provides:
+#### `StringTransformer`
 
 ```text
-Trim  LTrim  RTrim  ToLower  ToUpper
+IfZero  Trim  LTrim  RTrim  ToLower  ToUpper
+Apply  ApplyContext  Then
 ```
 
-Pointer/Slice/Map provide `IfNull`, `Apply`, `ApplyContext`, and `Then`.
-Their inner element transformation is the first constructed step; fluent
-`IfNull`/`Apply` calls then run in method-call order.
+`Then` is inherited from the embedded `ValueTransformer[string]`.
+
+#### `NumberTransformer[N]` — also `Int` / `Int64` / `Float64` / `Duration`
+
+```text
+IfZero  Apply  ApplyContext  Then
+```
+
+#### `ValueTransformer[T]` — also `Bool` / `Time`
+
+```text
+IfZero  Apply  ApplyContext  Then
+```
+
+#### `PointerTransformer[T]`
+
+```text
+IfNull  Apply  ApplyContext  Then
+```
+
+#### `SliceTransformer[T]`
+
+```text
+IfNull  Apply  ApplyContext  Then
+```
+
+#### `MapTransformer[K,V]`
+
+```text
+IfNull  Apply  ApplyContext  Then
+```
+
+For Pointer/Slice/Map, inner element transformation is the first constructed
+step; fluent `IfNull`/`Apply` calls then run in method-call order.
 
 All transforms return a value of the same Go type. Cross-type coercion is not
 part of this API.
@@ -361,3 +519,35 @@ custom JSON representations, and unsupported rules return
 - Context cancellation stops traversal and returns the context error.
 - Transformers, Validators, and Schemas are immutable and concurrency-safe.
 - User input errors return errors; invalid program configuration panics at construction.
+
+## 6. Compatibility policy
+
+After the first public release, the following require a major version:
+
+- removing or renaming a documented public identifier;
+- changing a public signature or generic constraint incompatibly;
+- changing Decode → Transform → Validate order;
+- making Transform validate or Validate transform;
+- changing aggregate/fail-fast semantics or traversal order;
+- changing documented zero, null, empty, path, or atomic Bind behavior;
+- changing an existing stable validation code to mean something different;
+- adding implicit coercion to an existing strict operation.
+
+Minor versions may add new factories, rules, transforms, languages, issue codes,
+or optional adapters when existing programs retain their behavior.
+
+Intentionally absent from the initial contract:
+
+```text
+implicit coercion
+Optional
+Default
+SkipNull
+Nullable
+NotBlank
+cross-type Transform
+ordinary-value Parse or in-place Bind
+```
+
+`IfZero`, `IfNull`, pointers, and explicit custom callbacks cover the intended
+cases without hiding JSON state or mixing validation with transformation.

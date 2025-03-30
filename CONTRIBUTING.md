@@ -10,9 +10,9 @@ Before submitting a change, run:
 make release-check
 ```
 
-Public API changes must update `docs/API.md`, relevant examples, and the
-architecture notes. After the first release, follow the compatibility policy in
-`docs/ARCHITECTURE.md`; incompatible behavior requires a major version.
+Public API changes must update `docs/API.md` and relevant examples. After the
+first release, follow the compatibility policy in `docs/API.md`; incompatible
+behavior requires a major version.
 Runtime packages and core adapters use only the Go standard library. The
 `shapevet` command uses `golang.org/x/tools`; runtime packages must not import
 it. Any additional dependency requires a concrete justification.
