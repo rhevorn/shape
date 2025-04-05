@@ -157,7 +157,7 @@ func TestExplicitSchemaCompositeFields(t *testing.T) {
 	for i, issue := range validation.Issues {
 		paths[i] = issue.Path.String()
 	}
-	if strings.Join(paths, ",") != "nickname,tags[0],scores.x,profile.bio" {
+	if strings.Join(paths, ",") != "nickname,tags[0],scores[\"x\"],profile.bio" {
 		t.Fatalf("issue paths = %v", paths)
 	}
 }
@@ -372,6 +372,25 @@ func TestExplicitTransformErrorsKeepCompletePath(t *testing.T) {
 	}
 }
 
+func TestStandaloneSpecTransformUsesPublicError(t *testing.T) {
+	boom := errors.New("bad value")
+	stringSpec := shape.String().Apply(func(string) (string, error) {
+		return "", boom
+	})
+	_, err := stringSpec.Transform("bad")
+	var transformError *shape.TransformError
+	if !errors.As(err, &transformError) || len(transformError.Path) != 0 || !errors.Is(err, boom) {
+		t.Fatalf("StringSpec.Transform() error = %#v", err)
+	}
+
+	mapSpec := shape.Map("", shape.Int(), stringSpec)
+	_, err = mapSpec.Transform(map[int]string{2: "bad", 1: "bad"})
+	transformError = nil
+	if !errors.As(err, &transformError) || transformError.Path.String() != "[1]" || !errors.Is(err, boom) {
+		t.Fatalf("MapSpec.Transform() error = %#v", err)
+	}
+}
+
 // A nested Schema returns its own *TransformError, and the collection wrapper
 // sits outside it. Normalization must recover the index/key from the wrapper
 // before matching the public type, or the element index disappears from the
@@ -402,7 +421,7 @@ func TestNestedSchemaTransformErrorKeepsCollectionIndex(t *testing.T) {
 		want  string
 	}{
 		{"slice element", Order{Items: []Item{{Sku: "ok"}, {Sku: "bad"}}}, "items[1].sku"},
-		{"map value", Order{ByKey: map[string]Item{"k": {Sku: "bad"}}}, "byKey.k.sku"},
+		{"map value", Order{ByKey: map[string]Item{"k": {Sku: "bad"}}}, "byKey[\"k\"].sku"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := order.Transform(tc.value)
@@ -442,7 +461,7 @@ func TestNestedSchemaTransformAndValidateAgreeOnPath(t *testing.T) {
 }
 
 // The spec path must inherit the time-aware zero test too; only the tagged
-// path used zeroValue.
+// path used isZero.
 func TestTimeSpecIfZeroTreatsAZeroTimeAsZero(t *testing.T) {
 	type Doc struct {
 		When time.Time `json:"when"`
@@ -668,4 +687,109 @@ func TestFluentCompositeFactories(t *testing.T) {
 	if err := slice.Validate([]int{1, 2}); err != nil {
 		t.Fatalf("Slice Validate() = %v", err)
 	}
+}
+
+func TestExplicitAndTaggedStringRulesStayEquivalent(t *testing.T) {
+	type Contacts struct {
+		Email string `json:"email" shape:"email"`
+		URL   string `json:"url" shape:"url"`
+		UUID  string `json:"uuid" shape:"uuid"`
+		IP    string `json:"ip" shape:"ip"`
+	}
+	explicit := shape.New[Contacts](
+		shape.String("Email").Email(),
+		shape.String("URL").URL(),
+		shape.String("UUID").UUID(),
+		shape.String("IP").IP(),
+	)
+	tagged := shape.Struct[Contacts]()
+
+	values := []Contacts{
+		{Email: "pong@example.com", URL: "https://example.com/a", UUID: "550e8400-e29b-41d4-a716-446655440000", IP: "127.0.0.1"},
+		{Email: "Pong <pong@example.com>", URL: "/relative", UUID: "bad", IP: "999.1.1.1"},
+	}
+	for _, value := range values {
+		explicitErr := explicit.Validate(value)
+		taggedErr := tagged.Validate(value)
+		if !reflect.DeepEqual(issueSignatures(explicitErr), issueSignatures(taggedErr)) {
+			t.Fatalf("value=%#v explicit=%#v tagged=%#v", value, explicitErr, taggedErr)
+		}
+	}
+}
+
+func TestExplicitAndTaggedTransformsStayEquivalent(t *testing.T) {
+	type Text struct {
+		Value string `json:"value" shape:"trim,tolower"`
+	}
+	explicit := shape.New[Text](shape.String("Value").Trim().ToLower())
+	tagged := shape.Struct[Text]()
+	want := Text{Value: "pong"}
+
+	explicitValue, explicitErr := explicit.Transform(Text{Value: " PONG "})
+	taggedValue, taggedErr := tagged.Transform(Text{Value: " PONG "})
+	if explicitErr != nil || taggedErr != nil || explicitValue != want || taggedValue != want {
+		t.Fatalf("explicit=%#v/%v tagged=%#v/%v", explicitValue, explicitErr, taggedValue, taggedErr)
+	}
+}
+
+func TestMapTraversalOrderIsShared(t *testing.T) {
+	type Item struct {
+		Value string `json:"value" shape:"notempty"`
+	}
+	type Values struct {
+		Items map[int]Item `json:"items"`
+	}
+	err := shape.Struct[Values]().Validate(Values{Items: map[int]Item{3: {}, 1: {}, 2: {}}})
+	var validationError *validate.Error
+	if !errors.As(err, &validationError) {
+		t.Fatalf("tagged map validation = %v", err)
+	}
+	want := []string{"items[1].value", "items[2].value", "items[3].value"}
+	got := make([]string, len(validationError.Issues))
+	for index, issue := range validationError.Issues {
+		got[index] = issue.Path.String()
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("tagged map paths = %v, want %v", got, want)
+	}
+
+	validatorErr := validate.Map(validate.Int(), validate.String().NotEmpty()).
+		Validate(map[int]string{3: "", 1: "", 2: ""})
+	if !errors.As(validatorErr, &validationError) {
+		t.Fatalf("fluent map validation = %v", validatorErr)
+	}
+	got = got[:0]
+	for _, issue := range validationError.Issues {
+		got = append(got, issue.Path.String())
+	}
+	if !reflect.DeepEqual(got, []string{"[1]", "[2]", "[3]"}) {
+		t.Fatalf("fluent map paths = %v", got)
+	}
+
+	type MapHolder struct {
+		Items map[int]string
+	}
+	transformer := shape.New[MapHolder](shape.Map("Items", shape.Int().Apply(func(value int) (int, error) {
+		return value, errors.New("stop")
+	}), shape.String()))
+	_, transformErr := transformer.Transform(MapHolder{Items: map[int]string{3: "c", 1: "a", 2: "b"}})
+	var pathError *shape.TransformError
+	if !errors.As(transformErr, &pathError) || pathError.Path.String() != "Items[1]" {
+		t.Fatalf("fluent map transform error = %#v", transformErr)
+	}
+}
+
+func issueSignatures(err error) []string {
+	if err == nil {
+		return nil
+	}
+	var validationError *validate.Error
+	if !errors.As(err, &validationError) {
+		return []string{err.Error()}
+	}
+	out := make([]string, len(validationError.Issues))
+	for index, issue := range validationError.Issues {
+		out[index] = issue.Path.String() + ":" + issue.Code
+	}
+	return out
 }

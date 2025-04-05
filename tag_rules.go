@@ -4,15 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
-	"net/mail"
-	"net/url"
 	"reflect"
 	"regexp"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/rhevorn/shape/internal/spec"
+	"github.com/rhevorn/shape/internal/stringrule"
 	"github.com/rhevorn/shape/internal/validationlocale"
 	"github.com/rhevorn/shape/internal/validationmsg"
 	"github.com/rhevorn/shape/validate"
@@ -121,7 +119,7 @@ func ruleIssue(ctx context.Context, err error, path validate.Path, label string)
 	return validate.Issue{
 		Code: failure.code, Path: cloneValidatePath(path), Label: label,
 		Message: validationmsg.Render(
-			validationlocale.Get(ctx) == uint8(validate.SimplifiedChinese),
+			validationlocale.Get(ctx),
 			failure.key,
 			label,
 			failure.expected,
@@ -163,17 +161,10 @@ func compareNumber(a, b reflect.Value) int {
 	}
 	return 0
 }
-func compileRule(t reflect.Type, r spec.Rule) compiledRule {
-	name := spec.RuleName(r)
+func compileRule(t reflect.Type, r spec.Rule) tagCheck {
+	name := r.Name
 	bad := func() { panic(fmt.Sprintf("shape: rule %s does not support %v or its arguments", name, t)) }
-	args := spec.RuleArguments(r)
-	if name == "custom" {
-		check := spec.RuleCheck(r)
-		if spec.RuleTargetType(r) != t || check == nil {
-			bad()
-		}
-		return check
-	}
+	args := append([]any(nil), r.Args...)
 	var check func(context.Context, reflect.Value) bool
 	var expected any
 	if len(args) > 0 {
@@ -361,18 +352,15 @@ func compileRule(t reflect.Type, r spec.Rule) compiledRule {
 			bad()
 		}
 		check = func(_ context.Context, v reflect.Value) bool {
-			s := v.String()
 			switch name {
 			case "email":
-				a, e := mail.ParseAddress(s)
-				return e == nil && a.Address == s && !strings.ContainsAny(s, "\r\n")
+				return stringrule.Email(v.String())
 			case "url":
-				u, e := url.ParseRequestURI(s)
-				return e == nil && u.Scheme != "" && u.Host != ""
+				return stringrule.URL(v.String())
 			case "ip":
-				return net.ParseIP(s) != nil
+				return stringrule.IP(v.String())
 			case "uuid":
-				return uuidPattern.MatchString(s)
+				return stringrule.UUID(v.String())
 			}
 			return false
 		}
@@ -440,5 +428,3 @@ func deepEqualMatchesComparable(t reflect.Type) bool {
 	}
 	return true
 }
-
-var uuidPattern = regexp.MustCompile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")

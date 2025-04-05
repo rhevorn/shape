@@ -10,10 +10,11 @@ import (
 )
 
 type Metadata struct{ Source string }
+type Attempts uint8
 
 type Settings struct {
 	Enabled  bool                `json:"enabled"`
-	Attempts uint8               `json:"attempts"`
+	Attempts Attempts            `json:"attempts"`
 	Total    int64               `json:"total"`
 	Ratio    float64             `json:"ratio"`
 	Created  time.Time           `json:"created"`
@@ -23,7 +24,7 @@ type Settings struct {
 
 var settingsSchema = shape.New[Settings](
 	shape.Bool("Enabled"),
-	shape.Number[uint8]("Attempts").Between(1, 5),
+	shape.Number[Attempts]("Attempts").Between(1, 5),
 	shape.Int64("Total").NonNegative(),
 	shape.Float64("Ratio").Between(0, 1),
 	shape.Time("Created").Refine(func(value time.Time) error {

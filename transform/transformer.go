@@ -2,6 +2,7 @@ package transform
 
 import "context"
 
+// Transformer transforms a T without mutating caller-owned input.
 type Transformer[T any] interface {
 	Transform(T) (T, error)
 	TransformContext(context.Context, T) (T, error)

@@ -1,10 +1,5 @@
-// Package reflectclone holds the single deep-copy implementation shared by the
-// root package and transform.
-//
-// Both packages used to carry hand-synced copies of this logic, and the copies
-// had drifted: the transform copy never cloned unexported fields, so a private
-// slice or map stayed aliased to the caller's storage, while the two packages
-// disagreed about the recursion limit and the zero test for time.Time.
+// Package reflectclone holds the deep-copy policy shared by the root and
+// transform packages.
 package reflectclone
 
 import (
@@ -172,12 +167,9 @@ func clone(ctx context.Context, v reflect.Value, depth int, strict bool) (reflec
 
 // writable returns a settable view of f.
 //
-// Exported fields are already settable. Unexported fields are not, which is
-// why they used to be skipped and left aliasing the caller's storage. The
-// enclosing struct was built with reflect.New, so it is addressable and
-// reflect.NewAt can re-derive a writable view over the same memory. Without
-// this, a promoted exported field over a private slice or map leaks caller
-// storage into the working copy.
+// Exported fields are already settable. For an addressable cloned struct,
+// reflect.NewAt provides a writable view of unexported storage so mutable
+// fields can be detached as well.
 func writable(f reflect.Value) (reflect.Value, error) {
 	if f.CanSet() {
 		return f, nil

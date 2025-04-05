@@ -17,9 +17,11 @@ type StringSpec struct {
 func (f StringSpec) fieldDefinition() erasedField {
 	return eraseField(f.name, f.transformer, f.validator)
 }
-func (f StringSpec) Transform(v string) (string, error) { return f.transformer.Transform(v) }
+func (f StringSpec) Transform(v string) (string, error) {
+	return runSpecTransform(context.Background(), f.transformer, v)
+}
 func (f StringSpec) TransformContext(ctx context.Context, v string) (string, error) {
-	return f.transformer.TransformContext(ctx, v)
+	return runSpecTransform(ctx, f.transformer, v)
 }
 func (f StringSpec) Validate(v string) error { return f.validator.Validate(v) }
 func (f StringSpec) ValidateContext(ctx context.Context, v string) error {

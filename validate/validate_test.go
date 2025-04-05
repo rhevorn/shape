@@ -2,6 +2,7 @@ package validate_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -194,6 +195,62 @@ func TestMapKeyAndValueIssuesAreDistinguishable(t *testing.T) {
 	}
 }
 
+func TestMapKeyAndValueLabelsKeepTheirRoleWithParentLabel(t *testing.T) {
+	err := validate.Map(validate.String().NotEmpty(), validate.String().NotEmpty()).
+		Label("prices").
+		Validate(map[string]string{"": ""})
+	var got *validate.Error
+	if !errors.As(err, &got) || len(got.Issues) != 2 {
+		t.Fatalf("issues = %#v", err)
+	}
+	if got.Issues[0].Label != "prices.key" || got.Issues[1].Label != "prices.value" {
+		t.Fatalf("labels = %q, %q", got.Issues[0].Label, got.Issues[1].Label)
+	}
+}
+
+func TestMapPathPreservesKeyType(t *testing.T) {
+	intErr := validate.Map(validate.Int(), validate.String().NotEmpty()).
+		Validate(map[int]string{3: ""})
+	var intValidation *validate.Error
+	if !errors.As(intErr, &intValidation) {
+		t.Fatalf("integer map error = %#v", intErr)
+	}
+	intPath := intValidation.Issues[0].Path
+	if got := intPath.String(); got != "[3]" {
+		t.Fatalf("integer map path = %q", got)
+	}
+	data, err := json.Marshal(intPath)
+	if err != nil || string(data) != "[3]" {
+		t.Fatalf("integer map JSON path = %s, %v", data, err)
+	}
+
+	stringErr := validate.Map(validate.String(), validate.String().NotEmpty()).
+		Validate(map[string]string{"3": ""})
+	var stringValidation *validate.Error
+	if !errors.As(stringErr, &stringValidation) {
+		t.Fatalf("string map error = %#v", stringErr)
+	}
+	stringPath := stringValidation.Issues[0].Path
+	if got := stringPath.String(); got != "[\"3\"]" {
+		t.Fatalf("string map path = %q", got)
+	}
+	data, err = json.Marshal(stringPath)
+	if err != nil || string(data) != "[\"3\"]" {
+		t.Fatalf("string map JSON path = %s, %v", data, err)
+	}
+}
+
+func TestEmptyValidationErrorFromRefineIsNotSwallowed(t *testing.T) {
+	err := validate.String().Refine(func(string) error { return &validate.Error{} }).Validate("x")
+	var got *validate.Error
+	if !errors.As(err, &got) || len(got.Issues) != 1 {
+		t.Fatalf("error = %#v", err)
+	}
+	if got.Issues[0].Code != validate.CodeCustom || got.Issues[0].Message != "validation failed" {
+		t.Fatalf("issue = %#v", got.Issues[0])
+	}
+}
+
 // The exported validators are structs whose zero value is writable from
 // outside the package. It must report that as a configuration mistake for any
 // input, rather than dereferencing nil for some values and passing others.
@@ -288,5 +345,13 @@ func TestLanguageIsAppliedWhenErrorIsCreated(t *testing.T) {
 	err = validate.String().NotEmpty().ValidateContext(ctx, "")
 	if !errors.As(err, &got) || got.Issues[0].Message != "must not be empty" {
 		t.Fatalf("context error = %#v", err)
+	}
+}
+
+func TestLabelFormattingTreatsPercentAsText(t *testing.T) {
+	err := validate.String().MinLength(2).Label("100%").Validate("")
+	var got *validate.Error
+	if !errors.As(err, &got) || got.Issues[0].Message != "100% must contain at least 2 characters" {
+		t.Fatalf("error = %#v", err)
 	}
 }

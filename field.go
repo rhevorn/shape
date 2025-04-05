@@ -81,6 +81,15 @@ func requireSchema[T any](schema Schema[T]) {
 	}
 }
 
+func runSpecTransform[T any](ctx context.Context, transformer transform.Transformer[T], value T) (T, error) {
+	out, err := transformer.TransformContext(ctx, value)
+	if err != nil {
+		var zero T
+		return zero, normalizeTransformError(ctx, err)
+	}
+	return out, nil
+}
+
 // ValueSpec defines transform and validation behavior for a value of any type.
 type ValueSpec[T any] struct {
 	name        string
@@ -91,9 +100,11 @@ type ValueSpec[T any] struct {
 func (f ValueSpec[T]) fieldDefinition() erasedField {
 	return eraseField(f.name, f.transformer, f.validator)
 }
-func (f ValueSpec[T]) Transform(v T) (T, error) { return f.transformer.Transform(v) }
+func (f ValueSpec[T]) Transform(v T) (T, error) {
+	return runSpecTransform(context.Background(), f.transformer, v)
+}
 func (f ValueSpec[T]) TransformContext(ctx context.Context, v T) (T, error) {
-	return f.transformer.TransformContext(ctx, v)
+	return runSpecTransform(ctx, f.transformer, v)
 }
 func (f ValueSpec[T]) Validate(v T) error { return f.validator.Validate(v) }
 func (f ValueSpec[T]) ValidateContext(ctx context.Context, v T) error {

@@ -11,13 +11,16 @@ import (
 // Duration is a signed nanosecond duration encoded as a JSON string ("30s").
 type Duration time.Duration
 
-func (d Duration) String() string               { return time.Duration(d).String() }
+// String formats d with time.Duration syntax.
+func (d Duration) String() string { return time.Duration(d).String() }
+
+// MarshalJSON encodes d as a duration string.
 func (d Duration) MarshalJSON() ([]byte, error) { return json.Marshal(d.String()) }
 
 // UnmarshalJSON accepts duration strings or null (zero). Errors do not modify d.
 func (d *Duration) UnmarshalJSON(data []byte) error {
 	if d == nil {
-		return errors.New("shape/types: nil Duration receiver")
+		return errors.New("shape: nil Duration receiver")
 	}
 	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
 		*d = 0

@@ -8,6 +8,7 @@ import (
 
 	"github.com/rhevorn/shape"
 	"github.com/rhevorn/shape/types"
+	"github.com/rhevorn/shape/validate"
 )
 
 type contractProfile struct {
@@ -35,6 +36,9 @@ type contractUser struct {
 // compilePublicAPI is intentionally not executed. Compiling this package locks
 // the documented root API names, type relationships, and method signatures.
 func compilePublicAPI(ctx context.Context, reader io.Reader, source []byte) {
+	_ = &shape.UnsupportedSchemaError{Feature: "compile only"}
+	_ = validate.Path{validate.MapKeyPath(1)}
+	_ = validate.PathMapKey
 	identityString := func(value string) (string, error) { return value, nil }
 	identityStringContext := func(context.Context, string) (string, error) { return "", nil }
 	checkString := func(string) error { return nil }

@@ -15,8 +15,8 @@ type Request struct {
 }
 
 var requestSchema = shape.New[Request](
-	shape.String("Name").NotEmpty().MinLength(3).Label("姓名"),
-	shape.Int("Age").Min(18).Label("年龄"),
+	shape.String("Name").NotEmpty().MinLength(3).Label("name"),
+	shape.Int("Age").Min(18).Label("age"),
 )
 
 func main() {

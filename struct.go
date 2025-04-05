@@ -9,13 +9,13 @@ import (
 )
 
 type structCacheEntry struct {
-	plan *valuePlan
+	plan *tagPlan
 	err  error
 }
 
 var structCache sync.Map
 
-func taggedSchema[T any]() TaggedSpec[T] {
+func compileTaggedSpec[T any]() TaggedSpec[T] {
 	t := reflect.TypeFor[T]()
 	if t.Kind() != reflect.Struct || t == reflect.TypeFor[time.Time]() {
 		panic("shape: Struct requires an ordinary value struct")
@@ -36,14 +36,14 @@ func taggedSchema[T any]() TaggedSpec[T] {
 	return newTaggedSpec[T](e.plan)
 }
 
-type compiledField struct {
+type tagField struct {
 	index int
 	name  string
-	plan  *valuePlan
+	plan  *tagPlan
 }
 
-func compileType(t reflect.Type, active map[reflect.Type]bool) (*valuePlan, error) {
-	p := &valuePlan{typ: t}
+func compileType(t reflect.Type, active map[reflect.Type]bool) (*tagPlan, error) {
+	p := &tagPlan{typ: t}
 	if t == reflect.TypeFor[time.Time]() || t == durationType {
 		return p, nil
 	}
@@ -65,7 +65,7 @@ func compileType(t reflect.Type, active map[reflect.Type]bool) (*valuePlan, erro
 		}
 		p.element = inner
 	case reflect.Struct:
-		fields := make([]compiledField, 0, t.NumField())
+		fields := make([]tagField, 0, t.NumField())
 		names := map[string]bool{}
 		for i := 0; i < t.NumField(); i++ {
 			f := t.Field(i)
@@ -95,7 +95,7 @@ func compileType(t reflect.Type, active map[reflect.Type]bool) (*valuePlan, erro
 			if e != nil {
 				return nil, fmt.Errorf("%s: %w", f.Name, e)
 			}
-			fields = append(fields, compiledField{i, jsonName, inner})
+			fields = append(fields, tagField{i, jsonName, inner})
 		}
 		p.fields = fields
 	case reflect.Slice:
@@ -113,7 +113,6 @@ func compileType(t reflect.Type, active map[reflect.Type]bool) (*valuePlan, erro
 			return nil, e
 		}
 		p.element = inner
-		p.key = &valuePlan{typ: t.Key()}
 	default:
 		return nil, fmt.Errorf("shape: unsupported field type %v", t)
 	}

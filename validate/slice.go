@@ -5,67 +5,80 @@ import (
 	"reflect"
 )
 
+// SliceValidator validates a slice and each of its elements.
 type SliceValidator[T any] struct {
 	base[[]T]
 	inner Validator[T]
 }
 
 func (v SliceValidator[T]) add(fn check[[]T]) SliceValidator[T] { v.base = v.base.add(fn); return v }
+
+// NotNull rejects nil slices.
 func (v SliceValidator[T]) NotNull() SliceValidator[T] {
 	return v.add(func(_ context.Context, x []T) error {
 		if x == nil {
-			return issue(CodeInvalidValue, "not_null", nil, x)
+			return issueError(CodeInvalidValue, "not_null", nil, x)
 		}
 		return nil
 	})
 }
+
+// NotEmpty rejects nil and zero-length slices.
 func (v SliceValidator[T]) NotEmpty() SliceValidator[T] {
 	return v.add(func(_ context.Context, x []T) error {
 		if len(x) == 0 {
-			return issue(CodeInvalidValue, "not_empty.collection", nil, x)
+			return issueError(CodeInvalidValue, "not_empty.collection", nil, x)
 		}
 		return nil
 	})
 }
+
+// Min requires at least n elements.
 func (v SliceValidator[T]) Min(n int) SliceValidator[T] {
 	if n < 0 {
 		panic("validate: negative length")
 	}
 	return v.add(func(_ context.Context, x []T) error {
 		if len(x) < n {
-			return issue(CodeTooSmall, "too_small.collection", n, len(x))
+			return issueError(CodeTooSmall, "too_small.collection", n, len(x))
 		}
 		return nil
 	})
 }
+
+// Max allows at most n elements.
 func (v SliceValidator[T]) Max(n int) SliceValidator[T] {
 	if n < 0 {
 		panic("validate: negative length")
 	}
 	return v.add(func(_ context.Context, x []T) error {
 		if len(x) > n {
-			return issue(CodeTooBig, "too_big.collection", n, len(x))
+			return issueError(CodeTooBig, "too_big.collection", n, len(x))
 		}
 		return nil
 	})
 }
+
+// Len requires exactly n elements.
 func (v SliceValidator[T]) Len(n int) SliceValidator[T] {
 	if n < 0 {
 		panic("validate: negative length")
 	}
 	return v.add(func(_ context.Context, x []T) error {
 		if len(x) != n {
-			return issue(CodeInvalidValue, "collection.len", n, len(x))
+			return issueError(CodeInvalidValue, "collection.len", n, len(x))
 		}
 		return nil
 	})
 }
+
+// Unique rejects duplicate elements using value equality.
 func (v SliceValidator[T]) Unique() SliceValidator[T] {
 	return v.add(func(ctx context.Context, x []T) error {
 		typ := reflect.TypeFor[T]()
 		fast := deepEqualMatchesComparable(typ)
 		if !fast && len(x) > MaxDeepUniqueItems {
-			return issue(CodeUniqueLimit, "unique_limit", MaxDeepUniqueItems, len(x))
+			return issueError(CodeUniqueLimit, "unique_limit", MaxDeepUniqueItems, len(x))
 		}
 		if fast {
 			seen := make(map[any]struct{}, len(x))
@@ -75,7 +88,7 @@ func (v SliceValidator[T]) Unique() SliceValidator[T] {
 				}
 				key := any(item)
 				if _, exists := seen[key]; exists {
-					return issue(CodeInvalidValue, "unique", nil, item)
+					return issueError(CodeInvalidValue, "unique", nil, item)
 				}
 				seen[key] = struct{}{}
 			}
@@ -87,7 +100,7 @@ func (v SliceValidator[T]) Unique() SliceValidator[T] {
 					return err
 				}
 				if reflect.DeepEqual(x[i], x[j]) {
-					return issue(CodeInvalidValue, "unique", nil, x[i])
+					return issueError(CodeInvalidValue, "unique", nil, x[i])
 				}
 			}
 		}
@@ -113,17 +126,25 @@ func deepEqualMatchesComparable(t reflect.Type) bool {
 	}
 	return true
 }
+
+// Validate collects issues using a background context.
 func (v SliceValidator[T]) Validate(x []T) error { return v.ValidateContext(context.Background(), x) }
+
+// ValidateContext collects issues and observes cancellation.
 func (v SliceValidator[T]) ValidateContext(ctx context.Context, x []T) error {
-	return v.runAll(ctx, x, false)
+	return v.validateMode(ctx, x, collectAll)
 }
+
+// ValidateFirst stops after the first issue.
 func (v SliceValidator[T]) ValidateFirst(x []T) error {
 	return v.ValidateFirstContext(context.Background(), x)
 }
+
+// ValidateFirstContext stops after the first issue and observes cancellation.
 func (v SliceValidator[T]) ValidateFirstContext(ctx context.Context, x []T) error {
-	return v.runAll(ctx, x, true)
+	return v.validateMode(ctx, x, stopAtFirst)
 }
-func (v SliceValidator[T]) runAll(ctx context.Context, x []T, first bool) error {
+func (v SliceValidator[T]) validateMode(ctx context.Context, x []T, mode validationMode) error {
 	// The zero value is writable from outside the package, so a nil inner is
 	// reachable. Report it as the configuration mistake it is instead of
 	// dereferencing nil — and do so regardless of the data, so the same
@@ -132,9 +153,9 @@ func (v SliceValidator[T]) runAll(ctx context.Context, x []T, first bool) error 
 		panic("validate: SliceValidator must be built with validate.Slice")
 	}
 	var issues []Issue
-	if err := v.base.run(ctx, x, first); err != nil {
+	if err := v.base.run(ctx, x, mode); err != nil {
 		issues = customIssue(err)
-		if first {
+		if mode == stopAtFirst {
 			return err
 		}
 	}
@@ -142,10 +163,10 @@ func (v SliceValidator[T]) runAll(ctx context.Context, x []T, first bool) error 
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		err := runValidator(ctx, v.inner, item, first)
+		err := runValidator(ctx, v.inner, item, mode)
 		if err != nil {
 			var stop bool
-			issues, stop = appendIssues(issues, prefix(withLabel(customIssue(err), v.base.label), IndexPath(i)), first)
+			issues, stop = appendIssues(issues, prefix(withLabel(customIssue(err), v.base.label), IndexPath(i)), mode == stopAtFirst)
 			if stop {
 				return finish(ctx, issues)
 			}
@@ -153,6 +174,8 @@ func (v SliceValidator[T]) runAll(ctx context.Context, x []T, first bool) error 
 	}
 	return finish(ctx, issues)
 }
+
+// Refine appends custom validation rules.
 func (v SliceValidator[T]) Refine(fns ...func([]T) error) SliceValidator[T] {
 	for _, fn := range fns {
 		if fn == nil {
@@ -163,6 +186,8 @@ func (v SliceValidator[T]) Refine(fns ...func([]T) error) SliceValidator[T] {
 	}
 	return v
 }
+
+// RefineContext appends context-aware custom validation rules.
 func (v SliceValidator[T]) RefineContext(fns ...func(context.Context, []T) error) SliceValidator[T] {
 	for _, fn := range fns {
 		if fn == nil {
@@ -172,10 +197,14 @@ func (v SliceValidator[T]) RefineContext(fns ...func(context.Context, []T) error
 	}
 	return v
 }
+
+// And appends validators that run after this validator's rules.
 func (v SliceValidator[T]) And(vs ...Validator[[]T]) SliceValidator[T] {
 	v.base = v.base.andAll(vs...)
 	return v
 }
+
+// Label sets the human-readable label on otherwise unlabeled issues.
 func (v SliceValidator[T]) Label(s string) SliceValidator[T] {
 	v.base = v.base.clone()
 	v.base.label = s

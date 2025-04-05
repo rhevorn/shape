@@ -2,25 +2,17 @@ package shape
 
 import (
 	"fmt"
-	"github.com/rhevorn/shape/internal/taglang"
 	"strconv"
+
+	"github.com/rhevorn/shape/internal/taglang"
 )
 
-type tagOption struct {
-	name, value string
-	has         bool
-}
-
-func parseShapeTag(text string) ([]tagOption, error) {
+func parseShapeTag(text string) ([]taglang.Item, error) {
 	items, err := taglang.Parse(text)
 	if err != nil {
 		return nil, fmt.Errorf("shape: %w", err)
 	}
-	out := make([]tagOption, len(items))
-	for i, item := range items {
-		out[i] = tagOption{item.Name, item.Value, item.HasValue}
-	}
-	return out, nil
+	return items, nil
 }
 func tagCount(text string) (int, error) {
 	if text == "" {

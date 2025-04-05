@@ -17,9 +17,11 @@ type SliceSpec[T any] struct {
 func (f SliceSpec[T]) fieldDefinition() erasedField {
 	return eraseField(f.name, f.transformer, f.validator)
 }
-func (f SliceSpec[T]) Transform(v []T) ([]T, error) { return f.transformer.Transform(v) }
+func (f SliceSpec[T]) Transform(v []T) ([]T, error) {
+	return runSpecTransform(context.Background(), f.transformer, v)
+}
 func (f SliceSpec[T]) TransformContext(ctx context.Context, v []T) ([]T, error) {
-	return f.transformer.TransformContext(ctx, v)
+	return runSpecTransform(ctx, f.transformer, v)
 }
 func (f SliceSpec[T]) Validate(v []T) error { return f.validator.Validate(v) }
 func (f SliceSpec[T]) ValidateContext(ctx context.Context, v []T) error {

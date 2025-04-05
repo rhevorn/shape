@@ -144,6 +144,35 @@ func TestIfZeroTreatsAZeroTimeAsZero(t *testing.T) {
 	}
 }
 
+func TestFallbackSnapshotRejectsTypesThatCannotBeDetached(t *testing.T) {
+	type WithInterface struct{ Value any }
+	defer func() {
+		if recover() == nil {
+			t.Fatal("IfZero accepted a fallback whose interface storage cannot be snapshotted")
+		}
+	}()
+	_ = transform.Value[WithInterface]().IfZero(WithInterface{Value: []int{1}})
+}
+
+func TestFallbackIsSnapshottedAndClonedPerTransform(t *testing.T) {
+	fallback := []int{1}
+	transformer := transform.Slice(transform.Int()).IfNull(fallback)
+	fallback[0] = 9
+
+	first, err := transformer.Transform(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first[0] = 7
+	second, err := transformer.Transform(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second[0] != 1 {
+		t.Fatalf("fallback storage was shared: first=%v second=%v", first, second)
+	}
+}
+
 // cachedTransformer is a foreign Transformer: it makes no promise about where
 // the value it returns lives.
 type cachedTransformer struct{ cached []int }

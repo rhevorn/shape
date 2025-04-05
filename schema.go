@@ -7,6 +7,7 @@ import (
 	"io"
 	"reflect"
 
+	"github.com/rhevorn/shape/internal/maporder"
 	"github.com/rhevorn/shape/internal/transformpath"
 	"github.com/rhevorn/shape/internal/validationlocale"
 	"github.com/rhevorn/shape/internal/validationmsg"
@@ -46,6 +47,7 @@ type TransformError struct {
 	Err  error
 }
 
+// Error formats the failed path and underlying error.
 func (e *TransformError) Error() string {
 	if e == nil || e.Err == nil {
 		return "shape: transform failed"
@@ -56,6 +58,7 @@ func (e *TransformError) Error() string {
 	return fmt.Sprintf("shape: transform failed at %s: %v", e.Path.String(), e.Err)
 }
 
+// Unwrap returns the underlying transform error.
 func (e *TransformError) Unwrap() error {
 	if e == nil {
 		return nil
@@ -81,7 +84,7 @@ func normalizeTransformError(ctx context.Context, err error) error {
 			if segment.IsIndex {
 				path = append(path, validate.IndexPath(segment.Index))
 			} else {
-				path = append(path, validate.FieldPath(segment.Key))
+				path = append(path, validate.MapKeyPath(segment.Key))
 			}
 		}
 		var nested *TransformError
@@ -99,11 +102,9 @@ func normalizeTransformError(ctx context.Context, err error) error {
 
 // structSchema is the immutable, concurrency-safe implementation returned by
 // Struct. Users only need the Schema interface.
-type structSchema[T any] struct{ p *valuePlan }
+type structSchema[T any] struct{ p *tagPlan }
 
 var _ Schema[struct{}] = structSchema[struct{}]{}
-
-func (s structSchema[T]) plan() *valuePlan { return s.p }
 
 func (s structSchema[T]) Transform(value T) (T, error) {
 	return s.TransformContext(context.Background(), value)
@@ -125,7 +126,11 @@ func (s structSchema[T]) transformContext(ctx context.Context, value T, owned bo
 	if s.p == nil {
 		return zero, errors.New("shape: uninitialized schema; use shape.Struct")
 	}
-	out, err := transformPlanMode(ctx, s.p, reflect.ValueOf(&value).Elem(), nil, 0, owned)
+	ownership := borrowedValue
+	if owned {
+		ownership = ownedValue
+	}
+	out, err := transformTagPlan(ctx, s.p, reflect.ValueOf(&value).Elem(), nil, 0, ownership)
 	if err != nil {
 		return zero, err
 	}
@@ -166,7 +171,15 @@ func (s structSchema[T]) validate(ctx context.Context, value T, first bool) erro
 	return &validate.Error{Issues: issues}
 }
 
-func transformPlanMode(ctx context.Context, p *valuePlan, value reflect.Value, path validate.Path, depth int, owned bool) (reflect.Value, error) {
+type valueOwnership uint8
+
+const (
+	borrowedValue valueOwnership = iota
+	ownedValue
+)
+
+func transformTagPlan(ctx context.Context, p *tagPlan, value reflect.Value, path validate.Path, depth int, ownership valueOwnership) (reflect.Value, error) {
+	owned := ownership == ownedValue
 	if err := ctx.Err(); err != nil {
 		return reflect.Value{}, err
 	}
@@ -180,14 +193,14 @@ func transformPlanMode(ctx context.Context, p *valuePlan, value reflect.Value, p
 			return reflect.Value{}, err
 		}
 		switch step.kind {
-		case valueStepOption:
-			if (step.option == "ifzero" && zeroValue(value)) || (step.option == "ifnull" && value.IsNil()) {
+		case tagStepOption:
+			if (step.option == "ifzero" && isZero(value)) || (step.option == "ifnull" && value.IsNil()) {
 				value, err = cloneValue(ctx, step.fallback, true)
 				if err != nil {
 					return reflect.Value{}, &TransformError{Path: cloneValidatePath(path), Err: err}
 				}
 			}
-		case valueStepTransform:
+		case tagStepTransform:
 			value, err = step.transform(ctx, value)
 			if err != nil {
 				if ctx.Err() != nil {
@@ -203,7 +216,7 @@ func transformPlanMode(ctx context.Context, p *valuePlan, value reflect.Value, p
 		if value.IsNil() || p.element == nil {
 			return value, nil
 		}
-		inner, err := transformPlanMode(ctx, p.element, value.Elem(), path, depth+1, owned)
+		inner, err := transformTagPlan(ctx, p.element, value.Elem(), path, depth+1, ownership)
 		if err != nil {
 			return reflect.Value{}, err
 		}
@@ -225,7 +238,7 @@ func transformPlanMode(ctx context.Context, p *valuePlan, value reflect.Value, p
 		}
 		for _, field := range p.fields {
 			fieldPath := appendValidatePath(path, validate.FieldPath(field.name))
-			item, err := transformPlanMode(ctx, field.plan, value.Field(field.index), fieldPath, depth+1, owned)
+			item, err := transformTagPlan(ctx, field.plan, value.Field(field.index), fieldPath, depth+1, ownership)
 			if err != nil {
 				return reflect.Value{}, err
 			}
@@ -241,7 +254,7 @@ func transformPlanMode(ctx context.Context, p *valuePlan, value reflect.Value, p
 			out = reflect.MakeSlice(value.Type(), value.Len(), value.Len())
 		}
 		for i := 0; i < value.Len(); i++ {
-			item, err := transformPlanMode(ctx, p.element, value.Index(i), appendValidatePath(path, validate.IndexPath(i)), depth+1, owned)
+			item, err := transformTagPlan(ctx, p.element, value.Index(i), appendValidatePath(path, validate.IndexPath(i)), depth+1, ownership)
 			if err != nil {
 				return reflect.Value{}, err
 			}
@@ -252,17 +265,17 @@ func transformPlanMode(ctx context.Context, p *valuePlan, value reflect.Value, p
 		if value.IsNil() || p.element == nil {
 			return value, nil
 		}
-		keys, err := orderedKeys(ctx, value)
+		keys, err := maporder.Reflect(ctx, value)
 		if err != nil {
 			return reflect.Value{}, err
 		}
 		out := reflect.MakeMapWithSize(value.Type(), value.Len())
 		for _, key := range keys {
-			itemPath := appendValidatePath(path, validate.FieldPath(fmt.Sprint(key.Interface())))
+			itemPath := appendValidatePath(path, validate.MapKeyPath(key.Interface()))
 			mapValue := value.MapIndex(key)
 			valueInput := reflect.New(mapValue.Type()).Elem()
 			valueInput.Set(mapValue)
-			item, err := transformPlanMode(ctx, p.element, valueInput, itemPath, depth+1, owned)
+			item, err := transformTagPlan(ctx, p.element, valueInput, itemPath, depth+1, ownership)
 			if err != nil {
 				return reflect.Value{}, err
 			}
@@ -274,7 +287,7 @@ func transformPlanMode(ctx context.Context, p *valuePlan, value reflect.Value, p
 	}
 }
 
-func validatePlan(ctx context.Context, p *valuePlan, value reflect.Value, path validate.Path, depth int, first bool, issues *[]validate.Issue) (bool, error) {
+func validatePlan(ctx context.Context, p *tagPlan, value reflect.Value, path validate.Path, depth int, first bool, issues *[]validate.Issue) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
@@ -296,7 +309,7 @@ func validatePlan(ctx context.Context, p *valuePlan, value reflect.Value, path v
 	}
 
 	for _, step := range p.steps {
-		if step.kind != valueStepRule {
+		if step.kind != tagStepRule {
 			continue
 		}
 		if err := ctx.Err(); err != nil {
@@ -344,12 +357,12 @@ func validatePlan(ctx context.Context, p *valuePlan, value reflect.Value, path v
 		}
 	case reflect.Map:
 		if p.element != nil && !value.IsNil() {
-			keys, err := orderedKeys(ctx, value)
+			keys, err := maporder.Reflect(ctx, value)
 			if err != nil {
 				return false, err
 			}
 			for _, key := range keys {
-				stop, err := validatePlan(ctx, p.element, value.MapIndex(key), appendValidatePath(path, validate.FieldPath(fmt.Sprint(key.Interface()))), depth+1, first, issues)
+				stop, err := validatePlan(ctx, p.element, value.MapIndex(key), appendValidatePath(path, validate.MapKeyPath(key.Interface())), depth+1, first, issues)
 				if err != nil || stop {
 					return stop, err
 				}
@@ -373,7 +386,7 @@ func appendSchemaIssue(ctx context.Context, issues *[]validate.Issue, issue vali
 }
 
 func validationMessage(ctx context.Context, id, label string, expected any) string {
-	return validationmsg.Render(validationlocale.Get(ctx) == uint8(validate.SimplifiedChinese), id, label, expected)
+	return validationmsg.Render(validationlocale.Get(ctx), id, label, expected)
 }
 
 func appendValidatePath(path validate.Path, segment validate.PathSegment) validate.Path {

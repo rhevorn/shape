@@ -4,11 +4,10 @@ package transformpath
 
 import (
 	"errors"
-	"fmt"
 )
 
 type Segment struct {
-	Key     string
+	Key     any
 	Index   int
 	IsIndex bool
 }
@@ -37,7 +36,7 @@ func Index(err error, index int) error {
 }
 
 func Key(err error, key any) error {
-	return prefix(err, Segment{Key: fmt.Sprint(key)})
+	return prefix(err, Segment{Key: key})
 }
 
 func prefix(err error, segment Segment) error {

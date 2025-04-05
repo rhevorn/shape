@@ -19,10 +19,7 @@ func Parse(text string) ([]Item, error) {
 	}
 	var result []Item
 	for {
-		end := strings.IndexAny(text, "=, \t\r\n")
-		if end < 0 {
-			end = len(text)
-		}
+		end := tagNameEnd(text)
 		name := text[:end]
 		if name == "" {
 			return nil, fmt.Errorf("empty tag name")
@@ -97,4 +94,13 @@ func Parse(text string) ([]Item, error) {
 			return nil, fmt.Errorf("trailing comma")
 		}
 	}
+}
+
+func tagNameEnd(text string) int {
+	for index, value := range text {
+		if value == '=' || value == ',' || unicode.IsSpace(value) {
+			return index
+		}
+	}
+	return len(text)
 }

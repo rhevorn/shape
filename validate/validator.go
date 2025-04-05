@@ -2,6 +2,7 @@ package validate
 
 import "context"
 
+// Validator validates T either exhaustively or until the first issue.
 type Validator[T any] interface {
 	Validate(T) error
 	ValidateContext(context.Context, T) error
@@ -10,6 +11,13 @@ type Validator[T any] interface {
 }
 
 type check[T any] func(context.Context, T) error
+
+type validationMode uint8
+
+const (
+	collectAll validationMode = iota
+	stopAtFirst
+)
 
 type base[T any] struct {
 	checks []check[T]
@@ -22,12 +30,22 @@ func (b base[T]) clone() base[T] {
 	b.and = append([]Validator[T](nil), b.and...)
 	return b
 }
-func (b base[T]) add(fn check[T]) base[T]                             { b = b.clone(); b.checks = append(b.checks, fn); return b }
-func (b base[T]) Validate(v T) error                                  { return b.ValidateContext(context.Background(), v) }
-func (b base[T]) ValidateContext(ctx context.Context, v T) error      { return b.run(ctx, v, false) }
-func (b base[T]) ValidateFirst(v T) error                             { return b.ValidateFirstContext(context.Background(), v) }
-func (b base[T]) ValidateFirstContext(ctx context.Context, v T) error { return b.run(ctx, v, true) }
-func (b base[T]) run(ctx context.Context, v T, first bool) error {
+func (b base[T]) add(fn check[T]) base[T] { b = b.clone(); b.checks = append(b.checks, fn); return b }
+
+// Validate collects issues using a background context.
+func (b base[T]) Validate(v T) error { return b.ValidateContext(context.Background(), v) }
+
+// ValidateContext collects issues and observes cancellation.
+func (b base[T]) ValidateContext(ctx context.Context, v T) error { return b.run(ctx, v, collectAll) }
+
+// ValidateFirst stops after the first issue.
+func (b base[T]) ValidateFirst(v T) error { return b.ValidateFirstContext(context.Background(), v) }
+
+// ValidateFirstContext stops after the first issue and observes cancellation.
+func (b base[T]) ValidateFirstContext(ctx context.Context, v T) error {
+	return b.run(ctx, v, stopAtFirst)
+}
+func (b base[T]) run(ctx context.Context, v T, mode validationMode) error {
 	if ctx == nil {
 		panic("validate: nil context")
 	}
@@ -42,20 +60,20 @@ func (b base[T]) run(ctx context.Context, v T, first bool) error {
 		}
 		if err != nil {
 			var stop bool
-			issues, stop = appendIssues(issues, withLabel(customIssue(err), b.label), first)
+			issues, stop = appendIssues(issues, withLabel(customIssue(err), b.label), mode == stopAtFirst)
 			if stop {
 				return finish(ctx, issues)
 			}
 		}
 	}
 	for _, other := range b.and {
-		err := runValidator(ctx, other, v, first)
+		err := runValidator(ctx, other, v, mode)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		if err != nil {
 			var stop bool
-			issues, stop = appendIssues(issues, withLabel(customIssue(err), b.label), first)
+			issues, stop = appendIssues(issues, withLabel(customIssue(err), b.label), mode == stopAtFirst)
 			if stop {
 				return finish(ctx, issues)
 			}
@@ -63,6 +81,8 @@ func (b base[T]) run(ctx context.Context, v T, first bool) error {
 	}
 	return finish(ctx, issues)
 }
+
+// Refine appends custom validation rules.
 func (b base[T]) Refine(fns ...func(T) error) Validator[T] {
 	for _, fn := range fns {
 		if fn == nil {
@@ -73,6 +93,8 @@ func (b base[T]) Refine(fns ...func(T) error) Validator[T] {
 	}
 	return b
 }
+
+// RefineContext appends context-aware custom validation rules.
 func (b base[T]) RefineContext(fns ...func(context.Context, T) error) Validator[T] {
 	for _, fn := range fns {
 		if fn == nil {
@@ -83,12 +105,8 @@ func (b base[T]) RefineContext(fns ...func(context.Context, T) error) Validator[
 	return b
 }
 
-// andAll appends sibling validators to a clone of the receiver, so the
-// receiver's own checks and label apply to every issue the result produces.
-//
-// It replaces joinValidators, which built a fresh zero base and therefore
-// dropped the label: Slice/Map/Pointer lost it while String/Number/Value kept
-// it, for the same call shape.
+// andAll appends sibling validators to a clone of the receiver while retaining
+// the receiver's checks and label.
 func (b base[T]) andAll(vs ...Validator[T]) base[T] {
 	b = b.clone()
 	for _, v := range vs {
@@ -99,8 +117,8 @@ func (b base[T]) andAll(vs ...Validator[T]) base[T] {
 	}
 	return b
 }
-func runValidator[T any](ctx context.Context, v Validator[T], value T, first bool) error {
-	if first {
+func runValidator[T any](ctx context.Context, v Validator[T], value T, mode validationMode) error {
+	if mode == stopAtFirst {
 		return v.ValidateFirstContext(ctx, value)
 	}
 	return v.ValidateContext(ctx, value)

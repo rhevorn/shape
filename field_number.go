@@ -17,9 +17,11 @@ type NumberSpec[N Numeric] struct {
 func (f NumberSpec[N]) fieldDefinition() erasedField {
 	return eraseField(f.name, f.transformer, f.validator)
 }
-func (f NumberSpec[N]) Transform(v N) (N, error) { return f.transformer.Transform(v) }
+func (f NumberSpec[N]) Transform(v N) (N, error) {
+	return runSpecTransform(context.Background(), f.transformer, v)
+}
 func (f NumberSpec[N]) TransformContext(ctx context.Context, v N) (N, error) {
-	return f.transformer.TransformContext(ctx, v)
+	return runSpecTransform(ctx, f.transformer, v)
 }
 func (f NumberSpec[N]) Validate(v N) error { return f.validator.Validate(v) }
 func (f NumberSpec[N]) ValidateContext(ctx context.Context, v N) error {

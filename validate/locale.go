@@ -6,21 +6,26 @@ import (
 	"github.com/rhevorn/shape/internal/validationlocale"
 )
 
-type Language uint8
+// Language identifies a built-in validation-message language.
+type Language = validationlocale.Language
 
 const (
-	English Language = iota
-	SimplifiedChinese
+	// English selects English built-in messages.
+	English = validationlocale.English
+	// SimplifiedChinese selects Simplified Chinese built-in messages.
+	SimplifiedChinese = validationlocale.SimplifiedChinese
 )
 
-func SetLanguage(lang Language) { validationlocale.Set(uint8(requireLanguage(lang))) }
+// SetLanguage changes the process-wide default message language.
+func SetLanguage(lang Language) { validationlocale.Set(requireLanguage(lang)) }
 
+// WithLocale overrides the message language for operations using ctx.
 func WithLocale(ctx context.Context, lang Language) context.Context {
-	return validationlocale.With(ctx, uint8(requireLanguage(lang)))
+	return validationlocale.With(ctx, requireLanguage(lang))
 }
 
 func languageFromContext(ctx context.Context) Language {
-	return Language(validationlocale.Get(ctx))
+	return validationlocale.Get(ctx)
 }
 
 func requireLanguage(lang Language) Language {

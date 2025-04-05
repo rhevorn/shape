@@ -24,5 +24,9 @@ func main() {
 	fmt.Println(string(body))
 
 	requestBody, err := openapi.JSONRequestBody(schema, true)
-	fmt.Println("OpenAPI request body:", requestBody, "error:", err)
+	if err != nil {
+		panic(err)
+	}
+	body, _ = json.MarshalIndent(requestBody, "", "  ")
+	fmt.Println(string(body))
 }

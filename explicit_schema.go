@@ -44,10 +44,12 @@ func (s StructSpec[T]) RefineContext(rules ...func(context.Context, T) error) St
 	return s
 }
 
+// Transform applies field and whole-struct transforms without validation.
 func (s StructSpec[T]) Transform(value T) (T, error) {
 	return s.TransformContext(context.Background(), value)
 }
 
+// TransformContext applies transforms and observes context cancellation.
 func (s StructSpec[T]) TransformContext(ctx context.Context, value T) (T, error) {
 	return s.transformContext(ctx, value, false)
 }
@@ -65,34 +67,42 @@ func (s StructSpec[T]) transformContext(ctx context.Context, value T, owned bool
 	return applyWholeTransforms(ctx, s.transforms, out, owned)
 }
 
+// Validate collects validation issues without transforming value.
 func (s StructSpec[T]) Validate(value T) error {
 	return s.validator.Validate(value)
 }
 
+// ValidateContext collects issues and observes context cancellation.
 func (s StructSpec[T]) ValidateContext(ctx context.Context, value T) error {
 	return s.validator.ValidateContext(ctx, value)
 }
 
+// ValidateFirst stops after the first issue.
 func (s StructSpec[T]) ValidateFirst(value T) error {
 	return s.validator.ValidateFirst(value)
 }
 
+// ValidateFirstContext stops after the first issue and observes cancellation.
 func (s StructSpec[T]) ValidateFirstContext(ctx context.Context, value T) error {
 	return s.validator.ValidateFirstContext(ctx, value)
 }
 
+// ParseJSON decodes, transforms, and validates one JSON value.
 func (s StructSpec[T]) ParseJSON(source []byte, options ...JSONOptions) (T, error) {
 	return ParseJSON(s, source, options...)
 }
 
+// ParseJSONContext decodes, transforms, and validates with ctx.
 func (s StructSpec[T]) ParseJSONContext(ctx context.Context, source []byte, options ...JSONOptions) (T, error) {
 	return ParseJSONContext(ctx, s, source, options...)
 }
 
+// ParseJSONReader reads, transforms, and validates one JSON value.
 func (s StructSpec[T]) ParseJSONReader(reader io.Reader, options ...JSONOptions) (T, error) {
 	return ParseJSONReader(s, reader, options...)
 }
 
+// ParseJSONReaderContext is the context-aware reader form of ParseJSON.
 func (s StructSpec[T]) ParseJSONReaderContext(ctx context.Context, reader io.Reader, options ...JSONOptions) (T, error) {
 	return ParseJSONReaderContext(ctx, s, reader, options...)
 }

@@ -16,39 +16,36 @@ import (
 // reflectclone.MaxDepth, which bounds copies of a single value.
 const defaultMaxRecursiveDepth = 64
 
-type compiledRule func(context.Context, reflect.Value) error
-type valueStepKind uint8
+type tagCheck func(context.Context, reflect.Value) error
+type tagStepKind uint8
 
 const (
-	valueStepOption valueStepKind = iota
-	valueStepTransform
-	valueStepRule
+	tagStepOption tagStepKind = iota
+	tagStepTransform
+	tagStepRule
 )
 
-type valueStep struct {
-	kind      valueStepKind
+type tagStep struct {
+	kind      tagStepKind
 	option    string
 	fallback  reflect.Value
 	transform func(context.Context, reflect.Value) (reflect.Value, error)
-	check     compiledRule
+	check     tagCheck
 }
 
-type valuePlan struct {
+type tagPlan struct {
 	typ          reflect.Type
-	element      *valuePlan
-	key          *valuePlan
-	fields       []compiledField
-	fallback     reflect.Value
+	element      *tagPlan
+	fields       []tagField
 	fallbackKind string
-	transforms   []func(context.Context, reflect.Value) (reflect.Value, error)
-	checks       []compiledRule
+	hasTransform bool
 	descriptors  []spec.Rule
-	steps        []valueStep
+	steps        []tagStep
 	label        string
 }
 
-func copyPlan(p *valuePlan) *valuePlan { n := *p; return &n }
-func zeroValue(v reflect.Value) bool   { return reflectclone.IsZero(v) }
+func copyTagPlan(p *tagPlan) *tagPlan { n := *p; return &n }
+func isZero(v reflect.Value) bool     { return reflectclone.IsZero(v) }
 func finite(v reflect.Value) bool {
 	if v.Kind() == reflect.Float32 || v.Kind() == reflect.Float64 {
 		x := v.Float()
@@ -85,10 +82,10 @@ func numericRat(v reflect.Value) *big.Rat {
 func nilable(t reflect.Type) bool {
 	return t.Kind() == reflect.Pointer || t.Kind() == reflect.Slice || t.Kind() == reflect.Map
 }
-func addOptions(p *valuePlan, options ...spec.Option) *valuePlan {
-	p = copyPlan(p)
+func addOptions(p *tagPlan, options ...spec.Option) *tagPlan {
+	p = copyTagPlan(p)
 	for _, o := range options {
-		name := spec.OptionName(o)
+		name := o.Name
 		if name != "ifzero" && name != "ifnull" {
 			panic("shape: unknown option " + name)
 		}
@@ -101,7 +98,7 @@ func addOptions(p *valuePlan, options ...spec.Option) *valuePlan {
 		if name == "ifnull" && !nilable(p.typ) {
 			panic("shape: IfNull requires pointer, slice or map")
 		}
-		v := reflect.ValueOf(spec.OptionValue(o))
+		v := reflect.ValueOf(o.Value)
 		if !v.IsValid() {
 			if !nilable(p.typ) {
 				panic("shape: nil fallback for non-nilable type")
@@ -123,18 +120,16 @@ func addOptions(p *valuePlan, options ...spec.Option) *valuePlan {
 			panic("shape: invalid fallback: " + err.Error())
 		}
 		p.fallbackKind = name
-		p.fallback = snapshot
-		p.steps = appendCopy(p.steps, valueStep{kind: valueStepOption, option: name, fallback: snapshot})
+		p.steps = appendCopy(p.steps, tagStep{kind: tagStepOption, option: name, fallback: snapshot})
 	}
 	return p
 }
-func addRules(p *valuePlan, rules ...spec.Rule) *valuePlan {
-	p = copyPlan(p)
+func addRules(p *tagPlan, rules ...spec.Rule) *tagPlan {
+	p = copyTagPlan(p)
 	for _, r := range rules {
 		check := compileRule(p.typ, r)
-		p.checks = appendCopy(p.checks, check)
 		p.descriptors = appendCopy(p.descriptors, r)
-		p.steps = appendCopy(p.steps, valueStep{kind: valueStepRule, check: check})
+		p.steps = appendCopy(p.steps, tagStep{kind: tagStepRule, check: check})
 	}
 	return p
 }

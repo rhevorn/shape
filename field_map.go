@@ -17,9 +17,11 @@ type MapSpec[K MapKey, V any] struct {
 func (f MapSpec[K, V]) fieldDefinition() erasedField {
 	return eraseField(f.name, f.transformer, f.validator)
 }
-func (f MapSpec[K, V]) Transform(v map[K]V) (map[K]V, error) { return f.transformer.Transform(v) }
+func (f MapSpec[K, V]) Transform(v map[K]V) (map[K]V, error) {
+	return runSpecTransform(context.Background(), f.transformer, v)
+}
 func (f MapSpec[K, V]) TransformContext(ctx context.Context, v map[K]V) (map[K]V, error) {
-	return f.transformer.TransformContext(ctx, v)
+	return runSpecTransform(ctx, f.transformer, v)
 }
 func (f MapSpec[K, V]) Validate(v map[K]V) error { return f.validator.Validate(v) }
 func (f MapSpec[K, V]) ValidateContext(ctx context.Context, v map[K]V) error {

@@ -3,10 +3,9 @@ package transform
 import (
 	"context"
 	"fmt"
-	"reflect"
-	"sort"
 	"time"
 
+	"github.com/rhevorn/shape/internal/maporder"
 	"github.com/rhevorn/shape/internal/transformpath"
 	"github.com/rhevorn/shape/types"
 )
@@ -18,19 +17,34 @@ type MapKey interface {
 		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
 }
 
+// Value creates a transformer for any T.
 func Value[T any]() ValueTransformer[T] { return ValueTransformer[T]{} }
 
+// String creates a string transformer.
 func String() StringTransformer { return StringTransformer{} }
 
+// Number creates a transformer for a supported numeric type.
 func Number[N Numeric]() NumberTransformer[N] { return NumberTransformer[N]{} }
 
-func Int() NumberTransformer[int]                 { return Number[int]() }
-func Int64() NumberTransformer[int64]             { return Number[int64]() }
-func Float64() NumberTransformer[float64]         { return Number[float64]() }
-func Duration() NumberTransformer[types.Duration] { return Number[types.Duration]() }
-func Bool() ValueTransformer[bool]                { return Value[bool]() }
-func Time() ValueTransformer[time.Time]           { return Value[time.Time]() }
+// Int creates an int transformer.
+func Int() NumberTransformer[int] { return Number[int]() }
 
+// Int64 creates an int64 transformer.
+func Int64() NumberTransformer[int64] { return Number[int64]() }
+
+// Float64 creates a float64 transformer.
+func Float64() NumberTransformer[float64] { return Number[float64]() }
+
+// Duration creates a transformer for types.Duration.
+func Duration() NumberTransformer[types.Duration] { return Number[types.Duration]() }
+
+// Bool creates a bool transformer.
+func Bool() ValueTransformer[bool] { return Value[bool]() }
+
+// Time creates a time.Time transformer.
+func Time() ValueTransformer[time.Time] { return Value[time.Time]() }
+
+// Pointer creates a transformer for *T that applies inner to non-nil values.
 func Pointer[T any](inner Transformer[T]) PointerTransformer[T] {
 	if inner == nil {
 		panic("transform: nil pointer transformer")
@@ -48,6 +62,7 @@ func Pointer[T any](inner Transformer[T]) PointerTransformer[T] {
 	})}
 }
 
+// Slice creates a transformer that applies inner to each element.
 func Slice[T any](inner Transformer[T]) SliceTransformer[T] {
 	if inner == nil {
 		panic("transform: nil slice transformer")
@@ -70,6 +85,7 @@ func Slice[T any](inner Transformer[T]) SliceTransformer[T] {
 	})}
 }
 
+// Map creates a transformer that applies key and value in stable key order.
 func Map[K MapKey, V any](key Transformer[K], value Transformer[V]) MapTransformer[K, V] {
 	if key == nil || value == nil {
 		panic("transform: nil map transformer")
@@ -78,11 +94,10 @@ func Map[K MapKey, V any](key Transformer[K], value Transformer[V]) MapTransform
 		if input == nil {
 			return nil, nil
 		}
-		keys := make([]K, 0, len(input))
-		for item := range input {
-			keys = append(keys, item)
+		keys, err := maporder.Sorted(ctx, input)
+		if err != nil {
+			return nil, err
 		}
-		sort.Slice(keys, func(i, j int) bool { return lessMapKey(keys[i], keys[j]) })
 		out := make(map[K]V, len(input))
 		for _, item := range keys {
 			if err := ctx.Err(); err != nil {
@@ -103,16 +118,4 @@ func Map[K MapKey, V any](key Transformer[K], value Transformer[V]) MapTransform
 		}
 		return out, nil
 	})}
-}
-
-func lessMapKey[K MapKey](a, b K) bool {
-	av, bv := reflect.ValueOf(a), reflect.ValueOf(b)
-	switch av.Kind() {
-	case reflect.String:
-		return av.String() < bv.String()
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return av.Int() < bv.Int()
-	default:
-		return av.Uint() < bv.Uint()
-	}
 }

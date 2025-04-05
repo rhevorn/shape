@@ -3,7 +3,10 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 
 	"github.com/rhevorn/shape"
 )
@@ -31,8 +34,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	http.HandleFunc("/", handler)
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		panic(err)
-	}
+	request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":" Pong "}`))
+	response := httptest.NewRecorder()
+	handler(response, request)
+	fmt.Print(response.Body.String())
 }

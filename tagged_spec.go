@@ -19,7 +19,7 @@ type TaggedSpec[T any] struct {
 var _ Schema[struct{}] = TaggedSpec[struct{}]{}
 var _ JSONSchema[struct{}] = TaggedSpec[struct{}]{}
 
-func newTaggedSpec[T any](plan *valuePlan) TaggedSpec[T] {
+func newTaggedSpec[T any](plan *tagPlan) TaggedSpec[T] {
 	base := structSchema[T]{p: plan}
 	return TaggedSpec[T]{base: base, validator: base}
 }
@@ -62,10 +62,12 @@ func (s TaggedSpec[T]) RefineContext(rules ...func(context.Context, T) error) Ta
 	return s
 }
 
+// Transform applies tag and whole-struct transforms without validation.
 func (s TaggedSpec[T]) Transform(value T) (T, error) {
 	return s.TransformContext(context.Background(), value)
 }
 
+// TransformContext applies transforms and observes context cancellation.
 func (s TaggedSpec[T]) TransformContext(ctx context.Context, value T) (T, error) {
 	return s.transformContext(ctx, value, false)
 }
@@ -85,31 +87,45 @@ func (s TaggedSpec[T]) transformContext(ctx context.Context, value T, owned bool
 	return applyWholeTransforms(ctx, s.transforms, out, owned)
 }
 
+// Validate collects validation issues without transforming value.
 func (s TaggedSpec[T]) Validate(value T) error { return s.validator.Validate(value) }
+
+// ValidateContext collects issues and observes context cancellation.
 func (s TaggedSpec[T]) ValidateContext(ctx context.Context, value T) error {
 	return s.validator.ValidateContext(ctx, value)
 }
+
+// ValidateFirst stops after the first issue.
 func (s TaggedSpec[T]) ValidateFirst(value T) error { return s.validator.ValidateFirst(value) }
+
+// ValidateFirstContext stops after the first issue and observes cancellation.
 func (s TaggedSpec[T]) ValidateFirstContext(ctx context.Context, value T) error {
 	return s.validator.ValidateFirstContext(ctx, value)
 }
 
+// ParseJSON decodes, transforms, and validates one JSON value.
 func (s TaggedSpec[T]) ParseJSON(source []byte, options ...JSONOptions) (T, error) {
 	return ParseJSON(s, source, options...)
 }
+
+// ParseJSONContext decodes, transforms, and validates with ctx.
 func (s TaggedSpec[T]) ParseJSONContext(ctx context.Context, source []byte, options ...JSONOptions) (T, error) {
 	return ParseJSONContext(ctx, s, source, options...)
 }
+
+// ParseJSONReader reads, transforms, and validates one JSON value.
 func (s TaggedSpec[T]) ParseJSONReader(reader io.Reader, options ...JSONOptions) (T, error) {
 	return ParseJSONReader(s, reader, options...)
 }
+
+// ParseJSONReaderContext is the context-aware reader form of ParseJSON.
 func (s TaggedSpec[T]) ParseJSONReaderContext(ctx context.Context, reader io.Reader, options ...JSONOptions) (T, error) {
 	return ParseJSONReaderContext(ctx, s, reader, options...)
 }
 
-func (s TaggedSpec[T]) exportPlan() (*valuePlan, error) {
+func (s TaggedSpec[T]) schemaPlan() (*tagPlan, error) {
 	if s.custom {
-		return nil, &UnsupportedSchemaError{Operation: "custom Apply or Refine"}
+		return nil, &UnsupportedSchemaError{Feature: "custom Apply or Refine"}
 	}
 	return s.base.p, nil
 }

@@ -26,7 +26,7 @@ func New[T any](fields ...FieldSpec) StructSpec[T] {
 
 // Struct derives and caches a Schema for an ordinary value struct from its
 // json and shape tags. Invalid program configuration panics during construction.
-func Struct[T any]() TaggedSpec[T] { return taggedSchema[T]() }
+func Struct[T any]() TaggedSpec[T] { return compileTaggedSpec[T]() }
 
 // Value creates a Schema for any type. Omit name when using it as a Pointer,
 // Slice, or Map element Schema.
@@ -34,23 +34,37 @@ func Value[T any](name ...string) ValueSpec[T] {
 	return ValueSpec[T]{name: oneFieldName(name), transformer: transform.Value[T](), validator: validate.Value[T]()}
 }
 
+// String creates a string Schema, optionally named for use in New.
 func String(name ...string) StringSpec {
 	return StringSpec{name: oneFieldName(name), transformer: transform.String(), validator: validate.String()}
 }
 
+// Number creates a numeric Schema, optionally named for use in New.
 func Number[N Numeric](name ...string) NumberSpec[N] {
 	return NumberSpec[N]{name: oneFieldName(name), transformer: transform.Number[N](), validator: validate.Number[N]()}
 }
 
-func Int(name ...string) NumberSpec[int]         { return Number[int](name...) }
-func Int64(name ...string) NumberSpec[int64]     { return Number[int64](name...) }
+// Int creates an int Schema.
+func Int(name ...string) NumberSpec[int] { return Number[int](name...) }
+
+// Int64 creates an int64 Schema.
+func Int64(name ...string) NumberSpec[int64] { return Number[int64](name...) }
+
+// Float64 creates a float64 Schema.
 func Float64(name ...string) NumberSpec[float64] { return Number[float64](name...) }
+
+// Duration creates a Schema for types.Duration.
 func Duration(name ...string) NumberSpec[types.Duration] {
 	return Number[types.Duration](name...)
 }
-func Bool(name ...string) ValueSpec[bool]      { return Value[bool](name...) }
+
+// Bool creates a bool Schema.
+func Bool(name ...string) ValueSpec[bool] { return Value[bool](name...) }
+
+// Time creates a time.Time Schema.
 func Time(name ...string) ValueSpec[time.Time] { return Value[time.Time](name...) }
 
+// Pointer creates a pointer Schema with inner behavior for non-nil values.
 func Pointer[T any](name string, inner Schema[T]) PointerSpec[T] {
 	return pointerSpec(name, inner)
 }
@@ -62,6 +76,7 @@ func pointerSpec[T any](name string, inner Schema[T]) PointerSpec[T] {
 	}
 }
 
+// Slice creates a slice Schema that applies inner to every element.
 func Slice[T any](name string, inner Schema[T]) SliceSpec[T] {
 	return sliceSpec(name, inner)
 }
@@ -73,6 +88,7 @@ func sliceSpec[T any](name string, inner Schema[T]) SliceSpec[T] {
 	}
 }
 
+// Map creates a map Schema that applies key and value in stable key order.
 func Map[K MapKey, V any](name string, key Schema[K], value Schema[V]) MapSpec[K, V] {
 	requireSchema(key)
 	requireSchema(value)

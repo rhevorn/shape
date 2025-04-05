@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/rhevorn/shape"
 )
@@ -31,7 +32,10 @@ var userSchema = shape.New[User](
 	shape.Slice("Tags", shape.String().Trim().NotEmpty()).NotEmpty().Unique(),
 	shape.Map("Scores", shape.String().Trim().NotEmpty(), shape.Int().NonNegative()),
 	shape.Field("Profile", profileSchema),
-).Refine(func(user User) error {
+).Apply(func(user User) (User, error) {
+	user.Name = strings.Join(strings.Fields(user.Name), " ")
+	return user, nil
+}).Refine(func(user User) error {
 	if user.Nickname != nil && *user.Nickname == user.Name {
 		return errors.New("nickname must differ from name")
 	}
