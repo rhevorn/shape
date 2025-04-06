@@ -10,6 +10,12 @@ Before submitting a change, run:
 make release-check
 ```
 
+`tools/shapevet` is a separate Go module so its `golang.org/x/tools`
+dependency does not enter the library module graph. For a release, publish the
+root module tag first, then publish the matching nested-module tag (for
+example, `v0.1.0` followed by `tools/shapevet/v0.1.0`). Update the root version
+required by `tools/shapevet/go.mod` when the two modules move together.
+
 Public API changes must update `docs/API.md` and relevant examples. After the
 first release, follow the compatibility policy in `docs/API.md`; incompatible
 behavior requires a major version.

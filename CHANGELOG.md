@@ -32,6 +32,21 @@
 
 ### Fixed
 
+- Map validation paths preserve the concrete key type, so integer key `3` is
+  reported as `[3]` and string key `"3"` as `["3"]`; key and value failures
+  also remain distinguishable when the map has a custom label.
+- A non-nil empty `*validate.Error` returned by `Refine` is no longer silently
+  accepted.
+- Fluent and tagged Schemas share string predicates, validation messages, and
+  deterministic map ordering, with cross-path contract tests preventing
+  drift.
+- `IfZero` and `IfNull` fallback values are snapshotted at construction and
+  cloned per execution; unsupported mutable values fail during construction.
+- Standalone root Specs consistently expose transform failures as
+  `*shape.TransformError`, including nested map and slice paths.
+- Unicode whitespace is parsed consistently throughout the tag grammar, and
+  labels containing `%` are rendered as ordinary text rather than format
+  strings.
 - Nested-Schema transform failures keep the collection index or key in the
   reported path (`Items[0].Sku`), matching what `Validate` already reported.
   An error wrapped with `%w` by user code no longer loses its inner segments.

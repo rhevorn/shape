@@ -21,8 +21,9 @@ returns errors.
 
 ## Status
 
-Pre-1.0: the public surface is documented in [`docs/API.md`](docs/API.md), but
-breaking changes may still happen before a stable release.
+Release candidate. The public surface and behavioral contract are frozen in
+[`docs/API.md`](docs/API.md); after the first public tag, incompatible changes
+require a major version.
 
 ## Install
 

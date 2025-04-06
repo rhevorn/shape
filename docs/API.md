@@ -51,8 +51,8 @@ result is used as a Pointer/Slice/Map inner Schema or as a standalone Schema.
 `New` rejects unnamed,
 missing, unexported, duplicate, type-mismatched, and `json:"-"` fields.
 
-`Numeric` includes named forms of all integers except `uintptr` and
-`float32`/`float64`. Complex numbers are excluded. `MapKey` includes named
+`Numeric` includes named forms of signed and unsigned integer types except
+`uintptr`, plus `float32` and `float64`. Complex numbers are excluded. `MapKey` includes named
 string, signed-integer, and unsigned-integer types; `uintptr` is excluded.
 
 ### Spec methods by type
@@ -270,7 +270,7 @@ type TransformError struct {
 }
 
 type UnsupportedSchemaError struct {
-    Operation string
+    Feature string
 }
 
 ExportDocument[T](schema Schema[T]) (map[string]any, error)
@@ -370,20 +370,27 @@ type Issue struct {
 
 FieldPath(string) PathSegment
 IndexPath(int) PathSegment
+MapKeyPath(any) PathSegment
 
 type PathKind uint8
 const PathField PathKind
 const PathIndex PathKind
+const PathMapKey PathKind
 
 type PathSegment struct {
     Kind PathKind
     Key string
     Index int
+    MapKey any
 }
 
 func (Path) String() string
 func (Path) MarshalJSON() ([]byte, error)
 ```
+
+Map-key segments preserve the concrete key value: integer key `3` renders as
+`[3]` and marshals as JSON number `3`, while string key `"3"` renders as
+`["3"]` and marshals as a JSON string.
 
 Stable codes:
 
