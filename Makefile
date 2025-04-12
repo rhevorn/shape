@@ -1,9 +1,15 @@
-.PHONY: bench check fmt fmt-check fuzz-smoke release-check shapevet-check shapevet-test test test-race vet
+.PHONY: bench check fmt fmt-check fuzz-smoke release-check shapevet-check shapevet-isolated shapevet-test test test-race vet
 
 check: fmt-check vet test
 
 shapevet-test:
 	cd tools/shapevet && go test ./...
+
+shapevet-isolated:
+	cd tools/shapevet && GOWORK=off go mod download
+	cd tools/shapevet && GOWORK=off go mod verify
+	cd tools/shapevet && GOWORK=off go test ./...
+	cd tools/shapevet && GOWORK=off go vet ./...
 
 fmt:
 	gofmt -w $$(rg --files -g '*.go')
@@ -32,4 +38,4 @@ fuzz-smoke:
 bench:
 	go test -run '^$$' -bench . -benchmem ./...
 
-release-check: check shapevet-test shapevet-check test-race fuzz-smoke bench
+release-check: check shapevet-test shapevet-isolated shapevet-check test-race fuzz-smoke bench

@@ -21,6 +21,7 @@ jobs:
           cache: true
       - run: make check
       - run: make shapevet-test
+      - run: make shapevet-isolated
       - run: make shapevet-check
       - run: make test-race
 

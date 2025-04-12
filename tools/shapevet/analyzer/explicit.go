@@ -11,7 +11,7 @@ import (
 )
 
 func checkExplicitSchema(pass *analysis.Pass, call *ast.CallExpr, target types.Type) {
-	if _, generic := types.Unalias(target).(*types.TypeParam); generic {
+	if mentionsTypeParam(target) {
 		return
 	}
 	if classify(target) == kTime {
@@ -130,12 +130,16 @@ func calledName(pass *analysis.Pass, expression ast.Expr) string {
 }
 
 func calledObject(pass *analysis.Pass, expression ast.Expr) *types.Func {
-	selector, ok := unindex(expression).(*ast.SelectorExpr)
-	if !ok {
+	switch expression := unindex(expression).(type) {
+	case *ast.SelectorExpr:
+		object, _ := pass.TypesInfo.Uses[expression.Sel].(*types.Func)
+		return object
+	case *ast.Ident:
+		object, _ := pass.TypesInfo.Uses[expression].(*types.Func)
+		return object
+	default:
 		return nil
 	}
-	object, _ := pass.TypesInfo.Uses[selector.Sel].(*types.Func)
-	return object
 }
 
 func unindex(expression ast.Expr) ast.Expr {

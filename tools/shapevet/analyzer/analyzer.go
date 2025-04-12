@@ -80,16 +80,16 @@ func checkConstructionCall(pass *analysis.Pass, call *ast.CallExpr) {
 			typeArgument = indexed.Indices[0]
 		}
 	}
-	selector, ok := base.(*ast.SelectorExpr)
-	if !ok {
+	object := calledObject(pass, base)
+	if object == nil {
 		return
 	}
-	object, ok := pass.TypesInfo.Uses[selector.Sel].(*types.Func)
+	_, ok := object.Type().(*types.Signature)
 	if !ok || object.Pkg() == nil || object.Pkg().Path() != "github.com/rhevorn/shape" {
 		return
 	}
 	var target types.Type
-	switch selector.Sel.Name {
+	switch object.Name() {
 	case "New":
 		if typeArgument != nil {
 			target = pass.TypesInfo.TypeOf(typeArgument)
@@ -112,7 +112,7 @@ func checkConstructionCall(pass *analysis.Pass, call *ast.CallExpr) {
 	if target == nil {
 		return
 	}
-	if _, generic := types.Unalias(target).(*types.TypeParam); generic {
+	if mentionsTypeParam(target) {
 		return
 	}
 	if err := checkStructType(target, map[types.Type]bool{}); err != nil {
