@@ -3,6 +3,7 @@ package shape
 import (
 	"context"
 
+	"github.com/rhevorn/shape/internal/program"
 	"github.com/rhevorn/shape/transform"
 	"github.com/rhevorn/shape/validate"
 )
@@ -14,7 +15,7 @@ type StringSpec struct {
 	validator   validate.StringValidator
 }
 
-func (f StringSpec) fieldDefinition() erasedField {
+func (f StringSpec) fieldDefinition() program.Definition {
 	return eraseField(f.name, f.transformer, f.validator)
 }
 func (f StringSpec) Transform(v string) (string, error) {

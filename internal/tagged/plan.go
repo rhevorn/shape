@@ -1,4 +1,4 @@
-package shape
+package tagged
 
 import (
 	"context"
@@ -33,9 +33,9 @@ type tagStep struct {
 	check     tagCheck
 }
 
-type tagPlan struct {
+type Plan struct {
 	typ          reflect.Type
-	element      *tagPlan
+	element      *Plan
 	fields       []tagField
 	fallbackKind string
 	hasTransform bool
@@ -44,8 +44,14 @@ type tagPlan struct {
 	label        string
 }
 
-func copyTagPlan(p *tagPlan) *tagPlan { n := *p; return &n }
-func isZero(v reflect.Value) bool     { return reflectclone.IsZero(v) }
+func copyTagPlan(p *Plan) *Plan   { n := *p; return &n }
+func isZero(v reflect.Value) bool { return reflectclone.IsZero(v) }
+
+func appendCopy[T any](values []T, additions ...T) []T {
+	out := make([]T, len(values), len(values)+len(additions))
+	copy(out, values)
+	return append(out, additions...)
+}
 func finite(v reflect.Value) bool {
 	if v.Kind() == reflect.Float32 || v.Kind() == reflect.Float64 {
 		x := v.Float()
@@ -82,7 +88,7 @@ func numericRat(v reflect.Value) *big.Rat {
 func nilable(t reflect.Type) bool {
 	return t.Kind() == reflect.Pointer || t.Kind() == reflect.Slice || t.Kind() == reflect.Map
 }
-func addOptions(p *tagPlan, options ...spec.Option) *tagPlan {
+func addOptions(p *Plan, options ...spec.Option) *Plan {
 	p = copyTagPlan(p)
 	for _, o := range options {
 		name := o.Name
@@ -124,7 +130,7 @@ func addOptions(p *tagPlan, options ...spec.Option) *tagPlan {
 	}
 	return p
 }
-func addRules(p *tagPlan, rules ...spec.Rule) *tagPlan {
+func addRules(p *Plan, rules ...spec.Rule) *Plan {
 	p = copyTagPlan(p)
 	for _, r := range rules {
 		check := compileRule(p.typ, r)

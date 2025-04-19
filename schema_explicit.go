@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 
+	"github.com/rhevorn/shape/internal/pipeline"
 	"github.com/rhevorn/shape/transform"
 	"github.com/rhevorn/shape/validate"
 )
@@ -12,7 +13,7 @@ import (
 type StructSpec[T any] struct {
 	transformer transform.Transformer[T]
 	validator   validate.Validator[T]
-	transforms  []wholeTransformStep[T]
+	transforms  []pipeline.Step[T]
 }
 
 var _ Schema[struct{}] = StructSpec[struct{}]{}
@@ -20,13 +21,13 @@ var _ JSONSchema[struct{}] = StructSpec[struct{}]{}
 
 // Apply appends one or more whole-struct transforms after all field transforms.
 func (s StructSpec[T]) Apply(steps ...func(T) (T, error)) StructSpec[T] {
-	s.transforms = appendWholeApply(s.transforms, steps...)
+	s.transforms = pipeline.Append(s.transforms, steps...)
 	return s
 }
 
 // ApplyContext is the context-aware form of Apply.
 func (s StructSpec[T]) ApplyContext(steps ...func(context.Context, T) (T, error)) StructSpec[T] {
-	s.transforms = appendWholeApplyContext(s.transforms, steps...)
+	s.transforms = pipeline.AppendContext(s.transforms, steps...)
 	return s
 }
 
@@ -64,7 +65,11 @@ func (s StructSpec[T]) transformContext(ctx context.Context, value T, owned bool
 	if err != nil {
 		return zero, normalizeTransformError(ctx, err)
 	}
-	return applyWholeTransforms(ctx, s.transforms, out, owned)
+	out, err = pipeline.Apply(ctx, s.transforms, out, owned)
+	if err != nil {
+		return zero, normalizeTransformError(ctx, err)
+	}
+	return out, nil
 }
 
 // Validate collects validation issues without transforming value.

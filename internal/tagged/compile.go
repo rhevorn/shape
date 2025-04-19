@@ -1,4 +1,4 @@
-package shape
+package tagged
 
 import (
 	"fmt"
@@ -9,41 +9,35 @@ import (
 )
 
 type structCacheEntry struct {
-	plan *tagPlan
+	plan *Plan
 	err  error
 }
 
 var structCache sync.Map
 
-func compileTaggedSpec[T any]() TaggedSpec[T] {
-	t := reflect.TypeFor[T]()
+// Compile derives and caches an immutable tag plan for t.
+func Compile(t reflect.Type) (*Plan, error) {
 	if t.Kind() != reflect.Struct || t == reflect.TypeFor[time.Time]() {
-		panic("shape: Struct requires an ordinary value struct")
+		return nil, fmt.Errorf("shape: Struct requires an ordinary value struct")
 	}
 	if cached, ok := structCache.Load(t); ok {
 		e := cached.(structCacheEntry)
-		if e.err != nil {
-			panic(e.err)
-		}
-		return newTaggedSpec[T](e.plan)
+		return e.plan, e.err
 	}
 	p, err := compileType(t, map[reflect.Type]bool{})
 	actual, _ := structCache.LoadOrStore(t, structCacheEntry{p, err})
 	e := actual.(structCacheEntry)
-	if e.err != nil {
-		panic(e.err)
-	}
-	return newTaggedSpec[T](e.plan)
+	return e.plan, e.err
 }
 
 type tagField struct {
 	index int
 	name  string
-	plan  *tagPlan
+	plan  *Plan
 }
 
-func compileType(t reflect.Type, active map[reflect.Type]bool) (*tagPlan, error) {
-	p := &tagPlan{typ: t}
+func compileType(t reflect.Type, active map[reflect.Type]bool) (*Plan, error) {
+	p := &Plan{typ: t}
 	if t == reflect.TypeFor[time.Time]() || t == durationType {
 		return p, nil
 	}

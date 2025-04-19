@@ -1,17 +1,22 @@
-package shape
+package pipeline
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"reflect"
+
+	"github.com/rhevorn/shape/internal/reflectclone"
 )
 
-type wholeTransformStep[T any] func(context.Context, T) (T, error)
+// Step transforms an entire schema value.
+type Step[T any] func(context.Context, T) (T, error)
 
-func appendWholeApply[T any](current []wholeTransformStep[T], steps ...func(T) (T, error)) []wholeTransformStep[T] {
+func Append[T any](current []Step[T], steps ...func(T) (T, error)) []Step[T] {
 	if len(steps) == 0 {
 		return current
 	}
-	out := append([]wholeTransformStep[T](nil), current...)
+	out := append([]Step[T](nil), current...)
 	for _, step := range steps {
 		if step == nil {
 			panic("shape: nil Apply function")
@@ -23,11 +28,11 @@ func appendWholeApply[T any](current []wholeTransformStep[T], steps ...func(T) (
 	return out
 }
 
-func appendWholeApplyContext[T any](current []wholeTransformStep[T], steps ...func(context.Context, T) (T, error)) []wholeTransformStep[T] {
+func AppendContext[T any](current []Step[T], steps ...func(context.Context, T) (T, error)) []Step[T] {
 	if len(steps) == 0 {
 		return current
 	}
-	out := append([]wholeTransformStep[T](nil), current...)
+	out := append([]Step[T](nil), current...)
 	for _, step := range steps {
 		if step == nil {
 			panic("shape: nil ApplyContext function")
@@ -37,7 +42,7 @@ func appendWholeApplyContext[T any](current []wholeTransformStep[T], steps ...fu
 	return out
 }
 
-func runWholeTransforms[T any](ctx context.Context, steps []wholeTransformStep[T], value T) (T, error) {
+func run[T any](ctx context.Context, steps []Step[T], value T) (T, error) {
 	var zero T
 	for _, step := range steps {
 		if err := ctx.Err(); err != nil {
@@ -58,9 +63,9 @@ func runWholeTransforms[T any](ctx context.Context, steps []wholeTransformStep[T
 // applyWholeTransforms runs the whole-struct steps that follow a base
 // transform, detaching the value first unless the caller already handed us a
 // private copy. Both Schema implementations use this ownership policy.
-func applyWholeTransforms[T any](
+func Apply[T any](
 	ctx context.Context,
-	transforms []wholeTransformStep[T],
+	transforms []Step[T],
 	value T,
 	owned bool,
 ) (T, error) {
@@ -71,22 +76,33 @@ func applyWholeTransforms[T any](
 	if !owned {
 		detached, err := cloneWholeValue(ctx, value)
 		if err != nil {
-			return zero, normalizeTransformError(ctx, err)
+			return zero, cloneError(err)
 		}
 		value = detached
 	}
-	out, err := runWholeTransforms(ctx, transforms, value)
+	out, err := run(ctx, transforms, value)
 	if err != nil {
-		return zero, normalizeTransformError(ctx, err)
+		return zero, err
 	}
 	return out, nil
 }
 
 func cloneWholeValue[T any](ctx context.Context, value T) (T, error) {
 	var zero T
-	out, err := cloneValue(ctx, reflect.ValueOf(&value).Elem(), false)
+	out, err := reflectclone.Clone(ctx, reflect.ValueOf(&value).Elem(), false)
 	if err != nil {
 		return zero, err
 	}
 	return out.Interface().(T), nil
+}
+
+func cloneError(err error) error {
+	switch {
+	case errors.Is(err, reflectclone.ErrDepthExceeded):
+		return errors.New("shape: copy depth exceeded (cyclic or deeply nested value)")
+	case errors.Is(err, reflectclone.ErrUnsupportedType):
+		return fmt.Errorf("shape: unsupported default type: %v", err)
+	default:
+		return err
+	}
 }

@@ -4,23 +4,25 @@ import (
 	"context"
 	"io"
 
+	"github.com/rhevorn/shape/internal/pipeline"
+	"github.com/rhevorn/shape/internal/tagged"
 	"github.com/rhevorn/shape/validate"
 )
 
 // TaggedSpec is the immutable tagged struct Schema returned by Struct. Apply
 // and Refine add whole-struct behavior after the compiled field behavior.
 type TaggedSpec[T any] struct {
-	base       structSchema[T]
+	base       tagged.Runtime[T]
 	validator  validate.Validator[T]
-	transforms []wholeTransformStep[T]
+	transforms []pipeline.Step[T]
 	custom     bool
 }
 
 var _ Schema[struct{}] = TaggedSpec[struct{}]{}
 var _ JSONSchema[struct{}] = TaggedSpec[struct{}]{}
 
-func newTaggedSpec[T any](plan *tagPlan) TaggedSpec[T] {
-	base := structSchema[T]{p: plan}
+func newTaggedSpec[T any](plan *tagged.Plan) TaggedSpec[T] {
+	base := tagged.Runtime[T]{Plan: plan}
 	return TaggedSpec[T]{base: base, validator: base}
 }
 
@@ -28,7 +30,7 @@ func (s TaggedSpec[T]) Apply(steps ...func(T) (T, error)) TaggedSpec[T] {
 	if len(steps) == 0 {
 		return s
 	}
-	s.transforms = appendWholeApply(s.transforms, steps...)
+	s.transforms = pipeline.Append(s.transforms, steps...)
 	s.custom = true
 	return s
 }
@@ -37,7 +39,7 @@ func (s TaggedSpec[T]) ApplyContext(steps ...func(context.Context, T) (T, error)
 	if len(steps) == 0 {
 		return s
 	}
-	s.transforms = appendWholeApplyContext(s.transforms, steps...)
+	s.transforms = pipeline.AppendContext(s.transforms, steps...)
 	s.custom = true
 	return s
 }
@@ -84,7 +86,11 @@ func (s TaggedSpec[T]) transformContext(ctx context.Context, value T, owned bool
 	if err != nil {
 		return zero, normalizeTransformError(ctx, err)
 	}
-	return applyWholeTransforms(ctx, s.transforms, out, owned)
+	out, err = pipeline.Apply(ctx, s.transforms, out, owned)
+	if err != nil {
+		return zero, normalizeTransformError(ctx, err)
+	}
+	return out, nil
 }
 
 // Validate collects validation issues without transforming value.
@@ -123,9 +129,9 @@ func (s TaggedSpec[T]) ParseJSONReaderContext(ctx context.Context, reader io.Rea
 	return ParseJSONReaderContext(ctx, s, reader, options...)
 }
 
-func (s TaggedSpec[T]) schemaPlan() (*tagPlan, error) {
+func (s TaggedSpec[T]) schemaPlan() (*tagged.Plan, error) {
 	if s.custom {
 		return nil, &UnsupportedSchemaError{Feature: "custom Apply or Refine"}
 	}
-	return s.base.p, nil
+	return s.base.Plan, nil
 }

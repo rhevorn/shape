@@ -1,4 +1,4 @@
-package shape
+package tagged
 
 import (
 	"context"
@@ -11,52 +11,40 @@ import (
 	"github.com/rhevorn/shape/validate"
 )
 
-// UnsupportedSchemaError reports processing that JSON Schema cannot represent
+// UnsupportedError reports processing that JSON Schema cannot represent
 // without changing Shape's runtime behavior.
-type UnsupportedSchemaError struct{ Feature string }
+type UnsupportedError struct{ Feature string }
 
 // Error identifies the behavior that cannot be represented.
-func (e *UnsupportedSchemaError) Error() string {
+func (e *UnsupportedError) Error() string {
 	if e == nil {
 		return "shape: schema export does not support this schema"
 	}
 	return "shape: schema export does not support " + e.Feature
 }
 
-// ExportDocument exports representable behavior as a JSON Schema object without
-// a root $schema dialect declaration. Most users should call jsonschema.Export.
-func ExportDocument[T any](schema Schema[T]) (map[string]any, error) {
-	provider, ok := any(schema).(interface{ schemaPlan() (*tagPlan, error) })
-	if !ok {
-		return nil, &UnsupportedSchemaError{Feature: "custom schema"}
-	}
-	p, err := provider.schemaPlan()
-	if err != nil {
-		return nil, err
-	}
-	return exportTagPlan(p)
-}
-func exportTagPlan(p *tagPlan) (map[string]any, error) { return exportTagPlanAt(p, false) }
+// Export builds a JSON Schema document from a compiled tag plan.
+func Export(p *Plan) (map[string]any, error) { return exportTagPlanAt(p, false) }
 
 // exportTagPlanAt builds the document for p. pointee is true when p sits behind a
 // pointer: there a JSON null decodes to the pointer, not to p, so p must not
 // offer a null branch of its own.
-func exportTagPlanAt(p *tagPlan, pointee bool) (map[string]any, error) {
+func exportTagPlanAt(p *Plan, pointee bool) (map[string]any, error) {
 	if p == nil {
-		return nil, &UnsupportedSchemaError{Feature: "uninitialized schema"}
+		return nil, &UnsupportedError{Feature: "uninitialized schema"}
 	}
 	if p.fallbackKind != "" {
-		return nil, &UnsupportedSchemaError{Feature: p.fallbackKind + " fallback"}
+		return nil, &UnsupportedError{Feature: p.fallbackKind + " fallback"}
 	}
 	if p.hasTransform {
-		return nil, &UnsupportedSchemaError{Feature: "transform"}
+		return nil, &UnsupportedError{Feature: "transform"}
 	}
 	t := p.typ
 	var document map[string]any
 	if t == durationType {
 		document = map[string]any{"type": "string", "format": "duration"}
 		if len(p.descriptors) != 0 {
-			return nil, &UnsupportedSchemaError{Feature: "duration comparison rules"}
+			return nil, &UnsupportedError{Feature: "duration comparison rules"}
 		}
 		return applyExportRules(document, p, pointee)
 	}
@@ -65,7 +53,7 @@ func exportTagPlanAt(p *tagPlan, pointee bool) (map[string]any, error) {
 		return applyExportRules(document, p, pointee)
 	}
 	if hasCustomJSON(t) {
-		return nil, &UnsupportedSchemaError{Feature: fmt.Sprintf("custom JSON representation for %v", t)}
+		return nil, &UnsupportedError{Feature: fmt.Sprintf("custom JSON representation for %v", t)}
 	}
 	switch t.Kind() {
 	case reflect.String:
@@ -86,7 +74,7 @@ func exportTagPlanAt(p *tagPlan, pointee bool) (map[string]any, error) {
 		document = map[string]any{"type": "number"}
 	case reflect.Pointer:
 		if p.element == nil {
-			return nil, &UnsupportedSchemaError{Feature: "custom pointer element"}
+			return nil, &UnsupportedError{Feature: "custom pointer element"}
 		}
 		inner, err := exportTagPlanAt(p.element, true)
 		if err != nil {
@@ -95,33 +83,33 @@ func exportTagPlanAt(p *tagPlan, pointee bool) (map[string]any, error) {
 		document = inner
 	case reflect.Slice:
 		if p.element == nil {
-			return nil, &UnsupportedSchemaError{Feature: "custom slice element"}
+			return nil, &UnsupportedError{Feature: "custom slice element"}
 		}
-		inner, err := exportTagPlan(p.element)
+		inner, err := Export(p.element)
 		if err != nil {
 			return nil, err
 		}
 		document = map[string]any{"type": "array", "items": inner}
 	case reflect.Map:
 		if p.element == nil {
-			return nil, &UnsupportedSchemaError{Feature: "custom map element"}
+			return nil, &UnsupportedError{Feature: "custom map element"}
 		}
 		if t.Key().Kind() != reflect.String {
-			return nil, &UnsupportedSchemaError{Feature: "non-string map key"}
+			return nil, &UnsupportedError{Feature: "non-string map key"}
 		}
-		inner, err := exportTagPlan(p.element)
+		inner, err := Export(p.element)
 		if err != nil {
 			return nil, err
 		}
 		document = map[string]any{"type": "object", "additionalProperties": inner}
 	case reflect.Struct:
 		if p.fields == nil {
-			return nil, &UnsupportedSchemaError{Feature: "explicit Object fields"}
+			return nil, &UnsupportedError{Feature: "explicit Object fields"}
 		}
 		properties := make(map[string]any, len(p.fields))
 		required := make([]string, 0, len(p.fields))
 		for _, field := range p.fields {
-			child, err := exportTagPlan(field.plan)
+			child, err := Export(field.plan)
 			if err != nil {
 				return nil, err
 			}
@@ -135,7 +123,7 @@ func exportTagPlanAt(p *tagPlan, pointee bool) (map[string]any, error) {
 			document["required"] = required
 		}
 	default:
-		return nil, &UnsupportedSchemaError{Feature: fmt.Sprintf("schema %v", t)}
+		return nil, &UnsupportedError{Feature: fmt.Sprintf("schema %v", t)}
 	}
 	return applyExportRules(document, p, pointee)
 }
@@ -166,7 +154,7 @@ func implementsJSONCodec(t reflect.Type) bool {
 		t.Implements(textUnmarshalerType)
 }
 
-func applyExportRules(document map[string]any, p *tagPlan, pointee bool) (map[string]any, error) {
+func applyExportRules(document map[string]any, p *Plan, pointee bool) (map[string]any, error) {
 	for _, descriptor := range p.descriptors {
 		var key string
 		var value any
@@ -177,7 +165,7 @@ func applyExportRules(document map[string]any, p *tagPlan, pointee bool) (map[st
 				// min is a numeric or collection rule; the compiler rejects it on
 				// a string, so reaching here means the rule set widened. Emitting
 				// a document under an empty key would be silent corruption.
-				return nil, &UnsupportedSchemaError{Feature: "rule min on " + p.typ.String()}
+				return nil, &UnsupportedError{Feature: "rule min on " + p.typ.String()}
 			} else if p.typ.Kind() == reflect.Slice {
 				key = "minItems"
 			} else if p.typ.Kind() == reflect.Map {
@@ -256,7 +244,7 @@ func applyExportRules(document map[string]any, p *tagPlan, pointee bool) (map[st
 		case "unique":
 			key, value = "uniqueItems", true
 		default:
-			return nil, &UnsupportedSchemaError{Feature: "rule " + name}
+			return nil, &UnsupportedError{Feature: "rule " + name}
 		}
 		document[key] = value
 	}
@@ -268,7 +256,7 @@ func applyExportRules(document map[string]any, p *tagPlan, pointee bool) (map[st
 	return document, nil
 }
 
-func planAcceptsZero(p *tagPlan) bool {
+func planAcceptsZero(p *Plan) bool {
 	if p == nil {
 		return false
 	}

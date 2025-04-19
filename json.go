@@ -3,10 +3,10 @@ package shape
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
+
+	"github.com/rhevorn/shape/internal/jsondecode"
 )
 
 // ErrJSONTooLarge reports that JSON input exceeded JSONOptions.MaxBytes.
@@ -46,9 +46,6 @@ func ParseJSONReaderContext[T any](ctx context.Context, schema Schema[T], reader
 	if ctx == nil {
 		panic("shape: nil context")
 	}
-	if reader == nil {
-		return zero, errors.New("shape: nil JSON reader")
-	}
 	if len(options) > 1 {
 		panic("shape: at most one JSONOptions")
 	}
@@ -56,41 +53,15 @@ func ParseJSONReaderContext[T any](ctx context.Context, schema Schema[T], reader
 	if len(options) == 1 {
 		opts = options[0]
 	}
-	if opts.MaxBytes < 0 {
-		return zero, errors.New("shape: MaxBytes must not be negative")
-	}
-	if opts.MaxBytes > 0 {
-		reader = &limitedJSONReader{r: reader, remaining: opts.MaxBytes}
-	}
-	if e := ctx.Err(); e != nil {
-		return zero, e
-	}
-	decoder := json.NewDecoder(contextReader{ctx, reader})
-	if opts.DisallowUnknownFields {
-		decoder.DisallowUnknownFields()
-	}
-	var candidate T
-	if e := decoder.Decode(&candidate); e != nil {
-		if ctx.Err() != nil {
-			return zero, ctx.Err()
-		}
-		return zero, fmt.Errorf("shape: decode JSON: %w", e)
-	}
-	var extra any
-	if e := decoder.Decode(&extra); e != io.EOF {
-		if ctx.Err() != nil {
-			return zero, ctx.Err()
-		}
-		if e == nil {
-			return zero, errors.New("shape: expected exactly one JSON value")
-		}
-		return zero, fmt.Errorf("shape: trailing JSON: %w", e)
-	}
-	if e := ctx.Err(); e != nil {
-		return zero, e
+	candidate, err := jsondecode.Decode[T](ctx, reader, jsondecode.Options{
+		DisallowUnknownFields: opts.DisallowUnknownFields,
+		MaxBytes:              opts.MaxBytes,
+		TooLargeError:         ErrJSONTooLarge,
+	})
+	if err != nil {
+		return zero, err
 	}
 	var out T
-	var err error
 	if decoded, ok := schema.(decodedTransformer[T]); ok {
 		out, err = decoded.transformDecodedContext(ctx, candidate)
 	} else {
@@ -106,6 +77,29 @@ func ParseJSONReaderContext[T any](ctx context.Context, schema Schema[T], reader
 		return zero, err
 	}
 	return out, nil
+}
+
+// BindJSON derives the target's cached tagged struct Schema and atomically
+// replaces *target only after decode, transform, and validation all succeed.
+// No Schema variable is required; field behavior comes from shape tags.
+func BindJSON[T any](target *T, source []byte, options ...JSONOptions) error {
+	return bindJSON(Struct[T](), target, source, options...)
+}
+
+// BindJSONContext is the context-aware form of BindJSON.
+func BindJSONContext[T any](ctx context.Context, target *T, source []byte, options ...JSONOptions) error {
+	return bindJSONContext(ctx, Struct[T](), target, source, options...)
+}
+
+// BindJSONReader derives the target's cached tagged struct Schema and
+// atomically binds one JSON value from reader.
+func BindJSONReader[T any](target *T, reader io.Reader, options ...JSONOptions) error {
+	return bindJSONReader(Struct[T](), target, reader, options...)
+}
+
+// BindJSONReaderContext is the context-aware reader form of BindJSON.
+func BindJSONReaderContext[T any](ctx context.Context, target *T, reader io.Reader, options ...JSONOptions) error {
+	return bindJSONReaderContext(ctx, Struct[T](), target, reader, options...)
 }
 
 func bindJSON[T any](schema Schema[T], target *T, source []byte, options ...JSONOptions) error {
@@ -150,65 +144,4 @@ func bindJSONReaderContext[T any](ctx context.Context, schema Schema[T], target 
 	}
 	*target = out
 	return nil
-}
-
-// ParseJSON decodes, transforms, and validates one JSON value.
-func (s structSchema[T]) ParseJSON(source []byte, options ...JSONOptions) (T, error) {
-	return ParseJSON(s, source, options...)
-}
-
-// ParseJSONContext is ParseJSON with cancellation and per-request locale.
-func (s structSchema[T]) ParseJSONContext(ctx context.Context, source []byte, options ...JSONOptions) (T, error) {
-	return ParseJSONContext(ctx, s, source, options...)
-}
-
-// ParseJSONReader decodes, transforms, and validates one value from reader.
-func (s structSchema[T]) ParseJSONReader(reader io.Reader, options ...JSONOptions) (T, error) {
-	return ParseJSONReader(s, reader, options...)
-}
-
-// ParseJSONReaderContext is the context-aware reader form.
-func (s structSchema[T]) ParseJSONReaderContext(ctx context.Context, reader io.Reader, options ...JSONOptions) (T, error) {
-	return ParseJSONReaderContext(ctx, s, reader, options...)
-}
-
-type contextReader struct {
-	ctx context.Context
-	r   io.Reader
-}
-
-func (r contextReader) Read(p []byte) (int, error) {
-	if e := r.ctx.Err(); e != nil {
-		return 0, e
-	}
-	n, e := r.r.Read(p)
-	if ce := r.ctx.Err(); ce != nil {
-		return n, ce
-	}
-	return n, e
-}
-
-type limitedJSONReader struct {
-	r         io.Reader
-	remaining int64
-}
-
-func (r *limitedJSONReader) Read(p []byte) (int, error) {
-	if len(p) == 0 {
-		return 0, nil
-	}
-	if r.remaining == 0 {
-		var b [1]byte
-		n, e := r.r.Read(b[:])
-		if n > 0 {
-			return 0, ErrJSONTooLarge
-		}
-		return 0, e
-	}
-	if int64(len(p)) > r.remaining {
-		p = p[:r.remaining]
-	}
-	n, e := r.r.Read(p)
-	r.remaining -= int64(n)
-	return n, e
 }

@@ -39,5 +39,15 @@ ordinary typed values also remain independently supported by `validate` and
 `transform`. Tag names must map directly to one of those basic capabilities.
 Process-wide language and per-request locale belong to `validate`.
 
+## Source layout
+
+The root package is a public facade: keep constructors, Schema types, field
+Specs, JSON entry points, and export entry points there. Implementation belongs
+under `internal`: `tagged` compiles and executes struct-tag plans, `program`
+executes explicit fields, `pipeline` runs whole-value transforms, and
+`jsondecode` owns the standard JSON decoding stage. The `validate`, `transform`,
+`jsonschema`, `openapi`, and `types` directories are intentionally public
+packages; do not move root implementation into a new public helper package.
+
 The project is licensed under MIT. Contributions are accepted under the same
 license.

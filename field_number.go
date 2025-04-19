@@ -3,6 +3,7 @@ package shape
 import (
 	"context"
 
+	"github.com/rhevorn/shape/internal/program"
 	"github.com/rhevorn/shape/transform"
 	"github.com/rhevorn/shape/validate"
 )
@@ -14,7 +15,7 @@ type NumberSpec[N Numeric] struct {
 	validator   validate.NumberValidator[N]
 }
 
-func (f NumberSpec[N]) fieldDefinition() erasedField {
+func (f NumberSpec[N]) fieldDefinition() program.Definition {
 	return eraseField(f.name, f.transformer, f.validator)
 }
 func (f NumberSpec[N]) Transform(v N) (N, error) {

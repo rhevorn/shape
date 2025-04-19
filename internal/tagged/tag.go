@@ -1,4 +1,4 @@
-package shape
+package tagged
 
 import (
 	"context"
@@ -64,7 +64,7 @@ func parseConstant(t reflect.Type, text string) (reflect.Value, error) {
 	}
 	return v, nil
 }
-func applyTag(p *tagPlan, text string) (out *tagPlan, err error) {
+func applyTag(p *Plan, text string) (out *Plan, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			out = nil
@@ -231,14 +231,14 @@ func applyStringTransform(name, value string, args []string) string {
 	panic("shape: uncompiled string transform " + name)
 }
 
-func appendCompiledTransform(p *tagPlan, fn func(context.Context, reflect.Value) (reflect.Value, error)) *tagPlan {
+func appendCompiledTransform(p *Plan, fn func(context.Context, reflect.Value) (reflect.Value, error)) *Plan {
 	p = copyTagPlan(p)
 	p.hasTransform = true
 	p.steps = appendCopy(p.steps, tagStep{kind: tagStepTransform, transform: fn})
 	return p
 }
 
-func appendPointerTagTransform(p *tagPlan, inner func(context.Context, reflect.Value) (reflect.Value, error)) *tagPlan {
+func appendPointerTagTransform(p *Plan, inner func(context.Context, reflect.Value) (reflect.Value, error)) *Plan {
 	p = copyTagPlan(p)
 	outer := func(ctx context.Context, value reflect.Value) (reflect.Value, error) {
 		if value.IsNil() {
@@ -257,7 +257,7 @@ func appendPointerTagTransform(p *tagPlan, inner func(context.Context, reflect.V
 	return p
 }
 
-func appendPointerTagRule(p *tagPlan, descriptor spec.Rule) *tagPlan {
+func appendPointerTagRule(p *Plan, descriptor spec.Rule) *Plan {
 	p = copyTagPlan(p)
 	inner := copyTagPlan(p.element)
 	check := compileRule(inner.typ, descriptor)

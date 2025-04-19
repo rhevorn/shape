@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 
+	"github.com/rhevorn/shape/internal/program"
 	"github.com/rhevorn/shape/transform"
 	"github.com/rhevorn/shape/validate"
 )
@@ -25,15 +26,7 @@ type MapKey interface {
 
 // FieldSpec is an explicit field definition accepted by New. Its unexported
 // method intentionally limits implementations to this package.
-type FieldSpec interface{ fieldDefinition() erasedField }
-
-type erasedField struct {
-	name        string
-	typ         reflect.Type
-	transform   func(context.Context, reflect.Value) (reflect.Value, error)
-	validateAll func(context.Context, reflect.Value) error
-	validateOne func(context.Context, reflect.Value) error
-}
+type FieldSpec interface{ fieldDefinition() program.Definition }
 
 type explicitField[T any] struct {
 	name        string
@@ -41,25 +34,25 @@ type explicitField[T any] struct {
 	validator   validate.Validator[T]
 }
 
-func (f explicitField[T]) fieldDefinition() erasedField {
+func (f explicitField[T]) fieldDefinition() program.Definition {
 	return eraseField(f.name, f.transformer, f.validator)
 }
 
-func eraseField[T any](name string, transformer transform.Transformer[T], validator validate.Validator[T]) erasedField {
-	return erasedField{
-		name: name,
-		typ:  reflect.TypeFor[T](),
-		transform: func(ctx context.Context, value reflect.Value) (reflect.Value, error) {
+func eraseField[T any](name string, transformer transform.Transformer[T], validator validate.Validator[T]) program.Definition {
+	return program.Definition{
+		Name: name,
+		Type: reflect.TypeFor[T](),
+		Transform: func(ctx context.Context, value reflect.Value) (reflect.Value, error) {
 			out, err := transformer.TransformContext(ctx, value.Interface().(T))
 			if err != nil {
 				return reflect.Value{}, err
 			}
 			return reflect.ValueOf(&out).Elem(), nil
 		},
-		validateAll: func(ctx context.Context, value reflect.Value) error {
+		ValidateAll: func(ctx context.Context, value reflect.Value) error {
 			return validator.ValidateContext(ctx, value.Interface().(T))
 		},
-		validateOne: func(ctx context.Context, value reflect.Value) error {
+		ValidateOne: func(ctx context.Context, value reflect.Value) error {
 			return validator.ValidateFirstContext(ctx, value.Interface().(T))
 		},
 	}
@@ -97,7 +90,7 @@ type ValueSpec[T any] struct {
 	validator   validate.ValueValidator[T]
 }
 
-func (f ValueSpec[T]) fieldDefinition() erasedField {
+func (f ValueSpec[T]) fieldDefinition() program.Definition {
 	return eraseField(f.name, f.transformer, f.validator)
 }
 func (f ValueSpec[T]) Transform(v T) (T, error) {

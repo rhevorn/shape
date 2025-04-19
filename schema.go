@@ -5,12 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"reflect"
 
-	"github.com/rhevorn/shape/internal/maporder"
+	"github.com/rhevorn/shape/internal/program"
+	"github.com/rhevorn/shape/internal/tagged"
 	"github.com/rhevorn/shape/internal/transformpath"
-	"github.com/rhevorn/shape/internal/validationlocale"
-	"github.com/rhevorn/shape/internal/validationmsg"
 	"github.com/rhevorn/shape/validate"
 )
 
@@ -40,7 +38,7 @@ type JSONSchema[T any] interface {
 	ParseJSONReaderContext(context.Context, io.Reader, ...JSONOptions) (T, error)
 }
 
-// TransformError reports the struct field or collection element whose tag
+// TransformError reports the struct field or collection element whose
 // transform failed. Unwrap returns the original transform error.
 type TransformError struct {
 	Path validate.Path
@@ -73,10 +71,21 @@ func normalizeTransformError(ctx context.Context, err error) error {
 	if ctx != nil && ctx.Err() != nil {
 		return ctx.Err()
 	}
-	// The internal collection segments must be recovered BEFORE probing
-	// *TransformError. A nested Schema already returns a *TransformError, and
-	// the collection wrapper sits outside it, so probing the public type first
-	// would match through the wrapper and silently drop the index/key.
+	path, cause := transformErrorParts(err)
+	return &TransformError{Path: path, Err: cause}
+}
+
+func transformErrorParts(err error) (validate.Path, error) {
+	var programError *program.TransformError
+	if errors.As(err, &programError) && programError != nil {
+		path, cause := transformErrorParts(programError.Err)
+		return appendPath(programError.Path, path), cause
+	}
+	var taggedError *tagged.TransformError
+	if errors.As(err, &taggedError) && taggedError != nil {
+		path, cause := transformErrorParts(taggedError.Err)
+		return appendPath(taggedError.Path, path), cause
+	}
 	var internal *transformpath.Error
 	if errors.As(err, &internal) && internal != nil && len(internal.Segments) > 0 {
 		path := make(validate.Path, 0, len(internal.Segments))
@@ -87,315 +96,20 @@ func normalizeTransformError(ctx context.Context, err error) error {
 				path = append(path, validate.MapKeyPath(segment.Key))
 			}
 		}
-		var nested *TransformError
-		if errors.As(internal.Err, &nested) && nested != nil {
-			return &TransformError{Path: append(path, nested.Path...), Err: nested.Err}
-		}
-		return &TransformError{Path: path, Err: internal.Err}
+		nested, cause := transformErrorParts(internal.Err)
+		return appendPath(path, nested), cause
 	}
 	var public *TransformError
 	if errors.As(err, &public) && public != nil {
-		return public
+		path, cause := transformErrorParts(public.Err)
+		return appendPath(public.Path, path), cause
 	}
-	return &TransformError{Err: err}
+	return nil, err
 }
 
-// structSchema is the immutable, concurrency-safe implementation returned by
-// Struct. Users only need the Schema interface.
-type structSchema[T any] struct{ p *tagPlan }
-
-var _ Schema[struct{}] = structSchema[struct{}]{}
-
-func (s structSchema[T]) Transform(value T) (T, error) {
-	return s.TransformContext(context.Background(), value)
-}
-
-func (s structSchema[T]) TransformContext(ctx context.Context, value T) (T, error) {
-	return s.transformContext(ctx, value, false)
-}
-
-func (s structSchema[T]) transformDecodedContext(ctx context.Context, value T) (T, error) {
-	return s.transformContext(ctx, value, true)
-}
-
-func (s structSchema[T]) transformContext(ctx context.Context, value T, owned bool) (T, error) {
-	var zero T
-	if ctx == nil {
-		panic("shape: nil context")
-	}
-	if s.p == nil {
-		return zero, errors.New("shape: uninitialized schema; use shape.Struct")
-	}
-	ownership := borrowedValue
-	if owned {
-		ownership = ownedValue
-	}
-	out, err := transformTagPlan(ctx, s.p, reflect.ValueOf(&value).Elem(), nil, 0, ownership)
-	if err != nil {
-		return zero, err
-	}
-	return out.Interface().(T), nil
-}
-
-func (s structSchema[T]) Validate(value T) error {
-	return s.ValidateContext(context.Background(), value)
-}
-
-func (s structSchema[T]) ValidateContext(ctx context.Context, value T) error {
-	return s.validate(ctx, value, false)
-}
-
-func (s structSchema[T]) ValidateFirst(value T) error {
-	return s.ValidateFirstContext(context.Background(), value)
-}
-
-func (s structSchema[T]) ValidateFirstContext(ctx context.Context, value T) error {
-	return s.validate(ctx, value, true)
-}
-
-func (s structSchema[T]) validate(ctx context.Context, value T, first bool) error {
-	if ctx == nil {
-		panic("shape: nil context")
-	}
-	if s.p == nil {
-		return errors.New("shape: uninitialized schema; use shape.Struct")
-	}
-	issues := make([]validate.Issue, 0)
-	_, err := validatePlan(ctx, s.p, reflect.ValueOf(&value).Elem(), nil, 0, first, &issues)
-	if err != nil {
-		return err
-	}
-	if len(issues) == 0 {
-		return nil
-	}
-	return &validate.Error{Issues: issues}
-}
-
-type valueOwnership uint8
-
-const (
-	borrowedValue valueOwnership = iota
-	ownedValue
-)
-
-func transformTagPlan(ctx context.Context, p *tagPlan, value reflect.Value, path validate.Path, depth int, ownership valueOwnership) (reflect.Value, error) {
-	owned := ownership == ownedValue
-	if err := ctx.Err(); err != nil {
-		return reflect.Value{}, err
-	}
-	if depth >= defaultMaxRecursiveDepth {
-		return reflect.Value{}, &TransformError{Path: cloneValidatePath(path), Err: errors.New("maximum traversal depth exceeded")}
-	}
-
-	var err error
-	for _, step := range p.steps {
-		if err = ctx.Err(); err != nil {
-			return reflect.Value{}, err
-		}
-		switch step.kind {
-		case tagStepOption:
-			if (step.option == "ifzero" && isZero(value)) || (step.option == "ifnull" && value.IsNil()) {
-				value, err = cloneValue(ctx, step.fallback, true)
-				if err != nil {
-					return reflect.Value{}, &TransformError{Path: cloneValidatePath(path), Err: err}
-				}
-			}
-		case tagStepTransform:
-			value, err = step.transform(ctx, value)
-			if err != nil {
-				if ctx.Err() != nil {
-					return reflect.Value{}, ctx.Err()
-				}
-				return reflect.Value{}, &TransformError{Path: cloneValidatePath(path), Err: err}
-			}
-		}
-	}
-
-	switch p.typ.Kind() {
-	case reflect.Pointer:
-		if value.IsNil() || p.element == nil {
-			return value, nil
-		}
-		inner, err := transformTagPlan(ctx, p.element, value.Elem(), path, depth+1, ownership)
-		if err != nil {
-			return reflect.Value{}, err
-		}
-		if owned {
-			value.Elem().Set(inner)
-			return value, nil
-		}
-		out := reflect.New(value.Type().Elem())
-		out.Elem().Set(inner)
-		return out, nil
-	case reflect.Struct:
-		if p.fields == nil {
-			return value, nil
-		}
-		out := value
-		if !owned {
-			out = reflect.New(value.Type()).Elem()
-			out.Set(value)
-		}
-		for _, field := range p.fields {
-			fieldPath := appendValidatePath(path, validate.FieldPath(field.name))
-			item, err := transformTagPlan(ctx, field.plan, value.Field(field.index), fieldPath, depth+1, ownership)
-			if err != nil {
-				return reflect.Value{}, err
-			}
-			out.Field(field.index).Set(item)
-		}
-		return out, nil
-	case reflect.Slice:
-		if value.IsNil() || p.element == nil {
-			return value, nil
-		}
-		out := value
-		if !owned {
-			out = reflect.MakeSlice(value.Type(), value.Len(), value.Len())
-		}
-		for i := 0; i < value.Len(); i++ {
-			item, err := transformTagPlan(ctx, p.element, value.Index(i), appendValidatePath(path, validate.IndexPath(i)), depth+1, ownership)
-			if err != nil {
-				return reflect.Value{}, err
-			}
-			out.Index(i).Set(item)
-		}
-		return out, nil
-	case reflect.Map:
-		if value.IsNil() || p.element == nil {
-			return value, nil
-		}
-		keys, err := maporder.Reflect(ctx, value)
-		if err != nil {
-			return reflect.Value{}, err
-		}
-		out := reflect.MakeMapWithSize(value.Type(), value.Len())
-		for _, key := range keys {
-			itemPath := appendValidatePath(path, validate.MapKeyPath(key.Interface()))
-			mapValue := value.MapIndex(key)
-			valueInput := reflect.New(mapValue.Type()).Elem()
-			valueInput.Set(mapValue)
-			item, err := transformTagPlan(ctx, p.element, valueInput, itemPath, depth+1, ownership)
-			if err != nil {
-				return reflect.Value{}, err
-			}
-			out.SetMapIndex(key, item)
-		}
-		return out, nil
-	default:
-		return value, nil
-	}
-}
-
-func validatePlan(ctx context.Context, p *tagPlan, value reflect.Value, path validate.Path, depth int, first bool, issues *[]validate.Issue) (bool, error) {
-	if err := ctx.Err(); err != nil {
-		return false, err
-	}
-	if depth >= defaultMaxRecursiveDepth {
-		return appendSchemaIssue(ctx, issues, validate.Issue{
-			Code: validate.CodeTooDeep, Path: cloneValidatePath(path),
-			Message:  validationMessage(ctx, "too_deep", "", defaultMaxRecursiveDepth),
-			Expected: defaultMaxRecursiveDepth, Received: depth,
-		}, first), nil
-	}
-	if !finite(value) {
-		if appendSchemaIssue(ctx, issues, validate.Issue{
-			Code: validate.CodeInvalidNumber, Path: cloneValidatePath(path),
-			Message:  validationMessage(ctx, "number.finite", p.label, nil),
-			Received: value.Interface(), Label: p.label,
-		}, first) {
-			return true, nil
-		}
-	}
-
-	for _, step := range p.steps {
-		if step.kind != tagStepRule {
-			continue
-		}
-		if err := ctx.Err(); err != nil {
-			return false, err
-		}
-		err := step.check(ctx, value)
-		if ctx.Err() != nil {
-			return false, ctx.Err()
-		}
-		if err == nil {
-			continue
-		}
-		issue, ok := ruleIssue(ctx, err, path, p.label)
-		if !ok {
-			issue = validate.Issue{
-				Code: validate.CodeCustom, Path: cloneValidatePath(path),
-				Message: err.Error(), Label: p.label,
-			}
-		}
-		if appendSchemaIssue(ctx, issues, issue, first) {
-			return true, nil
-		}
-	}
-
-	switch p.typ.Kind() {
-	case reflect.Pointer:
-		if !value.IsNil() && p.element != nil {
-			return validatePlan(ctx, p.element, value.Elem(), path, depth+1, first, issues)
-		}
-	case reflect.Struct:
-		for _, field := range p.fields {
-			stop, err := validatePlan(ctx, field.plan, value.Field(field.index), appendValidatePath(path, validate.FieldPath(field.name)), depth+1, first, issues)
-			if err != nil || stop {
-				return stop, err
-			}
-		}
-	case reflect.Slice:
-		if p.element != nil {
-			for i := 0; i < value.Len(); i++ {
-				stop, err := validatePlan(ctx, p.element, value.Index(i), appendValidatePath(path, validate.IndexPath(i)), depth+1, first, issues)
-				if err != nil || stop {
-					return stop, err
-				}
-			}
-		}
-	case reflect.Map:
-		if p.element != nil && !value.IsNil() {
-			keys, err := maporder.Reflect(ctx, value)
-			if err != nil {
-				return false, err
-			}
-			for _, key := range keys {
-				stop, err := validatePlan(ctx, p.element, value.MapIndex(key), appendValidatePath(path, validate.MapKeyPath(key.Interface())), depth+1, first, issues)
-				if err != nil || stop {
-					return stop, err
-				}
-			}
-		}
-	}
-	return false, nil
-}
-
-func appendSchemaIssue(ctx context.Context, issues *[]validate.Issue, issue validate.Issue, first bool) bool {
-	if len(*issues) >= validate.DefaultMaxIssues {
-		(*issues)[validate.DefaultMaxIssues-1] = validate.Issue{
-			Code:     validate.CodeTooManyIssues,
-			Message:  validationMessage(ctx, "too_many_issues", "", validate.DefaultMaxIssues),
-			Expected: validate.DefaultMaxIssues,
-		}
-		return true
-	}
-	*issues = append(*issues, issue)
-	return first
-}
-
-func validationMessage(ctx context.Context, id, label string, expected any) string {
-	return validationmsg.Render(validationlocale.Get(ctx), id, label, expected)
-}
-
-func appendValidatePath(path validate.Path, segment validate.PathSegment) validate.Path {
-	out := make(validate.Path, len(path)+1)
-	copy(out, path)
-	out[len(path)] = segment
+func appendPath(prefix, suffix validate.Path) validate.Path {
+	out := make(validate.Path, 0, len(prefix)+len(suffix))
+	out = append(out, prefix...)
+	out = append(out, suffix...)
 	return out
-}
-
-func cloneValidatePath(path validate.Path) validate.Path {
-	return append(validate.Path(nil), path...)
 }

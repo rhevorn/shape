@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/rhevorn/shape/internal/program"
+	"github.com/rhevorn/shape/internal/tagged"
 	"github.com/rhevorn/shape/transform"
 	"github.com/rhevorn/shape/types"
 	"github.com/rhevorn/shape/validate"
@@ -17,16 +19,30 @@ func New[T any](fields ...FieldSpec) StructSpec[T] {
 	if typ.Kind() != reflect.Struct || typ == reflect.TypeFor[time.Time]() {
 		panic("shape: New requires an ordinary value struct")
 	}
-	compiled := compileProgramFields(typ, fields)
+	definitions := make([]program.Definition, len(fields))
+	for i, field := range fields {
+		if field == nil {
+			panic("shape: nil field")
+		}
+		definitions[i] = field.fieldDefinition()
+	}
+	compiled := program.Compile(typ, definitions)
 	return StructSpec[T]{
-		transformer: programTransformer[T]{fields: compiled},
-		validator:   programValidator[T]{fields: compiled},
+		transformer: program.NewTransformer[T](compiled),
+		validator:   program.NewValidator[T](compiled),
 	}
 }
 
 // Struct derives and caches a Schema for an ordinary value struct from its
 // json and shape tags. Invalid program configuration panics during construction.
-func Struct[T any]() TaggedSpec[T] { return compileTaggedSpec[T]() }
+func Struct[T any]() TaggedSpec[T] {
+	typ := reflect.TypeFor[T]()
+	plan, err := tagged.Compile(typ)
+	if err != nil {
+		panic(err)
+	}
+	return newTaggedSpec[T](plan)
+}
 
 // Value creates a Schema for any type. Omit name when using it as a Pointer,
 // Slice, or Map element Schema.
