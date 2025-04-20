@@ -62,8 +62,8 @@ func TestExplicitSchemaParseJSON(t *testing.T) {
 	}
 
 	schema := shape.New[User](
-		shape.String("Name").Trim().NotEmpty(),
-		shape.Int("Age").Min(18),
+		shape.Field("Name", shape.String().Trim().NotEmpty()),
+		shape.Field("Age", shape.Int().Min(18)),
 	).Apply(func(user User) (User, error) {
 		if user.Name != "" {
 			user.Name = strings.ToUpper(user.Name[:1]) + user.Name[1:]
@@ -107,7 +107,7 @@ func TestPackageParseJSONAcceptsAnySchema(t *testing.T) {
 		t.Fatalf("Slice ParseJSON() = %#v, %v", items, err)
 	}
 
-	values, err := shape.ParseJSON(shape.Map("", shape.String().Trim(), shape.Int().Positive()), []byte(`{" a ":1}`))
+	values, err := shape.ParseJSON(shape.Map(shape.String().Trim(), shape.Int().Positive()), []byte(`{" a ":1}`))
 	if err != nil || len(values) != 1 || values["a"] != 1 {
 		t.Fatalf("Map ParseJSON() = %#v, %v", values, err)
 	}
@@ -129,11 +129,11 @@ func TestExplicitSchemaCompositeFields(t *testing.T) {
 		Scores   map[string]int `json:"scores"`
 		Profile  Profile        `json:"profile"`
 	}
-	profile := shape.New[Profile](shape.String("Bio").Trim().NotEmpty())
+	profile := shape.New[Profile](shape.Field("Bio", shape.String().Trim().NotEmpty()))
 	schema := shape.New[User](
-		shape.Pointer("Nickname", shape.String().Trim()).NotNull(),
-		shape.Slice("Tags", shape.String().Trim().NotEmpty()).NotEmpty().Unique(),
-		shape.Map("Scores", shape.String().Trim().NotEmpty(), shape.Int().NonNegative()).NotEmpty(),
+		shape.Field("Nickname", shape.Pointer(shape.String().Trim()).NotNull()),
+		shape.Field("Tags", shape.Slice(shape.String().Trim().NotEmpty()).NotEmpty().Unique()),
+		shape.Field("Scores", shape.Map(shape.String().Trim().NotEmpty(), shape.Int().NonNegative()).NotEmpty()),
 		shape.Field("Profile", profile),
 	)
 
@@ -171,11 +171,12 @@ func TestExplicitSchemaRejectsBadFields(t *testing.T) {
 		name string
 		make func()
 	}{
-		{"missing", func() { _ = shape.New[User](shape.String("Missing")) }},
-		{"wrong type", func() { _ = shape.New[User](shape.Int("Name")) }},
-		{"duplicate", func() { _ = shape.New[User](shape.String("Name"), shape.String("Name")) }},
-		{"json excluded", func() { _ = shape.New[User](shape.String("Hidden")) }},
-		{"unnamed", func() { _ = shape.New[User](shape.String()) }},
+		{"missing", func() { _ = shape.New[User](shape.Field("Missing", shape.String())) }},
+		{"case mismatch", func() { _ = shape.New[User](shape.Field("name", shape.String())) }},
+		{"wrong type", func() { _ = shape.New[User](shape.Field("Name", shape.Int())) }},
+		{"duplicate", func() { _ = shape.New[User](shape.Field("Name", shape.String()), shape.Field("Name", shape.String())) }},
+		{"json excluded", func() { _ = shape.New[User](shape.Field("Hidden", shape.String())) }},
+		{"unnamed", func() { _ = shape.New[User](shape.Field("", shape.String())) }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -357,12 +358,12 @@ func TestExplicitTransformErrorsKeepCompletePath(t *testing.T) {
 	}
 	boom := errors.New("bad item")
 	schema := shape.New[Request](
-		shape.Slice("Items", shape.String().Apply(func(value string) (string, error) {
+		shape.Field("Items", shape.Slice(shape.String().Apply(func(value string) (string, error) {
 			if value == "bad" {
 				return "", boom
 			}
 			return value, nil
-		})),
+		}))),
 	)
 
 	_, err := schema.Transform(Request{Items: []string{"ok", "bad"}})
@@ -383,7 +384,7 @@ func TestStandaloneSpecTransformUsesPublicError(t *testing.T) {
 		t.Fatalf("StringSpec.Transform() error = %#v", err)
 	}
 
-	mapSpec := shape.Map("", shape.Int(), stringSpec)
+	mapSpec := shape.Map(shape.Int(), stringSpec)
 	_, err = mapSpec.Transform(map[int]string{2: "bad", 1: "bad"})
 	transformError = nil
 	if !errors.As(err, &transformError) || transformError.Path.String() != "[1]" || !errors.Is(err, boom) {
@@ -404,15 +405,15 @@ func TestNestedSchemaTransformErrorKeepsCollectionIndex(t *testing.T) {
 		ByKey map[string]Item `json:"byKey"`
 	}
 	boom := errors.New("bad sku")
-	item := shape.New[Item](shape.String("Sku").Apply(func(value string) (string, error) {
+	item := shape.New[Item](shape.Field("Sku", shape.String().Apply(func(value string) (string, error) {
 		if value == "bad" {
 			return "", boom
 		}
 		return value, nil
-	}))
+	})))
 	order := shape.New[Order](
-		shape.Slice("Items", item),
-		shape.Map("ByKey", shape.String(), item),
+		shape.Field("Items", shape.Slice(item)),
+		shape.Field("ByKey", shape.Map(shape.String(), item)),
 	)
 
 	for _, tc := range []struct {
@@ -471,7 +472,7 @@ func TestTimeSpecIfZeroTreatsAZeroTimeAsZero(t *testing.T) {
 		t.Skip("this platform does not distinguish the two zero checks")
 	}
 	fallback := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-	out, err := shape.New[Doc](shape.Time("When").IfZero(fallback)).Transform(Doc{When: zero})
+	out, err := shape.New[Doc](shape.Field("When", shape.Time().IfZero(fallback))).Transform(Doc{When: zero})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -492,7 +493,7 @@ func TestExplicitSchemaRejectsDuplicateJSONNames(t *testing.T) {
 			t.Fatal("duplicate JSON names were accepted")
 		}
 	}()
-	_ = shape.New[Coll](shape.String("First"), shape.String("Second"))
+	_ = shape.New[Coll](shape.Field("First", shape.String()), shape.Field("Second", shape.String()))
 }
 
 // label is an outer tag while rules on a pointer field attach to the element
@@ -621,8 +622,8 @@ func TestValueFloatAgreesWithNumberOnNonFinite(t *testing.T) {
 		name   string
 		schema shape.Schema[Ratio]
 	}{
-		{"Value[float64]", shape.New[Ratio](shape.Value[float64]("R"))},
-		{"Float64", shape.New[Ratio](shape.Float64("R"))},
+		{"Value[float64]", shape.New[Ratio](shape.Field("R", shape.Value[float64]()))},
+		{"Float64", shape.New[Ratio](shape.Field("R", shape.Float64()))},
 		{"tagged", shape.Struct[Ratio]()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -697,10 +698,10 @@ func TestExplicitAndTaggedStringRulesStayEquivalent(t *testing.T) {
 		IP    string `json:"ip" shape:"ip"`
 	}
 	explicit := shape.New[Contacts](
-		shape.String("Email").Email(),
-		shape.String("URL").URL(),
-		shape.String("UUID").UUID(),
-		shape.String("IP").IP(),
+		shape.Field("Email", shape.String().Email()),
+		shape.Field("URL", shape.String().URL()),
+		shape.Field("UUID", shape.String().UUID()),
+		shape.Field("IP", shape.String().IP()),
 	)
 	tagged := shape.Struct[Contacts]()
 
@@ -721,7 +722,7 @@ func TestExplicitAndTaggedTransformsStayEquivalent(t *testing.T) {
 	type Text struct {
 		Value string `json:"value" shape:"trim,tolower"`
 	}
-	explicit := shape.New[Text](shape.String("Value").Trim().ToLower())
+	explicit := shape.New[Text](shape.Field("Value", shape.String().Trim().ToLower()))
 	tagged := shape.Struct[Text]()
 	want := Text{Value: "pong"}
 
@@ -769,9 +770,9 @@ func TestMapTraversalOrderIsShared(t *testing.T) {
 	type MapHolder struct {
 		Items map[int]string
 	}
-	transformer := shape.New[MapHolder](shape.Map("Items", shape.Int().Apply(func(value int) (int, error) {
+	transformer := shape.New[MapHolder](shape.Field("Items", shape.Map(shape.Int().Apply(func(value int) (int, error) {
 		return value, errors.New("stop")
-	}), shape.String()))
+	}), shape.String())))
 	_, transformErr := transformer.Transform(MapHolder{Items: map[int]string{3: "c", 1: "a", 2: "b"}})
 	var pathError *shape.TransformError
 	if !errors.As(transformErr, &pathError) || pathError.Path.String() != "Items[1]" {

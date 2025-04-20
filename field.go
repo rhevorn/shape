@@ -24,8 +24,8 @@ type MapKey interface {
 		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
 }
 
-// FieldSpec is an explicit field definition accepted by New. Its unexported
-// method intentionally limits implementations to this package.
+// FieldSpec is an explicit field binding created by Field and accepted by New.
+// Its unexported method intentionally limits implementations to this package.
 type FieldSpec interface{ fieldDefinition() program.Definition }
 
 type explicitField[T any] struct {
@@ -58,16 +58,6 @@ func eraseField[T any](name string, transformer transform.Transformer[T], valida
 	}
 }
 
-func oneFieldName(names []string) string {
-	if len(names) > 1 {
-		panic("shape: field factory accepts at most one name")
-	}
-	if len(names) == 0 {
-		return ""
-	}
-	return names[0]
-}
-
 func requireSchema[T any](schema Schema[T]) {
 	if schema == nil {
 		panic("shape: nil schema")
@@ -85,14 +75,10 @@ func runSpecTransform[T any](ctx context.Context, transformer transform.Transfor
 
 // ValueSpec defines transform and validation behavior for a value of any type.
 type ValueSpec[T any] struct {
-	name        string
 	transformer transform.ValueTransformer[T]
 	validator   validate.ValueValidator[T]
 }
 
-func (f ValueSpec[T]) fieldDefinition() program.Definition {
-	return eraseField(f.name, f.transformer, f.validator)
-}
 func (f ValueSpec[T]) Transform(v T) (T, error) {
 	return runSpecTransform(context.Background(), f.transformer, v)
 }
@@ -131,5 +117,5 @@ func (f ValueSpec[T]) Label(label string) ValueSpec[T] {
 	f.validator = f.validator.Label(label)
 	return f
 }
-func (f ValueSpec[T]) Pointer() PointerSpec[T] { return pointerSpec(f.name, f) }
-func (f ValueSpec[T]) Slice() SliceSpec[T]     { return sliceSpec(f.name, f) }
+func (f ValueSpec[T]) Pointer() PointerSpec[T] { return pointerSpec(f) }
+func (f ValueSpec[T]) Slice() SliceSpec[T]     { return sliceSpec(f) }

@@ -13,8 +13,8 @@ func ExampleNew() {
 	}
 
 	schema := shape.New[User](
-		shape.String("Name").Trim().NotEmpty(),
-		shape.Int("Age").Min(18),
+		shape.Field("Name", shape.String().Trim().NotEmpty()),
+		shape.Field("Age", shape.Int().Min(18)),
 	)
 	user, err := schema.ParseJSON([]byte(`{"name":" Pong ","age":20}`))
 

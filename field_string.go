@@ -3,21 +3,16 @@ package shape
 import (
 	"context"
 
-	"github.com/rhevorn/shape/internal/program"
 	"github.com/rhevorn/shape/transform"
 	"github.com/rhevorn/shape/validate"
 )
 
 // StringSpec defines transform and validation behavior for a string value.
 type StringSpec struct {
-	name        string
 	transformer transform.StringTransformer
 	validator   validate.StringValidator
 }
 
-func (f StringSpec) fieldDefinition() program.Definition {
-	return eraseField(f.name, f.transformer, f.validator)
-}
 func (f StringSpec) Transform(v string) (string, error) {
 	return runSpecTransform(context.Background(), f.transformer, v)
 }
@@ -91,5 +86,5 @@ func (f StringSpec) Label(label string) StringSpec {
 	f.validator = f.validator.Label(label)
 	return f
 }
-func (f StringSpec) Pointer() PointerSpec[string] { return pointerSpec(f.name, f) }
-func (f StringSpec) Slice() SliceSpec[string]     { return sliceSpec(f.name, f) }
+func (f StringSpec) Pointer() PointerSpec[string] { return pointerSpec(f) }
+func (f StringSpec) Slice() SliceSpec[string]     { return sliceSpec(f) }

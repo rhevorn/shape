@@ -3,21 +3,16 @@ package shape
 import (
 	"context"
 
-	"github.com/rhevorn/shape/internal/program"
 	"github.com/rhevorn/shape/transform"
 	"github.com/rhevorn/shape/validate"
 )
 
 // PointerSpec defines behavior for a pointer and its non-nil inner value.
 type PointerSpec[T any] struct {
-	name        string
 	transformer transform.PointerTransformer[T]
 	validator   validate.PointerValidator[T]
 }
 
-func (f PointerSpec[T]) fieldDefinition() program.Definition {
-	return eraseField(f.name, f.transformer, f.validator)
-}
 func (f PointerSpec[T]) Transform(v *T) (*T, error) {
 	return runSpecTransform(context.Background(), f.transformer, v)
 }
@@ -62,14 +57,10 @@ func (f PointerSpec[T]) Label(label string) PointerSpec[T] {
 
 // SliceSpec defines behavior for a slice and each of its elements.
 type SliceSpec[T any] struct {
-	name        string
 	transformer transform.SliceTransformer[T]
 	validator   validate.SliceValidator[T]
 }
 
-func (f SliceSpec[T]) fieldDefinition() program.Definition {
-	return eraseField(f.name, f.transformer, f.validator)
-}
 func (f SliceSpec[T]) Transform(v []T) ([]T, error) {
 	return runSpecTransform(context.Background(), f.transformer, v)
 }
@@ -136,14 +127,10 @@ func (f SliceSpec[T]) Label(label string) SliceSpec[T] {
 
 // MapSpec defines behavior for a map and each key and value.
 type MapSpec[K MapKey, V any] struct {
-	name        string
 	transformer transform.MapTransformer[K, V]
 	validator   validate.MapValidator[K, V]
 }
 
-func (f MapSpec[K, V]) fieldDefinition() program.Definition {
-	return eraseField(f.name, f.transformer, f.validator)
-}
 func (f MapSpec[K, V]) Transform(v map[K]V) (map[K]V, error) {
 	return runSpecTransform(context.Background(), f.transformer, v)
 }

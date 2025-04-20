@@ -3,21 +3,16 @@ package shape
 import (
 	"context"
 
-	"github.com/rhevorn/shape/internal/program"
 	"github.com/rhevorn/shape/transform"
 	"github.com/rhevorn/shape/validate"
 )
 
 // NumberSpec defines transform and validation behavior for a numeric value.
 type NumberSpec[N Numeric] struct {
-	name        string
 	transformer transform.NumberTransformer[N]
 	validator   validate.NumberValidator[N]
 }
 
-func (f NumberSpec[N]) fieldDefinition() program.Definition {
-	return eraseField(f.name, f.transformer, f.validator)
-}
 func (f NumberSpec[N]) Transform(v N) (N, error) {
 	return runSpecTransform(context.Background(), f.transformer, v)
 }
@@ -74,5 +69,5 @@ func (f NumberSpec[N]) Label(label string) NumberSpec[N] {
 	f.validator = f.validator.Label(label)
 	return f
 }
-func (f NumberSpec[N]) Pointer() PointerSpec[N] { return pointerSpec(f.name, f) }
-func (f NumberSpec[N]) Slice() SliceSpec[N]     { return sliceSpec(f.name, f) }
+func (f NumberSpec[N]) Pointer() PointerSpec[N] { return pointerSpec(f) }
+func (f NumberSpec[N]) Slice() SliceSpec[N]     { return sliceSpec(f) }

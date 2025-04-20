@@ -39,6 +39,23 @@ func compilePublicAPI(ctx context.Context, reader io.Reader, source []byte) {
 	_ = &shape.UnsupportedSchemaError{Feature: "compile only"}
 	_ = validate.Path{validate.MapKeyPath(1)}
 	_ = validate.PathMapKey
+
+	// Exact function assignments intentionally reject the former optional-name
+	// signatures. Value factories describe values; only Field binds a name.
+	var _ func() shape.ValueSpec[string] = shape.Value[string]
+	var _ func() shape.StringSpec = shape.String
+	var _ func() shape.NumberSpec[uint16] = shape.Number[uint16]
+	var _ func() shape.NumberSpec[int] = shape.Int
+	var _ func() shape.NumberSpec[int64] = shape.Int64
+	var _ func() shape.NumberSpec[float64] = shape.Float64
+	var _ func() shape.NumberSpec[types.Duration] = shape.Duration
+	var _ func() shape.ValueSpec[bool] = shape.Bool
+	var _ func() shape.ValueSpec[time.Time] = shape.Time
+	var _ func(shape.Schema[string]) shape.PointerSpec[string] = shape.Pointer[string]
+	var _ func(shape.Schema[string]) shape.SliceSpec[string] = shape.Slice[string]
+	var _ func(shape.Schema[string], shape.Schema[int]) shape.MapSpec[string, int] = shape.Map[string, int]
+	var _ func(string, shape.Schema[string]) shape.FieldSpec = shape.Field[string]
+
 	identityString := func(value string) (string, error) { return value, nil }
 	identityStringContext := func(context.Context, string) (string, error) { return "", nil }
 	checkString := func(string) error { return nil }
@@ -99,7 +116,7 @@ func compilePublicAPI(ctx context.Context, reader io.Reader, source []byte) {
 	var _ shape.Schema[contractMetadata] = valueSpec
 
 	fallback := "fallback"
-	pointerSpec := shape.Pointer("Nickname", shape.String()).
+	pointerSpec := shape.Pointer(shape.String()).
 		IfNull(&fallback).
 		Apply(func(value *string) (*string, error) { return value, nil }).
 		ApplyContext(func(context.Context, *string) (*string, error) { return nil, nil }).
@@ -111,7 +128,7 @@ func compilePublicAPI(ctx context.Context, reader io.Reader, source []byte) {
 	_ = pointerSpec.Validate(nil)
 	var _ shape.Schema[*string] = pointerSpec
 
-	sliceSpec := shape.Slice("Tags", shape.String()).
+	sliceSpec := shape.Slice(shape.String()).
 		IfNull([]string{}).
 		Apply(func(value []string) ([]string, error) { return value, nil }).
 		ApplyContext(func(context.Context, []string) ([]string, error) { return nil, nil }).
@@ -123,7 +140,7 @@ func compilePublicAPI(ctx context.Context, reader io.Reader, source []byte) {
 	_ = sliceSpec.Validate(nil)
 	var _ shape.Schema[[]string] = sliceSpec
 
-	mapSpec := shape.Map("Scores", shape.String(), shape.Int()).
+	mapSpec := shape.Map(shape.String(), shape.Int()).
 		IfNull(map[string]int{}).
 		Apply(func(value map[string]int) (map[string]int, error) { return value, nil }).
 		ApplyContext(func(context.Context, map[string]int) (map[string]int, error) { return nil, nil }).
@@ -135,21 +152,21 @@ func compilePublicAPI(ctx context.Context, reader io.Reader, source []byte) {
 	_ = mapSpec.Validate(nil)
 	var _ shape.Schema[map[string]int] = mapSpec
 
-	profileSchema := shape.New[contractProfile](shape.String("Bio"))
+	profileSchema := shape.New[contractProfile](shape.Field("Bio", shape.String()))
 	schema := shape.New[contractUser](
-		shape.String("Name"),
-		shape.Int("Age"),
-		shape.Int64("Count"),
-		shape.Float64("Ratio"),
-		shape.Number[uint16]("Code"),
-		shape.Bool("Enabled"),
-		shape.Time("Created"),
-		shape.Duration("Timeout"),
-		pointerSpec,
-		sliceSpec,
-		mapSpec,
+		shape.Field("Name", shape.String()),
+		shape.Field("Age", shape.Int()),
+		shape.Field("Count", shape.Int64()),
+		shape.Field("Ratio", shape.Float64()),
+		shape.Field("Code", shape.Number[uint16]()),
+		shape.Field("Enabled", shape.Bool()),
+		shape.Field("Created", shape.Time()),
+		shape.Field("Timeout", shape.Duration()),
+		shape.Field("Nickname", pointerSpec),
+		shape.Field("Tags", sliceSpec),
+		shape.Field("Scores", mapSpec),
 		shape.Field("Profile", profileSchema),
-		shape.Value[contractMetadata]("Metadata"),
+		shape.Field("Metadata", shape.Value[contractMetadata]()),
 	).Apply(
 		func(value contractUser) (contractUser, error) { return value, nil },
 	).ApplyContext(
