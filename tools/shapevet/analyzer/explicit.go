@@ -25,17 +25,12 @@ func checkExplicitSchema(pass *analysis.Pass, call *ast.CallExpr, target types.T
 	}
 	seen := make(map[string]bool, len(call.Args))
 	for _, argument := range call.Args {
-		factory := explicitFactoryCall(pass, argument)
+		factory := explicitFieldCall(pass, argument)
 		if factory == nil {
 			continue
 		}
-		if len(factory.Args) == 0 {
+		if len(factory.Args) < 2 {
 			pass.Reportf(factory.Pos(), "invalid Shape explicit field: field name must not be empty")
-			continue
-		}
-		factoryName := calledName(pass, factory.Fun)
-		if scalarFactory(factoryName) && len(factory.Args) > 1 {
-			pass.Reportf(factory.Args[1].Pos(), "invalid Shape explicit field: field factory accepts at most one name")
 			continue
 		}
 		name, ok := constantString(pass, factory.Args[0])
@@ -65,22 +60,10 @@ func checkExplicitSchema(pass *analysis.Pass, call *ast.CallExpr, target types.T
 			pass.Reportf(factory.Args[0].Pos(), "invalid Shape explicit field: field %s is excluded from JSON", name)
 			continue
 		}
-		schemaType := transformInputType(pass.TypesInfo.TypeOf(argument))
-		if factoryName == "Field" && len(factory.Args) > 1 {
-			schemaType = transformInputType(pass.TypesInfo.TypeOf(factory.Args[1]))
-		}
+		schemaType := transformInputType(pass.TypesInfo.TypeOf(factory.Args[1]))
 		if schemaType != nil && !types.Identical(field.Type(), schemaType) {
 			pass.Reportf(factory.Pos(), "invalid Shape explicit field: field %s has type %s, schema has type %s", name, field.Type(), schemaType)
 		}
-	}
-}
-
-func scalarFactory(name string) bool {
-	switch name {
-	case "Value", "String", "Number", "Int", "Int64", "Float64", "Duration", "Bool", "Time":
-		return true
-	default:
-		return false
 	}
 }
 
@@ -93,32 +76,20 @@ func underlyingStruct(target types.Type) (*types.Struct, bool) {
 	return value, ok
 }
 
-func explicitFactoryCall(pass *analysis.Pass, expression ast.Expr) *ast.CallExpr {
-	current := expression
-	for {
-		call, ok := current.(*ast.CallExpr)
-		if !ok {
-			return nil
-		}
-		name := calledName(pass, call.Fun)
-		switch name {
-		case "Value", "String", "Number", "Int", "Int64", "Float64", "Duration", "Bool", "Time", "Pointer", "Slice", "Map", "Field":
-			object := calledObject(pass, call.Fun)
-			if object == nil {
-				break
-			}
-			signature, _ := object.Type().(*types.Signature)
-			if object.Pkg() != nil && object.Pkg().Path() == "github.com/rhevorn/shape" && signature != nil && signature.Recv() == nil {
-				return call
-			}
-		}
-		base := unindex(call.Fun)
-		selector, ok := base.(*ast.SelectorExpr)
-		if !ok {
-			return nil
-		}
-		current = selector.X
+func explicitFieldCall(pass *analysis.Pass, expression ast.Expr) *ast.CallExpr {
+	call, ok := expression.(*ast.CallExpr)
+	if !ok || calledName(pass, call.Fun) != "Field" {
+		return nil
 	}
+	object := calledObject(pass, call.Fun)
+	if object == nil || object.Pkg() == nil || object.Pkg().Path() != "github.com/rhevorn/shape" {
+		return nil
+	}
+	signature, _ := object.Type().(*types.Signature)
+	if signature == nil || signature.Recv() != nil {
+		return nil
+	}
+	return call
 }
 
 func calledName(pass *analysis.Pass, expression ast.Expr) string {

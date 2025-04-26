@@ -65,21 +65,21 @@ func build(data []byte) {
 	_ = shape.BindJSONReaderContext(context.Background(), &tagged, strings.NewReader("{}"))
 
 	_ = shape.New[Explicit](
-		shape.String(nameField).Trim().NotEmpty(),
-		shape.Number[Count]("Count").Min(0),
-		shape.Bool("Active"),
-		shape.Time("Created"),
-		shape.Duration("Timeout"),
-		shape.Pointer("Nick", shape.String()),
-		shape.Slice("Names", shape.String()),
-		shape.Map("Scores", shape.String(), shape.Int()),
+		shape.Field(nameField, shape.String().Trim().NotEmpty()),
+		shape.Field("Count", shape.Number[Count]().Min(0)),
+		shape.Field("Active", shape.Bool()),
+		shape.Field("Created", shape.Time()),
+		shape.Field("Timeout", shape.Duration()),
+		shape.Field("Nick", shape.Pointer(shape.String())),
+		shape.Field("Names", shape.Slice(shape.String())),
+		shape.Field("Scores", shape.Map(shape.String(), shape.Int())),
 		shape.Field("Child", shape.Value[Child]()),
 	)
 	_ = shape.New[Explicit]()
 
 	fieldName := "Name"
-	_ = shape.New[Explicit](shape.String(fieldName))
-	var dynamic shape.FieldSpec = shape.String("Name")
+	_ = shape.New[Explicit](shape.Field(fieldName, shape.String()))
+	var dynamic shape.FieldSpec = shape.Field("Name", shape.String())
 	_ = shape.New[Explicit](dynamic)
 }
 
@@ -89,5 +89,5 @@ type Box[T any] struct {
 
 func generic[T any]() {
 	_ = shape.Struct[Box[T]]()
-	_ = shape.New[Box[T]](shape.Value[T]("Value"))
+	_ = shape.New[Box[T]](shape.Field("Value", shape.Value[T]()))
 }

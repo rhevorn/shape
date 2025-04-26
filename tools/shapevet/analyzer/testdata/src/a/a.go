@@ -93,20 +93,20 @@ func build() {
 	_ = shape.BindJSON(&bind, nil) // want "unsupported field type"
 
 	_ = shape.New[Explicit](
-		shape.String("Name").Trim().NotEmpty(),
-		shape.Int("Age").Min(18),
+		shape.Field("Name", shape.String().Trim().NotEmpty()),
+		shape.Field("Age", shape.Int().Min(18)),
 	)
-	_ = shape.New[Explicit](shape.String("Missing")) // want "target has no direct field Missing"
-	_ = shape.New[Explicit](shape.Int("Name"))       // want "field Name has type string, schema has type int"
+	_ = shape.New[Explicit](shape.Field("Missing", shape.String())) // want "target has no direct field Missing"
+	_ = shape.New[Explicit](shape.Field("name", shape.String()))    // want "target has no direct field name"
+	_ = shape.New[Explicit](shape.Field("Name", shape.Int()))       // want "field Name has type string, schema has type int"
 	_ = shape.New[Explicit](
-		shape.String("Name"),
-		shape.String("Name"), // want "duplicate field Name"
+		shape.Field("Name", shape.String()),
+		shape.Field("Name", shape.String()), // want "duplicate field Name"
 	)
-	_ = shape.New[Explicit](shape.String("Hidden"))        // want "field Hidden is excluded from JSON"
-	_ = shape.New[Explicit](shape.String())                // want "field name must not be empty"
-	_ = shape.New[Explicit](shape.String("Name", "Extra")) // want "field factory accepts at most one name"
-	_ = shape.New[time.Time]()                             // want "target must be an ordinary value struct"
-	_ = shape.Struct[time.Time]()                          // want "target must be an ordinary value struct"
+	_ = shape.New[Explicit](shape.Field("Hidden", shape.String())) // want "field Hidden is excluded from JSON"
+	_ = shape.New[Explicit](shape.Field("", shape.String()))       // want "field name must not be empty"
+	_ = shape.New[time.Time]()                                     // want "target must be an ordinary value struct"
+	_ = shape.Struct[time.Time]()                                  // want "target must be an ordinary value struct"
 }
 
 func genericBind[T any](target *T, data []byte) error {

@@ -113,10 +113,10 @@ func invalidConstruction(data []byte) {
 	_ = shape.BindJSONReader(&invalid, strings.NewReader("{}"))                              // want "unsupported field type"
 	_ = shape.BindJSONReaderContext(context.Background(), &invalid, strings.NewReader("{}")) // want "unsupported field type"
 
-	_ = shape.New[Explicit](shape.String("Missing")) // want "target has no direct field Missing"
-	_ = shape.New[Explicit](shape.String("private")) // want "field private is not exported"
-	_ = shape.New[Explicit](shape.String("Hidden"))  // want "field Hidden is excluded from JSON"
-	_ = shape.New[Explicit](shape.Int("Name"))       // want "field Name has type string, schema has type int"
-	_ = shape.New[Explicit](shape.String("Count"))   // want "field Count has type int, schema has type string"
-	_ = shape.New[Explicit](shape.String("Child"))   // want "target has no direct field Child"
+	_ = shape.New[Explicit](shape.Field("Missing", shape.String())) // want "target has no direct field Missing"
+	_ = shape.New[Explicit](shape.Field("private", shape.String())) // want "field private is not exported"
+	_ = shape.New[Explicit](shape.Field("Hidden", shape.String()))  // want "field Hidden is excluded from JSON"
+	_ = shape.New[Explicit](shape.Field("Name", shape.Int()))       // want "field Name has type string, schema has type int"
+	_ = shape.New[Explicit](shape.Field("Count", shape.String()))   // want "field Count has type int, schema has type string"
+	_ = shape.New[Explicit](shape.Field("Child", shape.String()))   // want "target has no direct field Child"
 }
