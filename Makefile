@@ -1,4 +1,4 @@
-.PHONY: bench check fmt fmt-check fuzz-smoke release-check shapevet-check shapevet-isolated shapevet-test test test-race vet
+.PHONY: bench check examples-check fmt fmt-check fuzz-smoke release-check shapevet-check shapevet-isolated shapevet-test test test-race vet
 
 check: fmt-check vet test
 
@@ -38,4 +38,9 @@ fuzz-smoke:
 bench:
 	go test -run '^$$' -bench . -benchmem ./...
 
-release-check: check shapevet-test shapevet-isolated shapevet-check test-race fuzz-smoke bench
+examples-check:
+	@for dir in $$(rg --files examples -g 'main.go' | sed 's|/main.go$$||' | sort); do \
+		go run ./$$dir >/dev/null || exit 1; \
+	done
+
+release-check: check shapevet-test shapevet-isolated shapevet-check test-race fuzz-smoke bench examples-check

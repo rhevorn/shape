@@ -27,29 +27,37 @@ func Struct[T any]() TaggedSpec[T]
 - Invalid program configuration panics during construction.
 - Both returned values are immutable and safe for concurrent reuse.
 
-Explicit field factories:
+Value Schema factories:
 
 ```go
-Value[T](name ...string) ValueSpec[T]
-String(name ...string) StringSpec
-Bool(name ...string) ValueSpec[bool]
-Number[N Numeric](name ...string) NumberSpec[N]
-Int(name ...string) NumberSpec[int]
-Int64(name ...string) NumberSpec[int64]
-Float64(name ...string) NumberSpec[float64]
-Time(name ...string) ValueSpec[time.Time]
-Duration(name ...string) NumberSpec[types.Duration]
+Value[T]() ValueSpec[T]
+String() StringSpec
+Bool() ValueSpec[bool]
+Number[N Numeric]() NumberSpec[N]
+Int() NumberSpec[int]
+Int64() NumberSpec[int64]
+Float64() NumberSpec[float64]
+Time() ValueSpec[time.Time]
+Duration() NumberSpec[types.Duration]
 
-Pointer[T](name string, inner Schema[T]) PointerSpec[T]
-Slice[T](name string, inner Schema[T]) SliceSpec[T]
-Map[K MapKey, V any](name string, key Schema[K], value Schema[V]) MapSpec[K, V]
+Pointer[T](inner Schema[T]) PointerSpec[T]
+Slice[T](inner Schema[T]) SliceSpec[T]
+Map[K MapKey, V any](key Schema[K], value Schema[V]) MapSpec[K, V]
+```
+
+Explicit struct binding:
+
+```go
 Field[T](name string, schema Schema[T]) FieldSpec
 ```
 
-Names are Go field names. A name may be omitted from scalar factories when the
-result is used as a Pointer/Slice/Map inner Schema or as a standalone Schema.
-`New` rejects unnamed,
-missing, unexported, duplicate, type-mismatched, and `json:"-"` fields.
+Value factories never accept field names, so the same Schema composes at the
+root, as a collection element, or as a struct field. `Field` binds a value
+Schema to one direct Go field name and is the only way to construct a
+`FieldSpec`. Every argument to `New` must be a `Field(...)`. The name is the
+exact, case-sensitive name of a direct exported Go field, not its JSON name.
+`New` rejects empty, missing, unexported, duplicate, type-mismatched, and
+`json:"-"` fields.
 
 `Numeric` includes named forms of signed and unsigned integer types except
 `uintptr`, plus `float32` and `float64`. Complex numbers are excluded. `MapKey` includes named

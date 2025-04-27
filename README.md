@@ -61,9 +61,9 @@ type User struct {
 }
 
 var userSchema = shape.New[User](
-	shape.String("Name").Trim().NotEmpty().MaxLength(50),
-	shape.Int("Age").Min(18).Max(120),
-	shape.Slice("Tags", shape.String().Trim().NotEmpty()).NotEmpty().Unique(),
+	shape.Field("Name", shape.String().Trim().NotEmpty().MaxLength(50)),
+	shape.Field("Age", shape.Int().Min(18).Max(120)),
+	shape.Field("Tags", shape.Slice(shape.String().Trim().NotEmpty()).NotEmpty().Unique()),
 )
 
 user, err := userSchema.ParseJSON([]byte(`{
@@ -75,6 +75,8 @@ user, err := userSchema.ParseJSON([]byte(`{
 ```
 
 The same schema also supports `Transform` and `Validate` on typed values.
+Value factories such as `String`, `Slice`, and `Map` never take a field name;
+`Field` is the single explicit bridge from a value Schema to a struct field.
 
 ## Scalars
 

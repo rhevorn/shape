@@ -83,6 +83,9 @@
 
 ### Changed
 
+- Root value factories no longer accept struct field names. Explicit
+  `shape.New[T]` arguments now use `shape.Field("Name", schema)`, leaving
+  scalar and collection Schemas uniformly reusable at any nesting level.
 - `And` returns the concrete family validator type instead of `Validator[T]`,
   so rule methods may follow it.
 - `validate.MaxDeepUniqueItems` and `validate.CodeUniqueLimit` are exported.

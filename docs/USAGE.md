@@ -27,12 +27,13 @@ type User struct {
 }
 
 var userSchema = shape.New[User](
-	shape.String("Name").Trim().NotEmpty().MaxLength(50),
-	shape.Int("Age").Min(18).Max(120),
+	shape.Field("Name", shape.String().Trim().NotEmpty().MaxLength(50)),
+	shape.Field("Age", shape.Int().Min(18).Max(120)),
 )
 ```
 
-Factory strings are **Go field names**; error paths use **JSON names**.
+`Field` strings are exact, case-sensitive **Go field names**; error paths use
+**JSON names**.
 Construction panics on missing, unexported, duplicate, type-mismatched, or
 `json:"-"` fields. Omitted fields pass through unchanged. `shape` tags are
 ignored by `New`.
@@ -60,16 +61,20 @@ Also: `ParseJSONContext`, `ParseJSONReaderContext`, optional `JSONOptions`.
 ### Fields and composition
 
 ```go
-shape.String("Name").Trim().NotEmpty()
-shape.Int("Age").Min(18)
-shape.Bool("Enabled")
-shape.Pointer("Nickname", shape.String().Trim()).NotNull()
-shape.Slice("Tags", shape.String().Trim()).NotEmpty().Unique()
-shape.Map("Scores", shape.String(), shape.Int().NonNegative())
+shape.Field("Name", shape.String().Trim().NotEmpty())
+shape.Field("Age", shape.Int().Min(18))
+shape.Field("Enabled", shape.Bool())
+shape.Field("Nickname", shape.Pointer(shape.String().Trim()).NotNull())
+shape.Field("Tags", shape.Slice(shape.String().Trim()).NotEmpty().Unique())
+shape.Field("Scores", shape.Map(shape.String(), shape.Int().NonNegative()))
 shape.Field("Address", addressSchema)
 ```
 
-Scalars implement `Schema[T]` (Transform/Validate), not `JSONSchema`.
+`String`, `Pointer`, `Slice`, `Map`, and the other value factories describe a
+value only. They never take a struct field name. `Field` is required only when
+binding one of those Schemas to a direct field inside `New`.
+
+All value Specs implement `Schema[T]` (Transform/Validate), not `JSONSchema`.
 Collection JSON roots use package helpers:
 
 ```go
