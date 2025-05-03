@@ -40,8 +40,7 @@ func (f PointerSpec[T]) ApplyContext(values ...func(context.Context, *T) (*T, er
 	f.transformer = f.transformer.ApplyContext(values...)
 	return f
 }
-func (f PointerSpec[T]) NotNull() PointerSpec[T]  { f.validator = f.validator.NotNull(); return f }
-func (f PointerSpec[T]) NotEmpty() PointerSpec[T] { f.validator = f.validator.NotEmpty(); return f }
+func (f PointerSpec[T]) NotNull() PointerSpec[T] { f.validator = f.validator.NotNull(); return f }
 func (f PointerSpec[T]) Refine(values ...func(*T) error) PointerSpec[T] {
 	f.validator = f.validator.Refine(values...)
 	return f

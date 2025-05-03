@@ -3,6 +3,7 @@ package validate
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"unicode"
@@ -55,8 +56,8 @@ func (p Path) String() string {
 			continue
 		case PathMapKey:
 			b.WriteByte('[')
-			if key, ok := s.MapKey.(string); ok {
-				b.WriteString(strconv.Quote(key))
+			if key := reflect.ValueOf(s.MapKey); key.IsValid() && key.Kind() == reflect.String {
+				b.WriteString(strconv.Quote(key.String()))
 			} else {
 				b.WriteString(fmt.Sprint(s.MapKey))
 			}

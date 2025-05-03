@@ -20,16 +20,6 @@ func (v PointerValidator[T]) NotNull() PointerValidator[T] {
 	})
 }
 
-// NotEmpty rejects nil pointers.
-func (v PointerValidator[T]) NotEmpty() PointerValidator[T] {
-	return v.add(func(_ context.Context, x *T) error {
-		if x == nil {
-			return issueError(CodeInvalidValue, "not_empty.pointer", nil, x)
-		}
-		return nil
-	})
-}
-
 // Validate collects issues using a background context.
 func (v PointerValidator[T]) Validate(x *T) error { return v.ValidateContext(context.Background(), x) }
 

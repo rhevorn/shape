@@ -19,18 +19,25 @@ const (
 	stopAtFirst
 )
 
+type validationStep[T any] struct {
+	check check[T]
+	other Validator[T]
+}
+
 type base[T any] struct {
-	checks []check[T]
-	and    []Validator[T]
-	label  string
+	steps []validationStep[T]
+	label string
 }
 
 func (b base[T]) clone() base[T] {
-	b.checks = append([]check[T](nil), b.checks...)
-	b.and = append([]Validator[T](nil), b.and...)
+	b.steps = append([]validationStep[T](nil), b.steps...)
 	return b
 }
-func (b base[T]) add(fn check[T]) base[T] { b = b.clone(); b.checks = append(b.checks, fn); return b }
+func (b base[T]) add(fn check[T]) base[T] {
+	b = b.clone()
+	b.steps = append(b.steps, validationStep[T]{check: fn})
+	return b
+}
 
 // Validate collects issues using a background context.
 func (b base[T]) Validate(v T) error { return b.ValidateContext(context.Background(), v) }
@@ -50,11 +57,16 @@ func (b base[T]) run(ctx context.Context, v T, mode validationMode) error {
 		panic("validate: nil context")
 	}
 	var issues []Issue
-	for _, fn := range b.checks {
+	for _, step := range b.steps {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		err := fn(ctx, v)
+		var err error
+		if step.check != nil {
+			err = step.check(ctx, v)
+		} else {
+			err = runValidator(ctx, step.other, v, mode)
+		}
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -66,19 +78,7 @@ func (b base[T]) run(ctx context.Context, v T, mode validationMode) error {
 			}
 		}
 	}
-	for _, other := range b.and {
-		err := runValidator(ctx, other, v, mode)
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if err != nil {
-			var stop bool
-			issues, stop = appendIssues(issues, withLabel(customIssue(err), b.label), mode == stopAtFirst)
-			if stop {
-				return finish(ctx, issues)
-			}
-		}
-	}
+
 	return finish(ctx, issues)
 }
 
@@ -113,7 +113,7 @@ func (b base[T]) andAll(vs ...Validator[T]) base[T] {
 		if v == nil {
 			panic("validate: nil validator")
 		}
-		b.and = append(b.and, v)
+		b.steps = append(b.steps, validationStep[T]{other: v})
 	}
 	return b
 }

@@ -103,7 +103,7 @@ func (v NumberValidator[N]) OneOf(values ...N) NumberValidator[N] {
 				return nil
 			}
 		}
-		return issueError(CodeInvalidEnum, "invalid_enum", values, x)
+		return issueError(CodeInvalidEnum, "invalid_enum", append([]N(nil), values...), x)
 	})
 }
 

@@ -91,7 +91,7 @@ func (v StringValidator) OneOf(values ...string) StringValidator {
 				return nil
 			}
 		}
-		return issueError(CodeInvalidEnum, "invalid_enum", values, s)
+		return issueError(CodeInvalidEnum, "invalid_enum", append([]string(nil), values...), s)
 	})
 }
 

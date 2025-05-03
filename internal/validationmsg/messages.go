@@ -32,7 +32,6 @@ func expected(english, chinese string) message {
 var messages = map[string]message{
 	"not_empty.string":     literal("must not be empty", "不能为空"),
 	"not_empty.collection": literal("must contain at least one item", "至少需要一项"),
-	"not_empty.pointer":    literal("must not be null", "不能为 null"),
 	"not_null":             literal("must not be null", "不能为 null"),
 	"too_small.string":     expected("must contain at least %v characters", "至少需要 %v 个字符"),
 	"too_big.string":       expected("must contain at most %v characters", "最多允许 %v 个字符"),
