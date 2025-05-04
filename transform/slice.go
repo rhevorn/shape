@@ -4,7 +4,8 @@ import "context"
 
 // SliceTransformer transforms a slice and each of its elements.
 type SliceTransformer[T any] struct {
-	value ValueTransformer[[]T]
+	value    ValueTransformer[[]T]
+	elements step[[]T]
 }
 
 // IfNull replaces a nil slice with an isolated snapshot of v.
@@ -46,9 +47,9 @@ func (t SliceTransformer[T]) Transform(v []T) ([]T, error) {
 
 // TransformContext runs the slice pipeline and observes cancellation.
 func (t SliceTransformer[T]) TransformContext(ctx context.Context, v []T) ([]T, error) {
-	return t.value.TransformContext(ctx, v)
+	return runComposite(ctx, t.value, t.elements, v, false)
 }
 
 func (t SliceTransformer[T]) transformOwnedContext(ctx context.Context, v []T) ([]T, error) {
-	return t.value.transformOwnedContext(ctx, v)
+	return runComposite(ctx, t.value, t.elements, v, true)
 }

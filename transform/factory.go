@@ -49,7 +49,7 @@ func Pointer[T any](inner Transformer[T]) PointerTransformer[T] {
 	if inner == nil {
 		panic("transform: nil pointer transformer")
 	}
-	return PointerTransformer[T]{value: Value[*T]().ApplyContext(func(ctx context.Context, value *T) (*T, error) {
+	return PointerTransformer[T]{elements: func(ctx context.Context, value *T) (*T, error) {
 		if value == nil {
 			return nil, nil
 		}
@@ -59,7 +59,7 @@ func Pointer[T any](inner Transformer[T]) PointerTransformer[T] {
 		}
 		*value = out
 		return value, nil
-	})}
+	}}
 }
 
 // Slice creates a transformer that applies inner to each element.
@@ -67,7 +67,7 @@ func Slice[T any](inner Transformer[T]) SliceTransformer[T] {
 	if inner == nil {
 		panic("transform: nil slice transformer")
 	}
-	return SliceTransformer[T]{value: Value[[]T]().ApplyContext(func(ctx context.Context, value []T) ([]T, error) {
+	return SliceTransformer[T]{elements: func(ctx context.Context, value []T) ([]T, error) {
 		if value == nil {
 			return nil, nil
 		}
@@ -82,7 +82,7 @@ func Slice[T any](inner Transformer[T]) SliceTransformer[T] {
 			value[i] = transformed
 		}
 		return value, nil
-	})}
+	}}
 }
 
 // Map creates a transformer that applies key and value in stable key order.
@@ -90,7 +90,7 @@ func Map[K MapKey, V any](key Transformer[K], value Transformer[V]) MapTransform
 	if key == nil || value == nil {
 		panic("transform: nil map transformer")
 	}
-	return MapTransformer[K, V]{value: Value[map[K]V]().ApplyContext(func(ctx context.Context, input map[K]V) (map[K]V, error) {
+	return MapTransformer[K, V]{elements: func(ctx context.Context, input map[K]V) (map[K]V, error) {
 		if input == nil {
 			return nil, nil
 		}
@@ -117,5 +117,5 @@ func Map[K MapKey, V any](key Transformer[K], value Transformer[V]) MapTransform
 			out[newKey] = newValue
 		}
 		return out, nil
-	})}
+	}}
 }

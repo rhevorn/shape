@@ -4,7 +4,8 @@ import "context"
 
 // PointerTransformer transforms an optional *T and its non-nil value.
 type PointerTransformer[T any] struct {
-	value ValueTransformer[*T]
+	value    ValueTransformer[*T]
+	elements step[*T]
 }
 
 // IfNull replaces nil with an isolated snapshot of v.
@@ -46,9 +47,9 @@ func (t PointerTransformer[T]) Transform(v *T) (*T, error) {
 
 // TransformContext runs the pointer pipeline and observes cancellation.
 func (t PointerTransformer[T]) TransformContext(ctx context.Context, v *T) (*T, error) {
-	return t.value.TransformContext(ctx, v)
+	return runComposite(ctx, t.value, t.elements, v, false)
 }
 
 func (t PointerTransformer[T]) transformOwnedContext(ctx context.Context, v *T) (*T, error) {
-	return t.value.transformOwnedContext(ctx, v)
+	return runComposite(ctx, t.value, t.elements, v, true)
 }

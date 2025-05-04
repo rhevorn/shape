@@ -81,3 +81,36 @@ func appendSequence[T any](items []Transformer[T], transformer Transformer[T]) [
 	}
 	return append(items, transformer)
 }
+
+// runComposite detaches once, runs outer steps, then transforms the resulting elements.
+func runComposite[T any](ctx context.Context, outer ValueTransformer[T], elements step[T], value T, owned bool) (T, error) {
+	var zero T
+	if ctx == nil {
+		panic("transform: nil context")
+	}
+	if elements == nil {
+		panic("transform: composite must be built with Pointer, Slice or Map")
+	}
+	if err := ctx.Err(); err != nil {
+		return zero, err
+	}
+	if !owned {
+		var err error
+		value, err = cloneContext(ctx, value)
+		if err != nil {
+			return zero, err
+		}
+	}
+	out, err := outer.transformOwnedContext(ctx, value)
+	if err != nil {
+		return zero, err
+	}
+	out, err = elements(ctx, out)
+	if ctx.Err() != nil {
+		return zero, ctx.Err()
+	}
+	if err != nil {
+		return zero, err
+	}
+	return out, nil
+}

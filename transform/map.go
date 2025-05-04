@@ -6,7 +6,8 @@ import (
 
 // MapTransformer transforms a map and each key and value in stable key order.
 type MapTransformer[K MapKey, V any] struct {
-	value ValueTransformer[map[K]V]
+	value    ValueTransformer[map[K]V]
+	elements step[map[K]V]
 }
 
 // IfNull replaces a nil map with an isolated snapshot of v.
@@ -48,9 +49,9 @@ func (t MapTransformer[K, V]) Transform(v map[K]V) (map[K]V, error) {
 
 // TransformContext runs the map pipeline and observes cancellation.
 func (t MapTransformer[K, V]) TransformContext(ctx context.Context, v map[K]V) (map[K]V, error) {
-	return t.value.TransformContext(ctx, v)
+	return runComposite(ctx, t.value, t.elements, v, false)
 }
 
 func (t MapTransformer[K, V]) transformOwnedContext(ctx context.Context, v map[K]V) (map[K]V, error) {
-	return t.value.transformOwnedContext(ctx, v)
+	return runComposite(ctx, t.value, t.elements, v, true)
 }
