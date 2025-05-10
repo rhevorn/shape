@@ -19,7 +19,7 @@ var explicitSchema = shape.New[Request](
 	shape.Field("Age", shape.Int().Min(18)),
 )
 
-var taggedSchema = shape.Struct[Request]()
+var taggedSchema = shape.FromTags[Request]()
 
 var strict = shape.JSONOptions{
 	DisallowUnknownFields: true,

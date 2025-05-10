@@ -120,7 +120,7 @@ func compilePublicAPI(ctx context.Context, reader io.Reader, source []byte) {
 		IfNull(&fallback).
 		Apply(func(value *string) (*string, error) { return value, nil }).
 		ApplyContext(func(context.Context, *string) (*string, error) { return nil, nil }).
-		NotNull().NotEmpty().
+		NotNull().
 		Refine(func(*string) error { return nil }).
 		RefineContext(func(context.Context, *string) error { return nil }).
 		Label("pointer")
@@ -197,7 +197,7 @@ func compilePublicAPI(ctx context.Context, reader io.Reader, source []byte) {
 	_, _ = shape.ParseJSONReaderContext(ctx, shape.Int().Slice(), reader)
 
 	var target contractUser
-	_ = shape.Struct[contractUser]()
+	_ = shape.FromTags[contractUser]()
 	_ = shape.BindJSON(&target, source)
 	_ = shape.BindJSONContext(ctx, &target, source)
 	_ = shape.BindJSONReader(&target, reader)

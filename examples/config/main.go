@@ -15,7 +15,7 @@ type Config struct {
 	Debug       *bool          `json:"debug" shape:"ifnull=false"`
 }
 
-var configSchema = shape.Struct[Config]()
+var configSchema = shape.FromTags[Config]()
 
 var strict = shape.JSONOptions{
 	DisallowUnknownFields: true,

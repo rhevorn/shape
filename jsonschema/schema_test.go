@@ -17,7 +17,7 @@ func TestExportTaggedStruct(t *testing.T) {
 		Name string `json:"name" shape:"notempty,maxlength=50"`
 		Age  int    `json:"age" shape:"min=18"`
 	}
-	document, err := jsonschema.Export(shape.Struct[Request]())
+	document, err := jsonschema.Export(shape.FromTags[Request]())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestExportRejectsTextMarshalerRepresentation(t *testing.T) {
 	type Doc struct {
 		Value textJSON `json:"value"`
 	}
-	if _, err := jsonschema.Export(shape.Struct[Doc]()); err == nil {
+	if _, err := jsonschema.Export(shape.FromTags[Doc]()); err == nil {
 		t.Fatal("MarshalText type exported as its struct shape")
 	}
 }
@@ -66,7 +66,7 @@ func TestExportPointerNotnullHasNoNullBranch(t *testing.T) {
 	type Doc struct {
 		Name *string `json:"name" shape:"notnull"`
 	}
-	document, err := jsonschema.Export(shape.Struct[Doc]())
+	document, err := jsonschema.Export(shape.FromTags[Doc]())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestExportOptionalPointerIsNullableOnce(t *testing.T) {
 	type Doc struct {
 		Name *string `json:"name"`
 	}
-	document, err := jsonschema.Export(shape.Struct[Doc]())
+	document, err := jsonschema.Export(shape.FromTags[Doc]())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestExportRejectsTransform(t *testing.T) {
 	type Request struct {
 		Name string `shape:"trim"`
 	}
-	_, err := jsonschema.Export(shape.Struct[Request]())
+	_, err := jsonschema.Export(shape.FromTags[Request]())
 	var unsupported *jsonschema.UnsupportedError
 	if !errors.As(err, &unsupported) {
 		t.Fatalf("error = %v", err)
@@ -112,7 +112,7 @@ func TestExportRejectsTransform(t *testing.T) {
 
 func TestExportRejectsWholeStructCallbacks(t *testing.T) {
 	type Request struct{ Name string }
-	schema := shape.Struct[Request]().Refine(func(Request) error { return nil })
+	schema := shape.FromTags[Request]().Refine(func(Request) error { return nil })
 	_, err := jsonschema.Export(schema)
 	var unsupported *jsonschema.UnsupportedError
 	if !errors.As(err, &unsupported) {
@@ -124,7 +124,7 @@ func TestExportRejectsCustomJSONRepresentation(t *testing.T) {
 	type Request struct {
 		Value customJSON `json:"value"`
 	}
-	_, err := jsonschema.Export(shape.Struct[Request]())
+	_, err := jsonschema.Export(shape.FromTags[Request]())
 	var unsupported *jsonschema.UnsupportedError
 	if !errors.As(err, &unsupported) {
 		t.Fatalf("error = %v", err)

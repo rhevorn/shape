@@ -85,7 +85,7 @@ func main() {
 
 	pointerValue := "shape"
 	pointer := validate.Pointer(validate.String().NotEmpty()).
-		NotNull().NotEmpty().
+		NotNull().
 		Refine(func(*string) error { return nil }).
 		RefineContext(func(ctx context.Context, _ *string) error { return ctx.Err() }).
 		And(validate.Pointer(validate.String().MaxLength(10))).

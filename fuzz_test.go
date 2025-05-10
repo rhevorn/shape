@@ -11,7 +11,7 @@ func FuzzTaggedSchemaJSON(f *testing.F) {
 		Name string `json:"name" shape:"trim,notempty,maxlength=50"`
 		Age  int    `json:"age" shape:"min=0,max=150"`
 	}
-	schema := shape.Struct[Request]()
+	schema := shape.FromTags[Request]()
 	f.Add([]byte(`{"name":" Pong ","age":20}`))
 	f.Add([]byte(`null`))
 	f.Add([]byte(`{}`))

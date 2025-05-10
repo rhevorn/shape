@@ -18,7 +18,7 @@ func main() {
 		ApplyContext(func(ctx context.Context, value *string) (*string, error) {
 			return value, ctx.Err()
 		}).
-		NotNull().NotEmpty().
+		NotNull().
 		Refine(func(value *string) error {
 			if value != nil && *value == "root" {
 				return errors.New("reserved nickname")

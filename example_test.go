@@ -27,7 +27,7 @@ func ExampleStruct() {
 		Name string `json:"name" shape:"trim,notempty"`
 	}
 
-	schema := shape.Struct[Request]()
+	schema := shape.FromTags[Request]()
 	request, err := schema.ParseJSON([]byte(`{"name":" Pong "}`))
 
 	fmt.Println(request.Name, err)

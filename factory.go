@@ -34,9 +34,9 @@ func New[T any](fields ...FieldSpec) StructSpec[T] {
 	}
 }
 
-// Struct derives and caches a Schema for an ordinary value struct from its
+// FromTags derives and caches a Schema for an ordinary value struct from its
 // json and shape tags. Invalid program configuration panics during construction.
-func Struct[T any]() TaggedSpec[T] {
+func FromTags[T any]() TaggedSpec[T] {
 	typ := reflect.TypeFor[T]()
 	plan, err := tagged.Compile(typ)
 	if err != nil {

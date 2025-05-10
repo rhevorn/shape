@@ -28,14 +28,14 @@ type TaggedRequest struct {
 
 	Count    int     `json:"count" shape:"min=1,max=10,gt=1,gte=2,lt=10,lte=9,between=2|9,positive,nonnegative,oneof=5|7"`
 	Delta    int     `json:"delta" shape:"negative"`
-	Optional *string `json:"optional" shape:"ifnull=anonymous,notnull,notempty"`
+	Optional *string `json:"optional" shape:"ifnull=anonymous,notnull"`
 
 	Tags       []string       `json:"tags" shape:"notnull,notempty,min=2,max=2,len=2,unique"`
 	Attributes map[string]int `json:"attributes" shape:"notnull,notempty,min=1,max=1,len=1"`
 	Address    Address        `json:"address"`
 }
 
-var taggedSchema = shape.Struct[TaggedRequest]().
+var taggedSchema = shape.FromTags[TaggedRequest]().
 	Apply(func(value TaggedRequest) (TaggedRequest, error) { return value, nil }).
 	ApplyContext(func(ctx context.Context, value TaggedRequest) (TaggedRequest, error) {
 		return value, ctx.Err()

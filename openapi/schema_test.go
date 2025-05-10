@@ -21,7 +21,7 @@ func TestJSONRequestBody(t *testing.T) {
 	type Request struct {
 		Name string `json:"name" shape:"minlength=1"`
 	}
-	body, err := openapi.JSONRequestBody(shape.Struct[Request](), true)
+	body, err := openapi.JSONRequestBody(shape.FromTags[Request](), true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func TestJSONResponse(t *testing.T) {
 	type Response struct {
 		OK bool `json:"ok"`
 	}
-	response, err := openapi.JSONResponse("ok", shape.Struct[Response]())
+	response, err := openapi.JSONResponse("ok", shape.FromTags[Response]())
 	if err != nil || response["description"] != "ok" {
 		t.Fatalf("response=%#v err=%v", response, err)
 	}

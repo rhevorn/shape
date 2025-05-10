@@ -22,7 +22,7 @@ type Transformed struct {
 }
 
 func main() {
-	schema := shape.Struct[Request]()
+	schema := shape.FromTags[Request]()
 
 	lowLevel, err := shape.ExportDocument(schema)
 	printJSON("shape.ExportDocument", lowLevel, err)
@@ -43,7 +43,7 @@ func main() {
 	response, err := openapi.JSONResponse("validated request", schema)
 	printJSON("openapi.JSONResponse", response, err)
 
-	_, err = jsonschema.Export(shape.Struct[Transformed]())
+	_, err = jsonschema.Export(shape.FromTags[Transformed]())
 	var unsupported *shape.UnsupportedSchemaError
 	fmt.Printf("unsupported transform: typed=%t feature=%q\n",
 		errors.As(err, &unsupported), unsupportedFeature(unsupported))
