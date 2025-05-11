@@ -98,7 +98,7 @@ func checkConstructionCall(pass *analysis.Pass, call *ast.CallExpr) {
 			checkExplicitSchema(pass, call, target)
 		}
 		return
-	case "Struct":
+	case "FromTags":
 		if typeArgument != nil {
 			target = pass.TypesInfo.TypeOf(typeArgument)
 		}

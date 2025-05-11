@@ -7,7 +7,7 @@ type Unsupported struct {
 }
 
 func build(data []byte) {
-	_ = shape.Struct[Unsupported]()
+	_ = shape.FromTags[Unsupported]()
 	var value Unsupported
 	_ = shape.BindJSON(&value, data)
 	_ = shape.New[Unsupported]("Missing")

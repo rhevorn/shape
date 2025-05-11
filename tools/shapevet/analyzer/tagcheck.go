@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rhevorn/shape/internal/spec"
 	"github.com/rhevorn/shape/internal/taglang"
 )
 
@@ -66,6 +67,14 @@ func checkStructType(t types.Type, active map[types.Type]bool) error {
 
 func checkSupportedGraph(t types.Type, active map[types.Type]bool) error {
 	t = types.Unalias(t)
+	if classify(t) == kStruct {
+		return checkStructType(t, active)
+	}
+	if active[t] {
+		return errText("recursive type is unsupported")
+	}
+	active[t] = true
+	defer delete(active, t)
 	switch value := t.(type) {
 	case *types.Pointer:
 		element := types.Unalias(value.Elem())
@@ -120,73 +129,22 @@ func checkTag(t types.Type, items []taglang.Item) error {
 	}
 	fallbackSeen, labelSeen := false, false
 	for _, item := range items {
-		hasArgument := item.HasValue
-		switch item.Name {
-		case "label":
-			if !hasArgument || labelSeen {
+		if item.Name == "label" {
+			if !item.HasValue || labelSeen {
 				return errText("label requires one value and may appear once")
 			}
 			labelSeen = true
-		case "ifzero":
-			if !hasArgument || fallbackSeen {
+		}
+		if item.Name == "ifzero" || item.Name == "ifnull" {
+			if !item.HasValue || fallbackSeen {
 				return errText("invalid or duplicate fallback")
 			}
-			if fieldKind == kPointer || fieldKind == kStruct || fieldKind == kSlice || fieldKind == kMap {
-				return errText("ifzero literal is unsupported for this type")
-			}
 			fallbackSeen = true
-		case "ifnull":
-			if !hasArgument || fallbackSeen || fieldKind != kPointer || target == kStruct {
-				return errText("ifnull requires a pointer to scalar, time, or duration")
-			}
-			fallbackSeen = true
-		case "notnull":
-			if hasArgument || !(fieldKind == kPointer || fieldKind == kSlice || fieldKind == kMap) {
-				return errText("notnull requires pointer, slice, or map")
-			}
-		case "notempty":
-			if hasArgument || !(fieldKind == kString || fieldKind == kPointer || fieldKind == kSlice || fieldKind == kMap) {
-				return errText("notempty requires string, pointer, slice, or map and takes no value")
-			}
-		case "trim", "ltrim", "rtrim":
-			if target != kString {
-				return errText(item.Name + " requires string")
-			}
-		case "tolower", "toupper", "email", "url", "uuid", "ip":
-			if hasArgument || target != kString {
-				return errText(item.Name + " requires string and takes no value")
-			}
-		case "minlength", "maxlength", "pattern", "startswith", "endswith", "contains":
-			if !hasArgument || target != kString {
-				return errText(item.Name + " requires a string value")
-			}
-		case "len":
-			if !hasArgument || !(target == kString || fieldKind == kSlice || fieldKind == kMap) {
-				return errText("len requires string, slice, or map")
-			}
-		case "min", "max":
-			if !hasArgument || !(target == kNumber || target == kDuration || fieldKind == kSlice || fieldKind == kMap) {
-				return errText(item.Name + " requires number, duration, slice, or map")
-			}
-		case "between", "gt", "gte", "lt", "lte":
-			if !hasArgument || !(target == kNumber || target == kDuration) {
-				return errText(item.Name + " requires number or duration")
-			}
-		case "oneof":
-			if !hasArgument || !(target == kString || target == kNumber || target == kDuration) {
-				return errText("oneof requires string, number, or duration")
-			}
-		case "positive", "negative", "nonnegative":
-			if hasArgument || !(target == kNumber || target == kDuration) {
-				return errText(item.Name + " requires number or duration and takes no value")
-			}
-		case "unique":
-			if hasArgument || fieldKind != kSlice {
-				return errText("unique requires slice and takes no value")
-			}
-		default:
-			return errText("unknown option " + item.Name)
 		}
+		if err := spec.CheckTag(item.Name, domain(fieldKind), domain(target), item.HasValue); err != nil {
+			return err
+		}
+
 		if item.HasValue {
 			valueType := t
 			if fieldKind == kPointer {
@@ -288,3 +246,27 @@ func checkTagValue(typ types.Type, target kind, item taglang.Item) error {
 type errText string
 
 func (e errText) Error() string { return string(e) }
+
+func domain(k kind) spec.Kind {
+	switch k {
+	case kString:
+		return spec.String
+	case kBool:
+		return spec.Bool
+	case kNumber:
+		return spec.Number
+	case kDuration:
+		return spec.Duration
+	case kTime:
+		return spec.Time
+	case kPointer:
+		return spec.Pointer
+	case kSlice:
+		return spec.Slice
+	case kMap:
+		return spec.Map
+	case kStruct:
+		return spec.Struct
+	}
+	return 0
+}

@@ -14,7 +14,7 @@ type Schema[T any] interface {
 
 type JSONOptions struct{}
 
-func Struct[T any]() int { return 0 }
+func FromTags[T any]() int { return 0 }
 
 func BindJSON[T any](target *T, source []byte, _ ...JSONOptions) error         { return nil }
 func BindJSONContext[T any](context.Context, *T, []byte, ...JSONOptions) error { return nil }

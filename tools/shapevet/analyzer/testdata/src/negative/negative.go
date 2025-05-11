@@ -31,8 +31,8 @@ type InvalidRules struct {
 	NullStruct        *Child            `shape:"ifnull=x"`          // want "ifnull requires a pointer to scalar"
 	NotNullValue      string            `shape:"notnull"`           // want "notnull requires pointer, slice, or map"
 	NotNullArgument   *string           `shape:"notnull=x"`         // want "notnull requires pointer, slice, or map"
-	NotEmptyValue     int               `shape:"notempty"`          // want "notempty requires string, pointer, slice, or map"
-	NotEmptyArgument  string            `shape:"notempty=x"`        // want "notempty requires string, pointer, slice, or map"
+	NotEmptyValue     int               `shape:"notempty"`          // want "notempty requires string, slice, or map"
+	NotEmptyArgument  string            `shape:"notempty=x"`        // want "notempty requires string, slice, or map"
 	TrimNumber        int               `shape:"trim"`              // want "trim requires string"
 	LowerArgument     string            `shape:"tolower=x"`         // want "tolower requires string and takes no value"
 	LengthNumber      int               `shape:"minlength=1"`       // want "minlength requires a string value"
@@ -93,19 +93,19 @@ type Explicit struct {
 }
 
 func invalidConstruction(data []byte) {
-	_ = shape.Struct[ArrayField]()     // want "unsupported field type"
-	_ = shape.Struct[InterfaceField]() // want "unsupported field type"
-	_ = shape.Struct[ComplexField]()   // want "unsupported field type"
-	_ = shape.Struct[FuncField]()      // want "unsupported field type"
-	_ = shape.Struct[ChannelField]()   // want "unsupported field type"
-	_ = shape.Struct[UintptrField]()   // want "unsupported field type"
-	_ = shape.Struct[DoublePointer]()  // want "unsupported pointer field type"
-	_ = shape.Struct[SlicePointer]()   // want "unsupported pointer field type"
-	_ = shape.Struct[MapPointer]()     // want "unsupported pointer field type"
-	_ = shape.Struct[FloatMapKey]()    // want "map key must be string or integer"
-	_ = shape.Struct[Recursive]()      // want "recursive type is unsupported"
-	_ = shape.Struct[Embedded]()       // want "anonymous fields are unsupported"
-	_ = shape.Struct[TaggedIgnored]()  // want "has a tag but is not processed"
+	_ = shape.FromTags[ArrayField]()     // want "unsupported field type"
+	_ = shape.FromTags[InterfaceField]() // want "unsupported field type"
+	_ = shape.FromTags[ComplexField]()   // want "unsupported field type"
+	_ = shape.FromTags[FuncField]()      // want "unsupported field type"
+	_ = shape.FromTags[ChannelField]()   // want "unsupported field type"
+	_ = shape.FromTags[UintptrField]()   // want "unsupported field type"
+	_ = shape.FromTags[DoublePointer]()  // want "unsupported pointer field type"
+	_ = shape.FromTags[SlicePointer]()   // want "unsupported pointer field type"
+	_ = shape.FromTags[MapPointer]()     // want "unsupported pointer field type"
+	_ = shape.FromTags[FloatMapKey]()    // want "map key must be string or integer"
+	_ = shape.FromTags[Recursive]()      // want "recursive type is unsupported"
+	_ = shape.FromTags[Embedded]()       // want "anonymous fields are unsupported"
+	_ = shape.FromTags[TaggedIgnored]()  // want "has a tag but is not processed"
 
 	var invalid InterfaceField
 	_ = shape.BindJSON(&invalid, data)                                                       // want "unsupported field type"
@@ -119,4 +119,17 @@ func invalidConstruction(data []byte) {
 	_ = shape.New[Explicit](shape.Field("Name", shape.Int()))       // want "field Name has type string, schema has type int"
 	_ = shape.New[Explicit](shape.Field("Count", shape.String()))   // want "field Count has type int, schema has type string"
 	_ = shape.New[Explicit](shape.Field("Child", shape.String()))   // want "target has no direct field Child"
+}
+
+// Valid Go recursive containers must produce diagnostics, never recurse forever.
+type RecursiveSlice []RecursiveSlice
+type RecursiveMap map[string]RecursiveMap
+type SliceRequest struct{ Nodes RecursiveSlice }
+type MapRequest struct{ Nodes RecursiveMap }
+
+var _ = shape.FromTags[SliceRequest]() // want "recursive type is unsupported"
+var _ = shape.FromTags[MapRequest]()   // want "recursive type is unsupported"
+
+type PointerEmpty struct {
+	Name *string `shape:"notempty"` // want "use notnull on pointers"
 }

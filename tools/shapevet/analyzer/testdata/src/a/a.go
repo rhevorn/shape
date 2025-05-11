@@ -26,7 +26,7 @@ type Bad struct {
 	Items   []string            `shape:"min=-1"`       // want "invalid non-negative collection length"
 	Bounds  int                 `shape:"between=2|1"`  // want "minimum exceeds maximum"
 	Float   float64             `shape:"ifzero=NaN"`   // want "invalid or overflowing number"
-	Empty   int                 `shape:"notempty"`     // want "notempty requires string, pointer, slice, or map"
+	Empty   int                 `shape:"notempty"`     // want "notempty requires string, slice, or map"
 	ZeroPtr *int                `shape:"ifzero=1"`     // want "ifzero literal is unsupported"
 }
 
@@ -80,15 +80,15 @@ type Box[T any] struct {
 }
 
 func build() {
-	_ = shape.Struct[Good]()
-	_ = shape.Struct[Unsupported]()    // want "unsupported field type"
-	_ = shape.Struct[Duplicate]()      // want "duplicate field name value"
-	_ = shape.Struct[PointerToSlice]() // want "unsupported pointer field type"
-	_ = shape.Struct[Embedded]()       // want "anonymous fields are unsupported"
-	_ = shape.Struct[Recursive]()      // want "recursive type is unsupported"
-	_ = shape.Struct[FloatKey]()       // want "map key must be string or integer"
-	_ = shape.Struct[Graph]()
-	_ = shape.Struct[EmptyCandidate]()
+	_ = shape.FromTags[Good]()
+	_ = shape.FromTags[Unsupported]()    // want "unsupported field type"
+	_ = shape.FromTags[Duplicate]()      // want "duplicate field name value"
+	_ = shape.FromTags[PointerToSlice]() // want "unsupported pointer field type"
+	_ = shape.FromTags[Embedded]()       // want "anonymous fields are unsupported"
+	_ = shape.FromTags[Recursive]()      // want "recursive type is unsupported"
+	_ = shape.FromTags[FloatKey]()       // want "map key must be string or integer"
+	_ = shape.FromTags[Graph]()
+	_ = shape.FromTags[EmptyCandidate]()
 	var bind Unsupported
 	_ = shape.BindJSON(&bind, nil) // want "unsupported field type"
 
@@ -106,7 +106,7 @@ func build() {
 	_ = shape.New[Explicit](shape.Field("Hidden", shape.String())) // want "field Hidden is excluded from JSON"
 	_ = shape.New[Explicit](shape.Field("", shape.String()))       // want "field name must not be empty"
 	_ = shape.New[time.Time]()                                     // want "target must be an ordinary value struct"
-	_ = shape.Struct[time.Time]()                                  // want "target must be an ordinary value struct"
+	_ = shape.FromTags[time.Time]()                                // want "target must be an ordinary value struct"
 }
 
 func genericBind[T any](target *T, data []byte) error {

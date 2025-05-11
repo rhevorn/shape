@@ -78,8 +78,16 @@ func applyTag(p *Plan, text string) (out *Plan, err error) {
 	p = copyTagPlan(p)
 	labelSeen := false
 	for _, o := range opts {
+		elementKind := spec.Kind(0)
+		if p.element != nil {
+			elementKind = tagKind(p.element.typ)
+		}
+		if err := spec.CheckTag(o.Name, tagKind(p.typ), elementKind, o.HasValue); err != nil {
+			return nil, err
+		}
+		definition, _ := spec.LookupTag(o.Name)
 		target := p
-		outer := o.Name == "ifzero" || o.Name == "ifnull" || o.Name == "notnull" || o.Name == "notempty" || o.Name == "label"
+		outer := definition.Outer
 		pointerInner := p.typ.Kind() == reflect.Pointer && !outer
 		if pointerInner {
 			if p.element == nil {
@@ -197,12 +205,36 @@ func applyTag(p *Plan, text string) (out *Plan, err error) {
 }
 
 func flagTag(name string) bool {
-	switch name {
-	case "notnull", "notempty", "positive", "negative", "nonnegative", "unique", "tolower", "toupper", "email", "url", "uuid", "ip":
-		return true
-	default:
-		return false
+	definition, ok := spec.LookupTag(name)
+	return ok && definition.Argument == spec.NoArgument
+}
+
+func tagKind(t reflect.Type) spec.Kind {
+	if t == durationType {
+		return spec.Duration
 	}
+	if t == reflect.TypeFor[time.Time]() {
+		return spec.Time
+	}
+	switch t.Kind() {
+	case reflect.String:
+		return spec.String
+	case reflect.Bool:
+		return spec.Bool
+	case reflect.Pointer:
+		return spec.Pointer
+	case reflect.Slice:
+		return spec.Slice
+	case reflect.Map:
+		return spec.Map
+	case reflect.Struct:
+		return spec.Struct
+	default:
+		if numericKind(t.Kind()) {
+			return spec.Number
+		}
+	}
+	return 0
 }
 
 func applyStringTransform(name, value string, args []string) string {
@@ -240,20 +272,7 @@ func appendCompiledTransform(p *Plan, fn func(context.Context, reflect.Value) (r
 
 func appendPointerTagTransform(p *Plan, inner func(context.Context, reflect.Value) (reflect.Value, error)) *Plan {
 	p = copyTagPlan(p)
-	outer := func(ctx context.Context, value reflect.Value) (reflect.Value, error) {
-		if value.IsNil() {
-			return value, nil
-		}
-		out, err := inner(ctx, value.Elem())
-		if err != nil {
-			return reflect.Value{}, err
-		}
-		result := reflect.New(value.Type().Elem())
-		result.Elem().Set(out)
-		return result, nil
-	}
-	p.hasTransform = true
-	p.steps = appendCopy(p.steps, tagStep{kind: tagStepTransform, transform: outer})
+	p.element = appendCompiledTransform(p.element, inner)
 	return p
 }
 

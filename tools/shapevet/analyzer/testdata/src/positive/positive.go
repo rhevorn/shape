@@ -30,12 +30,12 @@ type Tagged struct {
 	Created  time.Time            `json:"created" shape:"ifzero=2026-09-11T08:00:00Z"`
 	Timeout  shapetypes.Duration  `json:"timeout" shape:"ifzero=30s,min=1s,max=5m,between=1s|5m,oneof=1s|30s"`
 	Nanos    time.Duration        `json:"nanos" shape:"ifzero=1000000000,min=1"`
-	Nickname *string              `json:"nickname" shape:"ifnull=guest,trim,notnull,notempty,email"`
+	Nickname *string              `json:"nickname" shape:"ifnull=guest,trim,notnull,email"`
 	Enabled  *bool                `json:"enabled" shape:"ifnull=false,notnull"`
 	Started  *time.Time           `json:"started" shape:"ifnull=2026-09-11T08:00:00Z,notnull"`
 	Delay    *shapetypes.Duration `json:"delay" shape:"ifnull=1s,positive"`
 	Child    Child                `json:"child" shape:"label=child"`
-	ChildPtr *Child               `json:"childPtr" shape:"notnull,notempty"`
+	ChildPtr *Child               `json:"childPtr" shape:"notnull"`
 	Names    Names                `json:"names" shape:"notnull,notempty,min=1,max=5,len=2,unique"`
 	Counts   Counts               `json:"counts" shape:"notnull,notempty,min=1,max=5,len=2"`
 	Hidden   chan int             `json:"-"`
@@ -57,7 +57,7 @@ type Explicit struct {
 const nameField = "Name"
 
 func build(data []byte) {
-	_ = shape.Struct[Tagged]()
+	_ = shape.FromTags[Tagged]()
 	var tagged Tagged
 	_ = shape.BindJSON(&tagged, data)
 	_ = shape.BindJSONContext(context.Background(), &tagged, data)
@@ -88,6 +88,6 @@ type Box[T any] struct {
 }
 
 func generic[T any]() {
-	_ = shape.Struct[Box[T]]()
+	_ = shape.FromTags[Box[T]]()
 	_ = shape.New[Box[T]](shape.Field("Value", shape.Value[T]()))
 }

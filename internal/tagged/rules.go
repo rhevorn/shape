@@ -72,8 +72,6 @@ func ruleFailure(name string, expected, received any) error {
 			key = "not_empty.string"
 		case reflect.Slice, reflect.Map:
 			key = "not_empty.collection"
-		case reflect.Pointer:
-			key = "not_empty.pointer"
 		}
 	case "pattern":
 		code = validate.CodeInvalidFormat
@@ -124,7 +122,7 @@ func ruleIssue(ctx context.Context, err error, path validate.Path, label string)
 			label,
 			failure.expected,
 		),
-		Expected: failure.expected, Received: failure.received,
+		Expected: detachedExpected(failure.expected), Received: failure.received,
 	}, true
 }
 
@@ -177,7 +175,7 @@ func compileRule(t reflect.Type, r spec.Rule) tagCheck {
 		}
 		check = func(_ context.Context, v reflect.Value) bool { return !v.IsNil() }
 	case "notempty":
-		if len(args) != 0 || (t.Kind() != reflect.String && t.Kind() != reflect.Slice && t.Kind() != reflect.Map && t.Kind() != reflect.Pointer) {
+		if len(args) != 0 || (t.Kind() != reflect.String && t.Kind() != reflect.Slice && t.Kind() != reflect.Map) {
 			bad()
 		}
 		check = func(_ context.Context, v reflect.Value) bool {
@@ -186,8 +184,6 @@ func compileRule(t reflect.Type, r spec.Rule) tagCheck {
 				return v.Len() > 0
 			case reflect.Slice, reflect.Map:
 				return !v.IsNil() && v.Len() > 0
-			case reflect.Pointer:
-				return !v.IsNil()
 			}
 			return true
 		}
@@ -427,4 +423,11 @@ func deepEqualMatchesComparable(t reflect.Type) bool {
 		}
 	}
 	return true
+}
+
+func detachedExpected(value any) any {
+	if values, ok := value.([]any); ok {
+		return append([]any(nil), values...)
+	}
+	return value
 }
