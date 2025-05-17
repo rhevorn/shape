@@ -9,7 +9,7 @@ import (
 	"github.com/rhevorn/shape/validate"
 )
 
-// TaggedSpec is the immutable tagged struct Schema returned by Struct. Apply
+// TaggedSpec is the immutable tagged struct Schema returned by FromTags. Apply
 // and Refine add whole-struct behavior after the compiled field behavior.
 type TaggedSpec[T any] struct {
 	base       tagged.Runtime[T]
@@ -82,7 +82,13 @@ func (s TaggedSpec[T]) transformDecodedContext(ctx context.Context, value T) (T,
 
 func (s TaggedSpec[T]) transformContext(ctx context.Context, value T, owned bool) (T, error) {
 	var zero T
-	out, err := s.base.TransformContext(ctx, value)
+	var out T
+	var err error
+	if owned {
+		out, err = s.base.TransformDecodedContext(ctx, value)
+	} else {
+		out, err = s.base.TransformContext(ctx, value)
+	}
 	if err != nil {
 		return zero, normalizeTransformError(ctx, err)
 	}

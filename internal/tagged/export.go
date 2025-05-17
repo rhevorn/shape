@@ -5,7 +5,12 @@ import (
 	"encoding"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"reflect"
+	"regexp"
+	"regexp/syntax"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/rhevorn/shape/validate"
@@ -42,11 +47,8 @@ func exportTagPlanAt(p *Plan, pointee bool) (map[string]any, error) {
 	t := p.typ
 	var document map[string]any
 	if t == durationType {
-		document = map[string]any{"type": "string", "format": "duration"}
-		if len(p.descriptors) != 0 {
-			return nil, &UnsupportedError{Feature: "duration comparison rules"}
-		}
-		return applyExportRules(document, p, pointee)
+		return nil, &UnsupportedError{Feature: "Go duration string representation"}
+
 	}
 	if t == reflect.TypeFor[time.Time]() {
 		document = map[string]any{"type": "string", "format": "date-time"}
@@ -82,6 +84,9 @@ func exportTagPlanAt(p *Plan, pointee bool) (map[string]any, error) {
 		}
 		document = inner
 	case reflect.Slice:
+		if t.Elem().Kind() == reflect.Uint8 {
+			return nil, &UnsupportedError{Feature: "base64 byte slice"}
+		}
 		if p.element == nil {
 			return nil, &UnsupportedError{Feature: "custom slice element"}
 		}
@@ -94,7 +99,7 @@ func exportTagPlanAt(p *Plan, pointee bool) (map[string]any, error) {
 		if p.element == nil {
 			return nil, &UnsupportedError{Feature: "custom map element"}
 		}
-		if t.Key().Kind() != reflect.String {
+		if t.Key().Kind() != reflect.String || hasCustomJSON(t.Key()) {
 			return nil, &UnsupportedError{Feature: "non-string map key"}
 		}
 		inner, err := Export(p.element)
@@ -109,6 +114,9 @@ func exportTagPlanAt(p *Plan, pointee bool) (map[string]any, error) {
 		properties := make(map[string]any, len(p.fields))
 		required := make([]string, 0, len(p.fields))
 		for _, field := range p.fields {
+			if field.quoted {
+				return nil, &UnsupportedError{Feature: "json string option on " + field.name}
+			}
 			child, err := Export(field.plan)
 			if err != nil {
 				return nil, err
@@ -190,11 +198,14 @@ func applyExportRules(document map[string]any, p *Plan, pointee bool) (map[strin
 		case "len":
 			switch p.typ.Kind() {
 			case reflect.Slice:
-				document["minItems"], document["maxItems"] = args[0], args[0]
+				mergeExportConstraint(document, "minItems", args[0])
+				mergeExportConstraint(document, "maxItems", args[0])
 			case reflect.Map:
-				document["minProperties"], document["maxProperties"] = args[0], args[0]
+				mergeExportConstraint(document, "minProperties", args[0])
+				mergeExportConstraint(document, "maxProperties", args[0])
 			default:
-				document["minLength"], document["maxLength"] = args[0], args[0]
+				mergeExportConstraint(document, "minLength", args[0])
+				mergeExportConstraint(document, "maxLength", args[0])
 			}
 			continue
 		case "gt":
@@ -212,13 +223,20 @@ func applyExportRules(document map[string]any, p *Plan, pointee bool) (map[strin
 		case "nonnegative":
 			key, value = "minimum", 0
 		case "oneof":
-			key, value = "enum", args
+			key, value = "enum", append([]any(nil), args...)
 		case "between":
-			document["minimum"], document["maximum"] = args[0], args[1]
+			mergeExportConstraint(document, "minimum", args[0])
+			mergeExportConstraint(document, "maximum", args[1])
 			continue
 		case "pattern":
-			key, value = "pattern", args[0]
-		case "email", "url", "uuid", "ip":
+			pattern, ok := portablePattern(args[0].(string))
+			if !ok {
+				return nil, &UnsupportedError{Feature: "non-portable Go regular expression"}
+			}
+			key, value = "pattern", pattern
+		case "ip":
+			key, value = "anyOf", []any{map[string]any{"format": "ipv4"}, map[string]any{"format": "ipv6"}}
+		case "email", "url", "uuid":
 			format := name
 			if format == "url" {
 				format = "uri"
@@ -246,7 +264,7 @@ func applyExportRules(document map[string]any, p *Plan, pointee bool) (map[strin
 		default:
 			return nil, &UnsupportedError{Feature: "rule " + name}
 		}
-		document[key] = value
+		mergeExportConstraint(document, key, value)
 	}
 	if !pointee && planAcceptsZero(p) {
 		return map[string]any{
@@ -278,4 +296,122 @@ func unsignedMaximum(bits int) uint64 {
 		return ^uint64(0)
 	}
 	return uint64(1)<<bits - 1
+}
+
+// Numeric bounds intersect without rounding int64/uint64 through float64.
+func mergeExportConstraint(document map[string]any, key string, value any) {
+	old, exists := document[key]
+	if !exists {
+		document[key] = value
+		return
+	}
+	switch key {
+	case "minimum", "exclusiveMinimum", "minLength", "minItems", "minProperties":
+		if exportNumber(value).Cmp(exportNumber(old)) > 0 {
+			document[key] = value
+		}
+		return
+	case "maximum", "exclusiveMaximum", "maxLength", "maxItems", "maxProperties":
+		if exportNumber(value).Cmp(exportNumber(old)) < 0 {
+			document[key] = value
+		}
+		return
+	}
+	if reflect.DeepEqual(old, value) {
+		return
+	}
+	document["allOf"] = append(exportConjunction(document), map[string]any{key: value})
+}
+
+func exportConjunction(document map[string]any) []any {
+	items, _ := document["allOf"].([]any)
+	return items
+}
+
+func exportNumber(value any) *big.Rat {
+	return numericRat(reflect.ValueOf(value))
+}
+
+// Parse Go syntax before emitting the portable subset. In particular, Go's $
+// is absolute end-of-text; JavaScript's $ also matches before a final newline.
+func portablePattern(pattern string) (string, bool) {
+	tree, err := syntax.Parse(pattern, syntax.Perl)
+	if err != nil {
+		return "", false
+	}
+	return exportRegexp(tree)
+}
+
+func exportRegexp(tree *syntax.Regexp) (string, bool) {
+	if tree.Flags&syntax.FoldCase != 0 {
+		return "", false
+	}
+	parts := make([]string, len(tree.Sub))
+	for i, sub := range tree.Sub {
+		part, ok := exportRegexp(sub)
+		if !ok {
+			return "", false
+		}
+		parts[i] = part
+	}
+	switch tree.Op {
+	case syntax.OpNoMatch:
+		return "(?!)", true
+	case syntax.OpEmptyMatch:
+		return "(?:)", true
+	case syntax.OpLiteral:
+		for _, r := range tree.Rune {
+			if r > 127 {
+				return "", false
+			}
+		}
+		return regexp.QuoteMeta(string(tree.Rune)), true
+	case syntax.OpCharClass:
+		var out strings.Builder
+		out.WriteByte('[')
+		for i := 0; i < len(tree.Rune); i += 2 {
+			low, high := tree.Rune[i], tree.Rune[i+1]
+			if high > 127 {
+				return "", false
+			}
+			fmt.Fprintf(&out, `\x%02x`, low)
+			if low != high {
+				fmt.Fprintf(&out, `-\x%02x`, high)
+			}
+		}
+		out.WriteByte(']')
+		return out.String(), true
+	case syntax.OpAnyCharNotNL:
+		return `[^\n]`, true
+	case syntax.OpAnyChar:
+		return `[\s\S]`, true
+	case syntax.OpBeginText:
+		return "^", true
+	case syntax.OpEndText:
+		return `(?![\s\S])`, true
+	case syntax.OpWordBoundary:
+		return `\b`, true
+	case syntax.OpNoWordBoundary:
+		return `\B`, true
+	case syntax.OpCapture:
+		return "(?:" + parts[0] + ")", true
+	case syntax.OpConcat:
+		return strings.Join(parts, ""), true
+	case syntax.OpAlternate:
+		return "(?:" + strings.Join(parts, "|") + ")", true
+	case syntax.OpStar:
+		return "(?:" + parts[0] + ")*", true
+	case syntax.OpPlus:
+		return "(?:" + parts[0] + ")+", true
+	case syntax.OpQuest:
+		return "(?:" + parts[0] + ")?", true
+	case syntax.OpRepeat:
+		maxCount := ""
+		if tree.Max >= 0 {
+			maxCount = strconv.Itoa(tree.Max)
+		}
+		return "(?:" + parts[0] + "){" + strconv.Itoa(tree.Min) + "," + maxCount + "}", true
+	default:
+		return "", false
+	}
 }

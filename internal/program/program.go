@@ -95,6 +95,9 @@ func (t Transformer[T]) TransformContext(ctx context.Context, value T) (T, error
 	if ctx == nil {
 		panic("shape: nil context")
 	}
+	if err := ctx.Err(); err != nil {
+		return zero, err
+	}
 	out := reflect.New(reflect.TypeFor[T]()).Elem()
 	out.Set(reflect.ValueOf(&value).Elem())
 	for _, field := range t.compiled.fields {
@@ -109,6 +112,9 @@ func (t Transformer[T]) TransformContext(ctx context.Context, value T) (T, error
 			return zero, &TransformError{Path: validate.Path{validate.FieldPath(field.name)}, Err: err}
 		}
 		out.Field(field.index).Set(item)
+	}
+	if err := ctx.Err(); err != nil {
+		return zero, err
 	}
 	return out.Interface().(T), nil
 }
@@ -138,6 +144,9 @@ func (v Validator[T]) run(ctx context.Context, value T, first bool) error {
 	if ctx == nil {
 		panic("shape: nil context")
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	root := reflect.ValueOf(&value).Elem()
 	issues := make([]validate.Issue, 0)
 	for _, field := range v.compiled.fields {
@@ -149,6 +158,9 @@ func (v Validator[T]) run(ctx context.Context, value T, first bool) error {
 			err = field.validateOne(ctx, root.Field(field.index))
 		} else {
 			err = field.validateAll(ctx, root.Field(field.index))
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
 		}
 		if err == nil {
 			continue
@@ -163,6 +175,9 @@ func (v Validator[T]) run(ctx context.Context, value T, first bool) error {
 				return &validate.Error{Issues: issues}
 			}
 		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	if len(issues) == 0 {
 		return nil

@@ -18,22 +18,26 @@ var structCache sync.Map
 // Compile derives and caches an immutable tag plan for t.
 func Compile(t reflect.Type) (*Plan, error) {
 	if t.Kind() != reflect.Struct || t == reflect.TypeFor[time.Time]() {
-		return nil, fmt.Errorf("shape: Struct requires an ordinary value struct")
+		return nil, fmt.Errorf("shape: FromTags requires an ordinary value struct")
 	}
 	if cached, ok := structCache.Load(t); ok {
 		e := cached.(structCacheEntry)
 		return e.plan, e.err
 	}
 	p, err := compileType(t, map[reflect.Type]bool{})
+	if err == nil {
+		prepare(p)
+	}
 	actual, _ := structCache.LoadOrStore(t, structCacheEntry{p, err})
 	e := actual.(structCacheEntry)
 	return e.plan, e.err
 }
 
 type tagField struct {
-	index int
-	name  string
-	plan  *Plan
+	index  int
+	name   string
+	quoted bool
+	plan   *Plan
 }
 
 func compileType(t reflect.Type, active map[reflect.Type]bool) (*Plan, error) {
@@ -89,7 +93,7 @@ func compileType(t reflect.Type, active map[reflect.Type]bool) (*Plan, error) {
 			if e != nil {
 				return nil, fmt.Errorf("%s: %w", f.Name, e)
 			}
-			fields = append(fields, tagField{i, jsonName, inner})
+			fields = append(fields, tagField{index: i, name: jsonName, plan: inner, quoted: jsonQuoted(f)})
 		}
 		p.fields = fields
 	case reflect.Slice:
@@ -111,4 +115,13 @@ func compileType(t reflect.Type, active map[reflect.Type]bool) (*Plan, error) {
 		return nil, fmt.Errorf("shape: unsupported field type %v", t)
 	}
 	return p, nil
+}
+
+func jsonQuoted(field reflect.StructField) bool {
+	for _, option := range strings.Split(field.Tag.Get("json"), ",")[1:] {
+		if option == "string" {
+			return true
+		}
+	}
+	return false
 }

@@ -34,14 +34,17 @@ type tagStep struct {
 }
 
 type Plan struct {
-	typ          reflect.Type
-	element      *Plan
-	fields       []tagField
-	fallbackKind string
-	hasTransform bool
-	descriptors  []spec.Rule
-	steps        []tagStep
-	label        string
+	typ             reflect.Type
+	element         *Plan
+	fields          []tagField
+	fallbackKind    string
+	hasTransform    bool
+	needsTransform  bool
+	needsValidation bool
+	height          int
+	descriptors     []spec.Rule
+	steps           []tagStep
+	label           string
 }
 
 func copyTagPlan(p *Plan) *Plan   { n := *p; return &n }
@@ -156,3 +159,21 @@ func cloneValue(ctx context.Context, v reflect.Value, strict bool) (reflect.Valu
 	}
 }
 func immutableType(t reflect.Type) bool { return reflectclone.ImmutableType(t) }
+
+// prepare computes immutable subtree work flags once, after all tags are applied.
+func prepare(p *Plan) {
+	p.needsTransform = p.hasTransform || p.fallbackKind != ""
+	p.needsValidation = len(p.descriptors) != 0 || p.typ.Kind() == reflect.Float32 || p.typ.Kind() == reflect.Float64
+	visit := func(child *Plan) {
+		prepare(child)
+		p.needsTransform = p.needsTransform || child.needsTransform
+		p.needsValidation = p.needsValidation || child.needsValidation
+		p.height = max(p.height, child.height+1)
+	}
+	if p.element != nil {
+		visit(p.element)
+	}
+	for _, field := range p.fields {
+		visit(field.plan)
+	}
+}

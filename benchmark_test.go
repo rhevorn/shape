@@ -1,6 +1,7 @@
 package shape_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/rhevorn/shape"
@@ -13,7 +14,7 @@ func BenchmarkSchemaParseJSON(b *testing.B) {
 		Name string `json:"name" shape:"trim,notempty,maxlength=50"`
 		Age  int    `json:"age" shape:"min=18"`
 	}
-	schema := shape.Struct[Request]()
+	schema := shape.FromTags[Request]()
 	data := []byte(`{"name":" Pong ","age":20}`)
 	b.ReportAllocs()
 	for b.Loop() {
@@ -100,6 +101,88 @@ func BenchmarkLargeTransformerThen(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
 			if _, err := many.Transform(input); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
+
+type BenchDTO struct {
+	Items []int `json:"items"`
+}
+
+var benchOut BenchDTO
+
+func BenchmarkNestedJSON(b *testing.B) {
+	data := []byte(`{"items":[1,2,3,4,5,6,7,8,9,10]}`)
+	tagged := shape.FromTags[BenchDTO]()
+	explicit := shape.New[BenchDTO](shape.Field("Items", shape.Slice(shape.Int())))
+	b.Run("json-only", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			var out BenchDTO
+			if err := json.Unmarshal(data, &out); err != nil {
+				b.Fatal(err)
+			}
+			benchOut = out
+		}
+	})
+	b.Run("tagged", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			out, err := tagged.ParseJSON(data)
+			if err != nil {
+				b.Fatal(err)
+			}
+			benchOut = out
+		}
+	})
+	b.Run("explicit", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			out, err := explicit.ParseJSON(data)
+			if err != nil {
+				b.Fatal(err)
+			}
+			benchOut = out
+		}
+	})
+}
+
+func BenchmarkNoopPayload(b *testing.B) {
+	type DTO struct{ Payload []byte }
+	input := DTO{Payload: make([]byte, 64<<10)}
+	tagged := shape.FromTags[DTO]()
+	explicit := shape.New[DTO](shape.Field("Payload", shape.Value[[]byte]()))
+	plain := transform.Value[DTO]()
+	b.Run("tagged-transform", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			if _, err := tagged.Transform(input); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	b.Run("explicit-transform", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			if _, err := explicit.Transform(input); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	b.Run("value-transform", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			if _, err := plain.Transform(input); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	b.Run("tagged-validate", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			if err := tagged.Validate(input); err != nil {
 				b.Fatal(err)
 			}
 		}

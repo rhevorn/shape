@@ -42,19 +42,24 @@ func (s Runtime[T]) TransformContext(ctx context.Context, value T) (T, error) {
 	return s.transformContext(ctx, value, false)
 }
 
+// TransformDecodedContext consumes a newly decoded, private value.
+func (s Runtime[T]) TransformDecodedContext(ctx context.Context, value T) (T, error) {
+	return s.transformContext(ctx, value, true)
+}
+
 func (s Runtime[T]) transformContext(ctx context.Context, value T, owned bool) (T, error) {
 	var zero T
 	if ctx == nil {
 		panic("shape: nil context")
 	}
 	if s.Plan == nil {
-		return zero, errors.New("shape: uninitialized schema; use shape.Struct")
+		return zero, errors.New("shape: uninitialized schema; use shape.FromTags")
 	}
 	ownership := borrowedValue
 	if owned {
 		ownership = ownedValue
 	}
-	out, err := transformTagPlan(ctx, s.Plan, reflect.ValueOf(&value).Elem(), nil, 0, ownership)
+	out, err := transformTagPlan(ctx, s.Plan, reflect.ValueOf(&value).Elem(), make(validate.Path, 0, min(s.Plan.height+1, defaultMaxRecursiveDepth)), 0, ownership)
 	if err != nil {
 		return zero, err
 	}
@@ -82,10 +87,13 @@ func (s Runtime[T]) validate(ctx context.Context, value T, first bool) error {
 		panic("shape: nil context")
 	}
 	if s.Plan == nil {
-		return errors.New("shape: uninitialized schema; use shape.Struct")
+		return errors.New("shape: uninitialized schema; use shape.FromTags")
+	}
+	if !s.Plan.needsValidation && s.Plan.height < defaultMaxRecursiveDepth {
+		return ctx.Err()
 	}
 	issues := make([]validate.Issue, 0)
-	_, err := validatePlan(ctx, s.Plan, reflect.ValueOf(&value).Elem(), nil, 0, first, &issues)
+	_, err := validatePlan(ctx, s.Plan, reflect.ValueOf(&value).Elem(), make(validate.Path, 0, min(s.Plan.height+1, defaultMaxRecursiveDepth)), 0, first, &issues)
 	if err != nil {
 		return err
 	}
@@ -111,6 +119,10 @@ func transformTagPlan(ctx context.Context, p *Plan, value reflect.Value, path va
 		return reflect.Value{}, &TransformError{Path: cloneValidatePath(path), Err: errors.New("maximum traversal depth exceeded")}
 	}
 
+	// An owned subtree without transforms can pass through unchanged.
+	if owned && !p.needsTransform && depth+p.height < defaultMaxRecursiveDepth {
+		return value, nil
+	}
 	var err error
 	for _, step := range p.steps {
 		if err = ctx.Err(); err != nil {
@@ -177,6 +189,10 @@ func transformTagPlan(ctx context.Context, p *Plan, value reflect.Value, path va
 		if !owned {
 			out = reflect.MakeSlice(value.Type(), value.Len(), value.Len())
 		}
+		if !p.element.needsTransform && immutableType(p.typ.Elem()) && depth+p.height < defaultMaxRecursiveDepth {
+			reflect.Copy(out, value)
+			return out, nil
+		}
 		for i := 0; i < value.Len(); i++ {
 			item, err := transformTagPlan(ctx, p.element, value.Index(i), appendValidatePath(path, validate.IndexPath(i)), depth+1, ownership)
 			if err != nil {
@@ -221,6 +237,9 @@ func validatePlan(ctx context.Context, p *Plan, value reflect.Value, path valida
 			Message:  validationMessage(ctx, "too_deep", "", defaultMaxRecursiveDepth),
 			Expected: defaultMaxRecursiveDepth, Received: depth,
 		}, first), nil
+	}
+	if !p.needsValidation && depth+p.height < defaultMaxRecursiveDepth {
+		return false, nil
 	}
 	if !finite(value) {
 		if appendSchemaIssue(ctx, issues, validate.Issue{
@@ -314,10 +333,7 @@ func validationMessage(ctx context.Context, id, label string, expected any) stri
 }
 
 func appendValidatePath(path validate.Path, segment validate.PathSegment) validate.Path {
-	out := make(validate.Path, len(path)+1)
-	copy(out, path)
-	out[len(path)] = segment
-	return out
+	return append(path, segment)
 }
 
 func cloneValidatePath(path validate.Path) validate.Path {

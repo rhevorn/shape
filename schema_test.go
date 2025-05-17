@@ -18,7 +18,7 @@ type profile struct {
 	Age  int    `json:"age" shape:"min=18,max=120"`
 }
 
-var profileSchema = shape.Struct[profile]()
+var profileSchema = shape.FromTags[profile]()
 var _ shape.Schema[profile] = profileSchema
 
 func TestSchemaKeepsTransformAndValidateIndependent(t *testing.T) {
@@ -44,7 +44,7 @@ func TestTaggedSchemaDoesNotMutateNestedInput(t *testing.T) {
 	type Request struct {
 		Items []Item `json:"items"`
 	}
-	schema := shape.Struct[Request]()
+	schema := shape.FromTags[Request]()
 	input := Request{Items: []Item{{Name: " Pong "}}}
 	out, err := schema.Transform(input)
 	if err != nil {
@@ -256,7 +256,7 @@ func TestSchemaNestedPathsAndStableMapOrder(t *testing.T) {
 		Items  []Item         `json:"items" shape:"notempty"`
 		Labels map[int]string `json:"labels"`
 	}
-	schema := shape.Struct[Request]()
+	schema := shape.FromTags[Request]()
 	err := schema.Validate(Request{
 		Items:  []Item{{Email: "bad"}, {Email: "also-bad"}},
 		Labels: map[int]string{10: "x", 2: "y"},
@@ -275,7 +275,7 @@ func TestSchemaNullFallbackAndAtomicBind(t *testing.T) {
 		Name  string `json:"name" shape:"ifzero=guest,trim,notempty"`
 		Debug *bool  `json:"debug" shape:"ifnull=true"`
 	}
-	schema := shape.Struct[Config]()
+	schema := shape.FromTags[Config]()
 	out, err := schema.ParseJSON([]byte(`{"name":null,"debug":null}`))
 	if err != nil || out.Name != "guest" || out.Debug == nil || !*out.Debug {
 		t.Fatalf("ParseJSON() = %#v, %v", out, err)
@@ -323,10 +323,10 @@ func TestStructRejectsInvalidConfiguration(t *testing.T) {
 	}
 	defer func() {
 		if recover() == nil {
-			t.Fatal("Struct did not panic")
+			t.Fatal("FromTags did not panic")
 		}
 	}()
-	_ = shape.Struct[Invalid]()
+	_ = shape.FromTags[Invalid]()
 }
 
 func TestSchemaUsesValidateLocale(t *testing.T) {
@@ -343,7 +343,7 @@ func TestStringOneOfAndCollectionLenTags(t *testing.T) {
 		Mode  string   `shape:"oneof=read|write"`
 		Items []string `shape:"len=2"`
 	}
-	schema := shape.Struct[Value]()
+	schema := shape.FromTags[Value]()
 	if err := schema.Validate(Value{Mode: "read", Items: []string{"a", "b"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -448,7 +448,7 @@ func TestNestedSchemaTransformAndValidateAgreeOnPath(t *testing.T) {
 	type Order struct {
 		Items []Item `json:"items"`
 	}
-	order := shape.Struct[Order]()
+	order := shape.FromTags[Order]()
 	value := Order{Items: []Item{{Sku: "ok"}, {Sku: ""}}}
 
 	verr := order.Validate(value)
@@ -505,7 +505,7 @@ func TestPointerFieldKeepsItsLabel(t *testing.T) {
 	}
 
 	age := 1
-	err := shape.Struct[Doc]().Validate(Doc{Age: &age, Size: 1})
+	err := shape.FromTags[Doc]().Validate(Doc{Age: &age, Size: 1})
 	var validationError *validate.Error
 	if !errors.As(err, &validationError) || len(validationError.Issues) != 2 {
 		t.Fatalf("issues = %#v", err)
@@ -598,7 +598,7 @@ func TestFailedWholeStructApplyDoesNotMutateInput(t *testing.T) {
 			Kept   string `json:"kept"`
 			Values []int  `json:"-"`
 		}
-		schema := shape.Struct[Large]().Apply(func(value Large) (Large, error) {
+		schema := shape.FromTags[Large]().Apply(func(value Large) (Large, error) {
 			value.Values[0] = 99
 			return value, boom
 		})
@@ -624,7 +624,7 @@ func TestValueFloatAgreesWithNumberOnNonFinite(t *testing.T) {
 	}{
 		{"Value[float64]", shape.New[Ratio](shape.Field("R", shape.Value[float64]()))},
 		{"Float64", shape.New[Ratio](shape.Field("R", shape.Float64()))},
-		{"tagged", shape.Struct[Ratio]()},
+		{"tagged", shape.FromTags[Ratio]()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := tc.schema.Validate(Ratio{R: math.NaN()})
@@ -644,7 +644,7 @@ func TestTaggedIssuesUseContextLanguage(t *testing.T) {
 		Name string `json:"name" shape:"label=姓名,notempty"`
 	}
 	ctx := validate.WithLocale(context.Background(), validate.SimplifiedChinese)
-	err := shape.Struct[Request]().ValidateContext(ctx, Request{})
+	err := shape.FromTags[Request]().ValidateContext(ctx, Request{})
 	var got *validate.Error
 	if !errors.As(err, &got) || len(got.Issues) != 1 || got.Issues[0].Message != "姓名不能为空" {
 		t.Fatalf("error = %#v", err)
@@ -655,7 +655,7 @@ func TestTaggedSpecSupportsWholeStructBehavior(t *testing.T) {
 	type Request struct {
 		Name string `shape:"trim"`
 	}
-	schema := shape.Struct[Request]().
+	schema := shape.FromTags[Request]().
 		Apply(func(value Request) (Request, error) {
 			value.Name = strings.ToUpper(value.Name)
 			return value, nil
@@ -703,7 +703,7 @@ func TestExplicitAndTaggedStringRulesStayEquivalent(t *testing.T) {
 		shape.Field("UUID", shape.String().UUID()),
 		shape.Field("IP", shape.String().IP()),
 	)
-	tagged := shape.Struct[Contacts]()
+	tagged := shape.FromTags[Contacts]()
 
 	values := []Contacts{
 		{Email: "pong@example.com", URL: "https://example.com/a", UUID: "550e8400-e29b-41d4-a716-446655440000", IP: "127.0.0.1"},
@@ -723,7 +723,7 @@ func TestExplicitAndTaggedTransformsStayEquivalent(t *testing.T) {
 		Value string `json:"value" shape:"trim,tolower"`
 	}
 	explicit := shape.New[Text](shape.Field("Value", shape.String().Trim().ToLower()))
-	tagged := shape.Struct[Text]()
+	tagged := shape.FromTags[Text]()
 	want := Text{Value: "pong"}
 
 	explicitValue, explicitErr := explicit.Transform(Text{Value: " PONG "})
@@ -740,7 +740,7 @@ func TestMapTraversalOrderIsShared(t *testing.T) {
 	type Values struct {
 		Items map[int]Item `json:"items"`
 	}
-	err := shape.Struct[Values]().Validate(Values{Items: map[int]Item{3: {}, 1: {}, 2: {}}})
+	err := shape.FromTags[Values]().Validate(Values{Items: map[int]Item{3: {}, 1: {}, 2: {}}})
 	var validationError *validate.Error
 	if !errors.As(err, &validationError) {
 		t.Fatalf("tagged map validation = %v", err)
