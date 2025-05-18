@@ -15,6 +15,11 @@ dependency does not enter the library module graph. For a release, publish the
 root module tag first, then publish the matching nested-module tag (for
 example, `v0.1.0` followed by `tools/shapevet/v0.1.0`). Update the root version
 required by `tools/shapevet/go.mod` when the two modules move together.
+`make shapevet-isolated` checks both candidate modules with `GOWORK=off`; a
+temporary modfile points the tool at the candidate root. This pre-release check
+does not require an already published tag. After publishing the root, also run
+`GOWORK=off go test ./...` and `GOWORK=off go vet ./...` in `tools/shapevet`
+without a replacement before tagging the tool. See [release steps](docs/RELEASE.md).
 
 Public API changes must update `docs/API.md` and relevant examples. After the
 first release, follow the compatibility policy in `docs/API.md`; incompatible
@@ -45,7 +50,10 @@ The root package is a public facade: keep constructors, Schema types, field
 Specs, JSON entry points, and export entry points there. Implementation belongs
 under `internal`: `tagged` compiles and executes struct-tag plans, `program`
 executes explicit fields, `pipeline` runs whole-value transforms, and
-`jsondecode` owns the standard JSON decoding stage. The `validate`, `transform`,
+`jsondecode` owns the standard JSON decoding stage. `internal/spec/tags.go`
+is the shared tag vocabulary, argument policy, and domain/scope matrix used by
+both runtime construction and shapevet. Add capabilities there before extending
+either executor, and add cross-path behavior tests. The `validate`, `transform`,
 `jsonschema`, `openapi`, and `types` directories are intentionally public
 packages; do not move root implementation into a new public helper package.
 

@@ -6,10 +6,7 @@ shapevet-test:
 	cd tools/shapevet && go test ./...
 
 shapevet-isolated:
-	cd tools/shapevet && GOWORK=off go mod download
-	cd tools/shapevet && GOWORK=off go mod verify
-	cd tools/shapevet && GOWORK=off go test ./...
-	cd tools/shapevet && GOWORK=off go vet ./...
+	sh scripts/check-isolated.sh
 
 fmt:
 	gofmt -w $$(rg --files -g '*.go')
@@ -27,8 +24,9 @@ vet:
 	go vet ./...
 
 shapevet-check:
-	cd tools/shapevet && go build -o /tmp/shapevet-vettool .
-	go vet -vettool=/tmp/shapevet-vettool -exclude-tests ./...
+	@tool_dir=$$(mktemp -d); trap 'rm -rf "$$tool_dir"' EXIT HUP INT TERM; \
+	go build -o "$$tool_dir/shapevet" ./tools/shapevet && \
+	go vet -vettool="$$tool_dir/shapevet" -exclude-tests ./...
 
 fuzz-smoke:
 	go test ./transform -run '^$$' -fuzz '^FuzzStringTransformer$$' -fuzztime 2s

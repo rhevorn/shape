@@ -25,6 +25,7 @@ jobs:
       - run: make shapevet-isolated
       - run: make shapevet-check
       - run: make test-race
+      - run: make examples-check
 
   fuzz:
     runs-on: ubuntu-latest
