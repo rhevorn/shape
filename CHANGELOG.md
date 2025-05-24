@@ -12,7 +12,7 @@
   custom `Apply` callbacks.
 - Code-defined struct schemas through typed `shape.New[T](...)` field Schemas,
   including scalar, pointer, slice, map, and nested Schema fields.
-- Cached tag schemas through `shape.Struct[T]()` and inferred package-level
+- Cached tag schemas through `shape.FromTags[T]()` and inferred package-level
   `shape.BindJSON*` helpers.
 - One `shape.Schema[T]` interface (Transform + Validate) implemented by scalar,
   pointer, slice, map, explicit struct, and tagged struct Specs.
@@ -31,6 +31,17 @@
   documentation.
 
 ### Fixed
+
+- Error enum values and exported documents no longer expose mutable schema state.
+- Exported constraints intersect instead of overwriting earlier rules; unsupported
+  JSON representations fail explicitly, and portable regexps are translated.
+- `And` retains declaration order, and pointer/slice/map outer transforms run
+  before element transforms, including fallback values and newly added elements.
+- Empty explicit schemas and final callbacks honor context cancellation.
+- Named string map keys stay quoted; mixed nested transform paths are not duplicated.
+- Recursive named collections produce shapevet diagnostics instead of stack overflow.
+- Tagged plans skip subtrees with no work, bulk-copy unchanged scalar slices,
+  reuse traversal paths, and consume already decoded values without recopying.
 
 - Map validation paths preserve the concrete key type, so integer key `3` is
   reported as `[3]` and string key `"3"` as `["3"]`; key and value failures
@@ -70,7 +81,7 @@
   named slice and map types are accepted, empty `oneof` candidates are accepted,
   and tags on type-parameter fields are left to the construction call.
 - The exported document no longer offers a `null` branch that a pointer-level
-  `notnull`/`notempty` rejects, and an optional pointer is nullable exactly once.
+  `notnull` rejects, and an optional pointer is nullable exactly once.
 - A type with only `MarshalText`/`UnmarshalText` is refused for export instead
   of being described as a struct.
 - The explicit Schema path rejects two fields that share a JSON name, matching
@@ -83,13 +94,20 @@
 
 ### Changed
 
+- Rename the tag constructor from `Struct[T]` to `FromTags[T]` without retaining
+  an ambiguous alias; package-level `ParseJSON*` is the uniform JSON entry point.
+- Runtime tags and shapevet share tag domains, arguments, and pointer scope.
+- Isolated release checks validate the candidate root and tool modules without
+  requiring a root version that has not yet been published.
+
 - Root value factories no longer accept struct field names. Explicit
   `shape.New[T]` arguments now use `shape.Field("Name", schema)`, leaving
   scalar and collection Schemas uniformly reusable at any nesting level.
 - `And` returns the concrete family validator type instead of `Validator[T]`,
   so rule methods may follow it.
 - `validate.MaxDeepUniqueItems` and `validate.CodeUniqueLimit` are exported.
-- `validate.PointerValidator.NotEmpty` is documented as a synonym of `NotNull`.
+- Pointer presence uses `NotNull`; the ambiguous pointer `NotEmpty` synonym
+  and pointer `notempty` tag are removed before the first release.
 
 ### Removed
 

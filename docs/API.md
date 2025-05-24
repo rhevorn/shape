@@ -17,13 +17,13 @@ package-level `BindJSON*` helpers.
 
 ```go
 func New[T any](fields ...FieldSpec) StructSpec[T]
-func Struct[T any]() TaggedSpec[T]
+func FromTags[T any]() TaggedSpec[T]
 ```
 
 - `New[T]` accepts an ordinary value struct and explicit fields.
 - An empty field list is valid for a Schema containing only whole-struct
   `Apply`/`Refine` callbacks.
-- `Struct[T]` compiles `json` and `shape` tags and caches the plan by Go type.
+- `FromTags[T]` compiles `json` and `shape` tags and caches the plan by Go type.
 - Invalid program configuration panics during construction.
 - Both returned values are immutable and safe for concurrent reuse.
 
@@ -138,12 +138,12 @@ Transform
   IfNull  Apply  ApplyContext
 
 Validate
-  NotNull  NotEmpty
+  NotNull
   Refine  RefineContext  Label
 ```
 
 Outer rules run on the pointer; a non-nil value then runs the inner Schema.
-On a pointer, `NotNull` and `NotEmpty` are synonyms (both reject only `nil`).
+`NotNull` rejects nil. Apply content rules to the inner Schema; pointers do not expose `NotEmpty`.
 
 #### `SliceSpec[T]` — `shape.Slice` or `.Slice()`
 
@@ -188,7 +188,7 @@ JSON (also JSONSchema[T])
 
 Whole-struct callbacks run after all field callbacks in the same phase.
 
-#### `TaggedSpec[T]` — `shape.Struct`
+#### `TaggedSpec[T]` — `shape.FromTags`
 
 ```text
 Transform
@@ -228,7 +228,8 @@ type JSONSchema[T any] interface {
 ```
 
 `StructSpec` and `TaggedSpec` implement `JSONSchema`. Scalar and composite Specs
-implement `Schema` only.
+implement `Schema` only. Package-level `ParseJSON*` is the uniform entry point
+for every root type; struct methods are convenience delegates.
 
 Package-level Parse for any Schema root (including scalars and collections):
 
@@ -340,11 +341,11 @@ Refine  RefineContext  And  Label
 #### `PointerValidator[T]`
 
 ```text
-NotNull  NotEmpty
+NotNull
 Refine  RefineContext  And  Label
 ```
 
-`NotNull` and `NotEmpty` are synonyms on pointers.
+Pointer presence uses `NotNull`; inner validators check the value.
 
 #### `SliceValidator[T]`
 
@@ -362,6 +363,8 @@ Refine  RefineContext  And  Label
 
 `And` returns the concrete family type, so further rule methods can follow it.
 A label set before `And` applies to the appended validators' issues too.
+`And` occupies its declaration position among outer rules; a later `Refine`
+executes after it. Container elements execute after all outer rules.
 
 Errors and paths:
 
@@ -488,8 +491,10 @@ IfNull  Apply  ApplyContext  Then
 IfNull  Apply  ApplyContext  Then
 ```
 
-For Pointer/Slice/Map, inner element transformation is the first constructed
-step; fluent `IfNull`/`Apply` calls then run in method-call order.
+For Pointer/Slice/Map, outer `IfNull`/`Apply` calls run in method-call order,
+then the resulting non-nil elements run their inner transformers. Defaults and
+elements inserted by `Apply` are therefore transformed too. `Then` composes
+complete pipelines in order.
 
 All transforms return a value of the same Go type. Cross-type coercion is not
 part of this API.
@@ -512,9 +517,19 @@ openapi.JSONResponse(description, schema)
 ```
 
 Export is intentionally conservative. Currently only representable tagged
-`shape.Struct[T]()` plans are exported. Transforms, custom callbacks, fallbacks,
-custom JSON representations, and unsupported rules return
-`UnsupportedSchemaError`; they are never omitted silently.
+`shape.FromTags[T]()` plans are exported. Transforms, custom callbacks, fallbacks,
+custom JSON representations, `json:",string"`, byte slices, Go duration strings,
+and unsupported rules return `UnsupportedSchemaError`; they are never omitted
+silently. Repeated rules intersect, and exported documents are detached from the
+cached plan. Patterns export only when the supported ASCII Go regexp subset
+can be translated to ECMA-262; unsupported flags and Unicode classes fail.
+
+The adapters describe constraints on JSON values, not every lexical detail of
+`encoding/json` (for example integer token spelling or duplicate object keys).
+Consumers must enable format assertions when relying on `format` annotations.
+The input accepts null where decoding to zero passes validation; the same
+value-constraint document is used by `JSONResponse`, which does not serialize
+values or validate a response body.
 
 ## 5. Frozen behavior
 
@@ -528,7 +543,7 @@ custom JSON representations, and unsupported rules return
 - Explicit Schema fields use `shape.New` argument order.
 - Tagged Schema fields use Go declaration order.
 - Slices use ascending indexes; maps use deterministic sorted keys.
-- `NotEmpty` treats nil pointer/slice/map as empty.
+- `NotEmpty` rejects empty strings and nil/empty slices/maps. Pointers use `NotNull`.
 - `IfZero` cannot distinguish missing JSON, JSON null, and an explicit zero after decoding.
 - `IfNull` applies only to nilable values and preserves nil/empty distinction.
 - Context cancellation stops traversal and returns the context error.
@@ -566,3 +581,26 @@ ordinary-value Parse or in-place Bind
 
 `IfZero`, `IfNull`, pointers, and explicit custom callbacks cover the intended
 cases without hiding JSON state or mixing validation with transformation.
+
+## 7. Ownership and callbacks
+
+A constructed Schema owns its rule configuration and fallback snapshots. Error
+`Expected` lists and exported documents are independent copies and may be edited
+without changing later calls. `Received` can refer to caller-supplied values;
+errors do not promise an arbitrary deep copy of user data.
+
+Built-in transforms detach the mutable data they process before invoking
+callbacks. Explicit fields omitted from `New` pass through unchanged and may
+share storage; a whole-struct `Apply` detaches the data it receives. A fresh JSON
+decode transfers ownership to the pipeline, so redundant defensive copies can
+be skipped. Every fallback is snapshotted during construction and copied for
+use; the caller's later edits cannot change it.
+
+`Value[T]` is intended for data values. Copying live synchronization objects,
+resource handles, closures or channels does not provide transactional isolation.
+Cycles or values beyond the copy depth limit return an error. Private data
+fields are copied as well; this is not a general-purpose object cloning API.
+Custom callbacks must be safe for concurrent reuse, validators must not mutate
+inputs, and transform callbacks must transfer ownership of mutable values they
+return. Side effects and external storage accessed by callbacks remain the
+caller's responsibility.

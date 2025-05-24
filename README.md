@@ -5,7 +5,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/rhevorn/shape)](https://goreportcard.com/report/github.com/rhevorn/shape)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Type-safe validation, transformation, and JSON binding for Go.
+Typed validation, transformation, and JSON binding for Go.
 
 Describe a struct once, then transform, validate, or decode JSON with the same
 definition. Invalid field configuration panics at construction; bad input
@@ -21,8 +21,8 @@ returns errors.
 
 ## Status
 
-Release candidate. The public surface and behavioral contract are frozen in
-[`docs/API.md`](docs/API.md); after the first public tag, incompatible changes
+Preparing the first public release. The public surface and behavioral contract
+are specified in [`docs/API.md`](docs/API.md); after the first public tag, incompatible changes
 require a major version.
 
 ## Install
@@ -48,6 +48,7 @@ err := shape.BindJSON(&request, data)
 ```
 
 `BindJSON` writes the target only after the full pipeline succeeds.
+Use `shape.FromTags[CreateUserRequest]()` to reuse the tagged Schema explicitly.
 
 ## Explicit Schema
 
@@ -66,13 +67,17 @@ var userSchema = shape.New[User](
 	shape.Field("Tags", shape.Slice(shape.String().Trim().NotEmpty()).NotEmpty().Unique()),
 )
 
-user, err := userSchema.ParseJSON([]byte(`{
+user, err := shape.ParseJSON(userSchema, []byte(`{
 	"name": " Pong ",
 	"age": 20,
 	"tags": [" go ", "shape"]
 }`))
 // user.Name == "Pong"
 ```
+
+`Field` names and their target types are checked at construction; generics
+check value and collection composition. Optional `shapevet` catches statically
+visible binding mistakes before runtime.
 
 The same schema also supports `Transform` and `Validate` on typed values.
 Value factories such as `String`, `Slice`, and `Map` never take a field name;

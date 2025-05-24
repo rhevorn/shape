@@ -3,7 +3,7 @@
 ```text
 shape.New[T](...)     explicit Schema (primary)
 shape.BindJSON(...)   tag DTO, no Schema variable
-shape.Struct[T]()     reusable tagged Schema
+shape.FromTags[T]()     reusable tagged Schema
 shape.ParseJSON(...)  any Schema as JSON root
 validate / transform  standalone packages
 ```
@@ -51,12 +51,14 @@ Context forms: `TransformContext`, `ValidateContext`, `ValidateFirstContext`.
 ### Parse JSON
 
 ```go
-user, err := userSchema.ParseJSON(data)
-user, err = userSchema.ParseJSONReader(reader)
+user, err := shape.ParseJSON(userSchema, data)
+user, err = shape.ParseJSONReader(userSchema, reader)
 ```
 
 Pipeline: decode one JSON value → Transform → Validate → return `T`.
 Also: `ParseJSONContext`, `ParseJSONReaderContext`, optional `JSONOptions`.
+Struct Schemas additionally expose convenience methods that delegate to these
+same package functions.
 
 ### Fields and composition
 
@@ -82,7 +84,7 @@ scores, err := shape.ParseJSON(shape.Int().NonNegative().Slice(), data)
 ```
 
 `Apply` transforms (`T → T`); `Refine` validates (`T → error`). Whole-struct
-callbacks chain on `New` / `Struct` after field work in the same phase.
+callbacks chain on `New` / `FromTags` after field work in the same phase.
 
 See [API.md](API.md) for every method on each Spec type.
 
@@ -99,10 +101,10 @@ err := shape.BindJSON(&request, data)
 ```
 
 No Schema variable. Bind writes `*target` only on full success.
-Reuse / Parse / export: `shape.Struct[Request]()`. Cross-field:
+Reuse / Parse / export: `shape.FromTags[Request]()`. Cross-field:
 
 ```go
-var requestSchema = shape.Struct[Request]().Apply(normalize).Refine(check)
+var requestSchema = shape.FromTags[Request]().Apply(normalize).Refine(check)
 ```
 
 Full tag grammar and type matrix: [TAGS.md](TAGS.md).
@@ -147,10 +149,11 @@ Full surfaces: [API.md](API.md) §2–3.
 ## 7. Export and shapevet
 
 ```go
-document, err := jsonschema.Export(shape.Struct[Request]())
+document, err := jsonschema.Export(shape.FromTags[Request]())
 ```
 
-Only representable tagged plans export; unsupported behavior returns an error
+Only representable `FromTags` plans export. Explicit `New` schemas do not yet
+carry export metadata. Unsupported behavior returns an error
 rather than silent omission.
 
 ```sh
@@ -161,12 +164,26 @@ go vet -vettool="$(which shapevet)" ./...
 ## 8. Choosing an API
 
 ```text
-Explicit reusable Schema     shape.New[T] → .ParseJSON
+Explicit reusable Schema     shape.New[T] → shape.ParseJSON(schema, data)
 Tag DTO bind                 shape.BindJSON(&req, data)
-Reusable tagged Schema       shape.Struct[T]
+Reusable tagged Schema       shape.FromTags[T]
 Non-struct JSON root         shape.ParseJSON(schema, data)
 Validate only                validate
 Transform only               transform
 ```
 
 See [API.md](API.md) and [examples](../examples).
+
+## 9. Migrating pre-release code
+
+- Replace `shape.Struct[T]()` with `shape.FromTags[T]()`. There is no alias.
+- Replace pointer `.NotEmpty()` with `.NotNull()`. For `*string` contents, use
+  `shape.Pointer(shape.String().NotEmpty())`; in tags use `notnull,minlength=1`.
+- Pointer/slice/map outer transforms now run before element transforms. Defaults
+  and elements introduced by a whole-container `Apply` are normalized too.
+- `And` follows declaration order, including rules appended after it.
+- Export may now reject byte slices, JSON string options, Go durations and
+  non-portable regexps that previously produced misleading documents.
+
+See [API ownership rules](API.md#7-ownership-and-callbacks) before adding custom
+callbacks or processing types with external resources.

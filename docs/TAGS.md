@@ -1,7 +1,7 @@
 # Struct tag reference
 
 `shape:"..."` configures tag-driven `shape.BindJSON*` and the reusable Schema
-returned by `shape.Struct[T]()`. This file is the complete tag specification.
+returned by `shape.FromTags[T]()`. This file is the complete tag specification.
 
 Tags are the convenience form for static DTO behavior. The recommended primary
 API is the explicit `shape.New[T](...)` Schema described in [USAGE.md](USAGE.md).
@@ -32,8 +32,8 @@ Value string `shape:"notempty,trim"`
 ```
 
 For JSON containing spaces, `trim` produces `""` and `notempty` then fails.
-Within the transform phase and within the validation phase, items retain the
-order in which they appear.
+Within each phase and scope, items retain their declaration order. Outer
+pointer/container work precedes inner value work.
 
 ## 2. Supported Go field graph
 
@@ -81,7 +81,7 @@ that points to a zero value.
 | Tag | Types | Pass condition |
 | --- | --- | --- |
 | `notnull` | pointer, slice, map | value is non-nil |
-| `notempty` | string, pointer, slice, map | string/container has items; pointer is non-nil |
+| `notempty` | string, slice, map | string/container has items; use `notnull` for pointers |
 | `minlength=n` | string / `*string` | rune count ≥ n |
 | `maxlength=n` | string / `*string` | rune count ≤ n |
 | `len=n` | string, slice, map | rune/item count equals n |
@@ -96,9 +96,11 @@ that points to a zero value.
 | `unique` | slice | elements are deeply unique |
 | `label=text` | every supported field | set the issue display label; path is unchanged |
 
-`NotEmpty` does not trim. A nil pointer is empty, but a pointer to `""` is not
-empty at the pointer layer; string rules on that field inspect the pointee.
-For a nil pointer, inner transforms and rules are skipped.
+`NotEmpty` does not trim and is not a pointer rule. Use `notnull` for presence
+and `minlength=1` for a non-empty string pointee. A pointer first runs outer
+options such as `ifnull`, then its inner transforms and rules. Inner transforms
+therefore process fallback values too, even when written before `ifnull` in the
+tag. Inner work is skipped if the pointer remains nil.
 
 Container tags belong to the container. They are not inherited by elements,
 map keys, or map values. Element/value structs use their own field tags. Map
@@ -126,8 +128,7 @@ unknown escapes are errors.
 | `time.Time` | RFC3339/RFC3339Nano |
 | lengths | non-negative base-10 integer |
 
-`between` and `oneof` separate candidates with `|`. Empty candidates are
-invalid. Duplicate `label` or fallback tags are invalid.
+`between` and `oneof` separate candidates with `|`. Empty string candidates are allowed; empty numeric candidates are invalid. Duplicate `label` or fallback tags are invalid.
 
 ## 6. JSON states
 
@@ -145,13 +146,13 @@ the standard library's behavior.
 
 ## 7. Errors and static checking
 
-`shape.Struct[T]()` and `shape.BindJSON*` panic for invalid program
+`shape.FromTags[T]()` and `shape.BindJSON*` panic for invalid program
 configuration. Input data that fails a rule returns `*validate.Error`. JSON
 syntax/type failures remain decode errors.
 
 Go itself does not understand struct-tag contents. Runtime construction is the
 authoritative check. CI can optionally check statically visible fields,
-`shape.Struct[T]()` calls, `shape.BindJSON*` target types, and direct explicit
+`shape.FromTags[T]()` calls, `shape.BindJSON*` target types, and direct explicit
 `shape.New[T](...)` fields:
 
 ```sh
