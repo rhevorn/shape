@@ -145,9 +145,7 @@ func TestUniqueDeepLimitUsesItsOwnCode(t *testing.T) {
 	}
 }
 
-// The same call shape must label issues identically in every family. The
-// collection families used to build a fresh zero base for And and drop the
-// receiver's label, while String/Number/Value kept it.
+// And preserves the receiver's label across all validator families.
 func TestAndKeepsLabelInEveryFamily(t *testing.T) {
 	fail := errors.New("boom")
 	issues := func(err error) []validate.Issue {
@@ -181,8 +179,7 @@ func TestAndKeepsLabelInEveryFamily(t *testing.T) {
 	}
 }
 
-// A map key failure and a map value failure share one path segment, so they
-// used to produce byte-identical issues.
+// Labels distinguish key and value failures at the same map entry.
 func TestMapKeyAndValueIssuesAreDistinguishable(t *testing.T) {
 	err := validate.Map(validate.String().NotEmpty(), validate.String().NotEmpty()).
 		Validate(map[string]string{"": ""})

@@ -45,9 +45,6 @@ func TestExportRejectsTextMarshalerRepresentation(t *testing.T) {
 	}
 }
 
-// A pointer-level notnull rejects JSON null at runtime, so the document must
-// not advertise a null branch. That branch used to be decided from the
-// pointee, which accepts its own zero value.
 // rootObject unwraps the document-level null branch, which the exporter adds
 // when the whole value accepts JSON null.
 func rootObject(t *testing.T, document map[string]any) map[string]any {
@@ -79,8 +76,7 @@ func TestExportPointerNotnullHasNoNullBranch(t *testing.T) {
 	}
 }
 
-// An optional pointer is nullable exactly once; it used to be wrapped at both
-// the pointee and the pointer.
+// An optional pointer adds a single null branch to the element schema.
 func TestExportOptionalPointerIsNullableOnce(t *testing.T) {
 	type Doc struct {
 		Name *string `json:"name"`

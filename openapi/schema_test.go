@@ -7,10 +7,7 @@ import (
 	"github.com/rhevorn/shape/openapi"
 )
 
-// Export deliberately covers tagged struct plans only; a standalone scalar
-// Spec is runtime-only (docs/API.md export boundary). This used to be implied by
-// an unread testdata fixture describing a string-rooted body, which the
-// exporter cannot produce. Asserting it here keeps the boundary explicit.
+// Export supports tagged struct schemas; standalone scalar Specs are runtime-only.
 func TestExportRefusesStandaloneScalarSchema(t *testing.T) {
 	if _, err := openapi.JSONRequestBody(shape.String().NotEmpty(), true); err == nil {
 		t.Fatal("a standalone scalar Spec was exported")

@@ -143,11 +143,8 @@ var (
 	textUnmarshalerType = reflect.TypeFor[encoding.TextUnmarshaler]()
 )
 
-// hasCustomJSON reports whether encoding/json uses a user-supplied
-// representation for t. The text interfaces count: encoding/json consults
-// MarshalText/UnmarshalText as well as the JSON ones, so a type with only
-// MarshalText encodes as a string while the struct walk below would describe
-// its fields. Missing that was a silent omission rather than a refusal.
+// hasCustomJSON reports whether t or *t implements a JSON or text codec.
+// These codecs can change the wire representation independently of the Go fields.
 func hasCustomJSON(t reflect.Type) bool {
 	if implementsJSONCodec(t) {
 		return true
@@ -170,9 +167,7 @@ func applyExportRules(document map[string]any, p *Plan, pointee bool) (map[strin
 		switch name {
 		case "min":
 			if p.typ.Kind() == reflect.String {
-				// min is a numeric or collection rule; the compiler rejects it on
-				// a string, so reaching here means the rule set widened. Emitting
-				// a document under an empty key would be silent corruption.
+				// String length constraints use minlength, not min.
 				return nil, &UnsupportedError{Feature: "rule min on " + p.typ.String()}
 			} else if p.typ.Kind() == reflect.Slice {
 				key = "minItems"

@@ -481,8 +481,7 @@ func TestTimeSpecIfZeroTreatsAZeroTimeAsZero(t *testing.T) {
 	}
 }
 
-// The tagged compiler already rejects two fields sharing a JSON name; the
-// explicit path accepted them, making one field unreachable from JSON.
+// Duplicate JSON names make fields unreachable and must be rejected.
 func TestExplicitSchemaRejectsDuplicateJSONNames(t *testing.T) {
 	type Coll struct {
 		First  string
@@ -496,8 +495,7 @@ func TestExplicitSchemaRejectsDuplicateJSONNames(t *testing.T) {
 	_ = shape.New[Coll](shape.Field("First", shape.String()), shape.Field("Second", shape.String()))
 }
 
-// label is an outer tag while rules on a pointer field attach to the element
-// plan, so `label=...,min=...` used to lose the label on *T but not on T.
+// A pointer field's label applies to validation issues from its element plan.
 func TestPointerFieldKeepsItsLabel(t *testing.T) {
 	type Doc struct {
 		Age  *int `json:"age" shape:"label=Age,min=18"`

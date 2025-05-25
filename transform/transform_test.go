@@ -85,9 +85,8 @@ func TestValueFuncCannotMutateInputSlice(t *testing.T) {
 	}
 }
 
-// A private slice or map used to stay aliased to the caller's storage, because
-// the clone skipped fields it could not Set. The promoted-field case needs no
-// unexported access at all to reach that storage from a callback.
+// Callbacks can reach mutable storage through private and promoted fields.
+// Cloning must detach that storage from the caller.
 func TestCloneDetachesUnexportedFields(t *testing.T) {
 	t.Run("promoted field over embedded private storage", func(t *testing.T) {
 		type Doc struct {
@@ -127,8 +126,8 @@ type private struct {
 	hidden []int
 }
 
-// reflect.Value.IsZero and time.Time.IsZero disagree for a zero instant that
-// carries a non-nil Location, so the fallback used to be skipped.
+// A zero instant with a non-nil Location is zero according to time.Time.IsZero,
+// but not reflect.Value.IsZero. IfZero follows time.Time.IsZero.
 func TestIfZeroTreatsAZeroTimeAsZero(t *testing.T) {
 	zero := time.Time{}.Local()
 	if !zero.IsZero() || reflect.ValueOf(zero).IsZero() {

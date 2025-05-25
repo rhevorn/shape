@@ -33,15 +33,14 @@ type contractUser struct {
 	Metadata contractMetadata
 }
 
-// compilePublicAPI is intentionally not executed. Compiling this package locks
-// the documented root API names, type relationships, and method signatures.
+// compilePublicAPI checks the documented types and signatures at compile time.
+// It is not called at runtime.
 func compilePublicAPI(ctx context.Context, reader io.Reader, source []byte) {
 	_ = &shape.UnsupportedSchemaError{Feature: "compile only"}
 	_ = validate.Path{validate.MapKeyPath(1)}
 	_ = validate.PathMapKey
 
-	// Exact function assignments intentionally reject the former optional-name
-	// signatures. Value factories describe values; only Field binds a name.
+	// Value factories take no field name; Field binds a schema to a field.
 	var _ func() shape.ValueSpec[string] = shape.Value[string]
 	var _ func() shape.StringSpec = shape.String
 	var _ func() shape.NumberSpec[uint16] = shape.Number[uint16]
