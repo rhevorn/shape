@@ -51,14 +51,15 @@ Context forms: `TransformContext`, `ValidateContext`, `ValidateFirstContext`.
 ### Parse JSON
 
 ```go
-user, err := shape.ParseJSON(userSchema, data)
-user, err = shape.ParseJSONReader(userSchema, reader)
+user, err := userSchema.ParseJSON(data)
+user, err = userSchema.ParseJSONReader(reader)
 ```
 
 Pipeline: decode one JSON value → Transform → Validate → return `T`.
 Also: `ParseJSONContext`, `ParseJSONReaderContext`, optional `JSONOptions`.
-Struct Schemas additionally expose convenience methods that delegate to these
-same package functions.
+Both `shape.New[T]` and `shape.FromTags[T]` support these methods.
+The equivalent package functions, such as `shape.ParseJSON(userSchema, data)`,
+accept any `Schema[T]`, including scalar and collection schemas.
 
 ### Fields and composition
 
@@ -164,7 +165,7 @@ go vet -vettool="$(which shapevet)" ./...
 ## 8. Choosing an API
 
 ```text
-Explicit reusable Schema     shape.New[T] → shape.ParseJSON(schema, data)
+Explicit reusable Schema     shape.New[T] → schema.ParseJSON(data)
 Tag DTO bind                 shape.BindJSON(&req, data)
 Reusable tagged Schema       shape.FromTags[T]
 Non-struct JSON root         shape.ParseJSON(schema, data)

@@ -35,9 +35,7 @@ go test -run '^$' -bench 'Benchmark(NoopPayload|NestedJSON|SchemaParseJSON)' -be
 The regression suite covers mutable error/export data, declaration order,
 pointer and collection defaults, canceled contexts, typed map keys, mixed
 transform paths, finite checks after traversal pruning, export intersections,
-unsupported wire representations, and recursive analyzer inputs. Successful
-checks establish the tested contract; they do not prove arbitrary callbacks or
-all possible inputs are free of defects.
+unsupported wire representations, and recursive analyzer inputs.
 
 ## Export boundary
 
@@ -70,29 +68,3 @@ library module graph.
 
 5. Publish the matching nested-module tag, for example `tools/shapevet/v0.1.0`.
    Check installation of both published modules in a fresh consumer project.
-
-Publishing tags and creating a public release are separate from local
-preparation. No tags are created by the check scripts.
-
-## Local validation record — 2026-09-17
-
-Environment: Apple M5 Pro, darwin/arm64, Go 1.27.0 and Go 1.24.0. The checks use
-the installed Command Line Tools binaries on this host because the Xcode
-launcher requires license setup; no system configuration is changed.
-
-- Root and analyzer race suites pass on Go 1.24.0.
-- The complete local `make release-check` passes on Go 1.27.0, including
-  candidate module isolation, fuzz smoke, benchmarks and every runnable example.
-- The review's nine standalone failing regressions now pass in the repository,
-  alongside additional ownership, ordering, cancellation and export cases.
-- Independent Ajv 8.17.1 with ajv-formats 3.0.1 checked 35 runtime/export cases:
-  constraint intersections, repeated enums/patterns, absolute regex end and
-  dot semantics, pointers, collections, numbers and IPs; no mismatches.
-- The 64 KiB no-rule tagged Transform benchmark reduced allocation from about
-  6.36 MB / 65,542 allocations to about 65.8 KB / 6 allocations per operation.
-  The final local run measured about 4.17 µs per Transform and 9.03 ns per
-  no-rule Validate (24 B / 1 allocation). These are machine-specific timings.
-
-The independent validator was installed in a temporary directory only. Remote
-CI and installation of the eventual published tags must still be checked when
-publishing; this record covers the local candidate.

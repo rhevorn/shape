@@ -67,13 +67,25 @@ var userSchema = shape.New[User](
 	shape.Field("Tags", shape.Slice(shape.String().Trim().NotEmpty()).NotEmpty().Unique()),
 )
 
-user, err := shape.ParseJSON(userSchema, []byte(`{
+data := []byte(`{
 	"name": " Pong ",
 	"age": 20,
 	"tags": [" go ", "shape"]
-}`))
+}`)
+
+user, err := userSchema.ParseJSON(data)
 // user.Name == "Pong"
 ```
+
+The equivalent package-level call is:
+
+```go
+user, err := shape.ParseJSON(userSchema, data)
+```
+
+Both forms decode, transform, and validate in one call. Schemas created with
+`shape.New[T]` or `shape.FromTags[T]` support the method form; the package
+function accepts any `Schema[T]`, including scalars and collections.
 
 `Field` names and their target types are checked at construction; generics
 check value and collection composition. Optional `shapevet` catches statically

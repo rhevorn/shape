@@ -27,8 +27,7 @@
   `types.Duration` tag support.
 - JSON Schema Draft 2020-12 and OpenAPI 3.1 adapters, plus the optional
   `shapevet` analyzer.
-- A Shape-first example suite plus usage, tag, and frozen public API
-  documentation.
+- Runnable examples and guides for the public API and struct tags.
 
 ### Fixed
 
@@ -61,9 +60,8 @@
 - Nested-Schema transform failures keep the collection index or key in the
   reported path (`Items[0].Sku`), matching what `Validate` already reported.
   An error wrapped with `%w` by user code no longer loses its inner segments.
-- A whole-struct `Apply` that fails no longer leaves caller-owned storage
-  mutated on the tagged path. It was already safe on the explicit path; the two
-  now share one policy.
+- A failing whole-struct `Apply` preserves caller-owned storage for both
+  explicit and tagged schemas.
 - `shape.Value[float64]` and `validate.Value[float64]` reject NaN and infinities
   the same way `Float64` and the tagged path always have.
 - `Between` panics on a NaN bound instead of silently accepting every value.
@@ -74,8 +72,7 @@
   the caller.
 - `IfZero` treats a zero `time.Time` carrying a non-nil `Location` as zero, so
   the fallback is applied.
-- A label set before `And` reaches the appended validators' issues in every
-  family; `Slice`, `Map`, and `Pointer` used to drop it.
+- `Slice`, `Map`, and `Pointer` preserve labels set before `And`.
 - Map key and value failures at the same entry are distinguishable.
 - `shapevet` no longer disagrees with the runtime: float map keys are rejected,
   named slice and map types are accepted, empty `oneof` candidates are accepted,
@@ -94,8 +91,8 @@
 
 ### Changed
 
-- Rename the tag constructor from `Struct[T]` to `FromTags[T]` without retaining
-  an ambiguous alias; package-level `ParseJSON*` is the uniform JSON entry point.
+- Renamed the tag constructor from `Struct[T]` to `FromTags[T]`; package-level
+  `ParseJSON*` accepts all schema types.
 - Runtime tags and shapevet share tag domains, arguments, and pointer scope.
 - Isolated release checks validate the candidate root and tool modules without
   requiring a root version that has not yet been published.
@@ -106,8 +103,8 @@
 - `And` returns the concrete family validator type instead of `Validator[T]`,
   so rule methods may follow it.
 - `validate.MaxDeepUniqueItems` and `validate.CodeUniqueLimit` are exported.
-- Pointer presence uses `NotNull`; the ambiguous pointer `NotEmpty` synonym
-  and pointer `notempty` tag are removed before the first release.
+- Pointer presence uses `NotNull`; removed pointer `NotEmpty` and the pointer
+  `notempty` tag.
 
 ### Removed
 
