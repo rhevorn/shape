@@ -39,6 +39,8 @@ func compilePublicAPI(ctx context.Context, reader io.Reader, source []byte) {
 	_ = &shape.UnsupportedSchemaError{Feature: "compile only"}
 	_ = validate.Path{validate.MapKeyPath(1)}
 	_ = validate.PathMapKey
+	_ = validate.Issue{Target: validate.TargetKey}
+	var _ validate.IssueTarget = validate.TargetValue
 
 	// Value factories take no field name; Field binds a schema to a field.
 	var _ func() shape.ValueSpec[string] = shape.Value[string]

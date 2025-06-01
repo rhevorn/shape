@@ -119,7 +119,7 @@ func (v MapValidator[K, V]) validateMode(ctx context.Context, x map[K]V, mode va
 		keyErr := runValidator(ctx, v.key, k, mode)
 		if keyErr != nil {
 			var stop bool
-			issues, stop = appendIssues(issues, prefix(withLabel(customIssue(keyErr), mapPartLabel(v.base.label, "key")), segment), mode == stopAtFirst)
+			issues, stop = appendIssues(issues, prefix(withLabel(mapKeyIssues(keyErr), mapPartLabel(v.base.label, "key")), segment), mode == stopAtFirst)
 			if stop {
 				return finish(ctx, issues)
 			}
@@ -180,4 +180,12 @@ func (v MapValidator[K, V]) Label(s string) MapValidator[K, V] {
 	v.base = v.base.clone()
 	v.base.label = s
 	return v
+}
+
+func mapKeyIssues(err error) []Issue {
+	issues := customIssue(err)
+	for i := range issues {
+		issues[i].Target = TargetKey
+	}
+	return issues
 }

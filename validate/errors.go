@@ -37,14 +37,25 @@ const DefaultMaxIssues = 100
 // Comparable collections use a hash set and are not bounded by this.
 const MaxDeepUniqueItems = 1024
 
+// IssueTarget identifies what is validated at an issue's path.
+type IssueTarget string
+
+const (
+	// TargetValue identifies the value at Path and is the default.
+	TargetValue IssueTarget = ""
+	// TargetKey identifies the map key at the final Path segment.
+	TargetKey IssueTarget = "key"
+)
+
 // Issue describes one validation failure and its structured location.
 type Issue struct {
-	Code      string `json:"code"`
-	Path      Path   `json:"path"`
-	Message   string `json:"message"`
-	Label     string `json:"label,omitempty"`
-	Expected  any    `json:"expected,omitempty"`
-	Received  any    `json:"received,omitempty"`
+	Target    IssueTarget `json:"target,omitempty"`
+	Code      string      `json:"code"`
+	Path      Path        `json:"path"`
+	Message   string      `json:"message"`
+	Label     string      `json:"label,omitempty"`
+	Expected  any         `json:"expected,omitempty"`
+	Received  any         `json:"received,omitempty"`
 	messageID string
 }
 
