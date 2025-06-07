@@ -7,6 +7,7 @@ import (
 // MapTransformer transforms a map and each key and value in stable key order.
 type MapTransformer[K MapKey, V any] struct {
 	value    ValueTransformer[map[K]V]
+	identity bool
 	elements step[map[K]V]
 }
 

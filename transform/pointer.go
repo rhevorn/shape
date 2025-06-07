@@ -5,6 +5,7 @@ import "context"
 // PointerTransformer transforms an optional *T and its non-nil value.
 type PointerTransformer[T any] struct {
 	value    ValueTransformer[*T]
+	identity bool
 	elements step[*T]
 }
 

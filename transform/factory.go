@@ -49,11 +49,13 @@ func Pointer[T any](inner Transformer[T]) PointerTransformer[T] {
 	if inner == nil {
 		panic("transform: nil pointer transformer")
 	}
-	return PointerTransformer[T]{elements: func(ctx context.Context, value *T) (*T, error) {
-		if value == nil {
-			return nil, nil
+	identity := identityTransformer(inner)
+	runInner := ownedStep(inner)
+	return PointerTransformer[T]{identity: identity, elements: func(ctx context.Context, value *T) (*T, error) {
+		if value == nil || identity {
+			return value, nil
 		}
-		out, err := runOwned(ctx, inner, *value)
+		out, err := runInner(ctx, *value)
 		if err != nil {
 			return nil, err
 		}
@@ -67,15 +69,17 @@ func Slice[T any](inner Transformer[T]) SliceTransformer[T] {
 	if inner == nil {
 		panic("transform: nil slice transformer")
 	}
-	return SliceTransformer[T]{elements: func(ctx context.Context, value []T) ([]T, error) {
-		if value == nil {
-			return nil, nil
+	identity := identityTransformer(inner)
+	runInner := ownedStep(inner)
+	return SliceTransformer[T]{identity: identity, elements: func(ctx context.Context, value []T) ([]T, error) {
+		if value == nil || identity {
+			return value, nil
 		}
 		for i, item := range value {
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
-			transformed, err := runOwned(ctx, inner, item)
+			transformed, err := runInner(ctx, item)
 			if err != nil {
 				return nil, transformpath.Index(err, i)
 			}
@@ -90,9 +94,11 @@ func Map[K MapKey, V any](key Transformer[K], value Transformer[V]) MapTransform
 	if key == nil || value == nil {
 		panic("transform: nil map transformer")
 	}
-	return MapTransformer[K, V]{elements: func(ctx context.Context, input map[K]V) (map[K]V, error) {
-		if input == nil {
-			return nil, nil
+	identity := identityTransformer(key) && identityTransformer(value)
+	runKey, runValue := ownedStep(key), ownedStep(value)
+	return MapTransformer[K, V]{identity: identity, elements: func(ctx context.Context, input map[K]V) (map[K]V, error) {
+		if input == nil || identity {
+			return input, nil
 		}
 		keys, err := maporder.Sorted(ctx, input)
 		if err != nil {
@@ -103,11 +109,11 @@ func Map[K MapKey, V any](key Transformer[K], value Transformer[V]) MapTransform
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
-			newKey, err := runOwned(ctx, key, item)
+			newKey, err := runKey(ctx, item)
 			if err != nil {
 				return nil, transformpath.Key(err, item)
 			}
-			newValue, err := runOwned(ctx, value, input[item])
+			newValue, err := runValue(ctx, input[item])
 			if err != nil {
 				return nil, transformpath.Key(err, item)
 			}

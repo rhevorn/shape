@@ -1,6 +1,9 @@
 package transform
 
-import "context"
+import (
+	"context"
+	"reflect"
+)
 
 // Transformer transforms a T without mutating caller-owned input.
 type Transformer[T any] interface {
@@ -11,22 +14,26 @@ type Transformer[T any] interface {
 // ownedTransformer is implemented by built-in transformers. The input passed
 // to transformOwnedContext is already detached from caller-owned storage.
 type ownedTransformer[T any] interface {
+	transformerType() reflect.Type
 	transformOwnedContext(context.Context, T) (T, error)
 }
 
 func runOwned[T any](ctx context.Context, transformer Transformer[T], value T) (T, error) {
-	if owned, ok := transformer.(ownedTransformer[T]); ok {
-		return owned.transformOwnedContext(ctx, value)
+	return ownedStep(transformer)(ctx, value)
+}
+
+func ownedStep[T any](transformer Transformer[T]) step[T] {
+	if owned, ok := builtIn(transformer); ok {
+		return owned.transformOwnedContext
 	}
-	// A foreign transformer detaches its input (its TransformContext clones)
-	// but promises nothing about what it returns: it may hand back storage it
-	// still holds. The rest of the pipeline treats the result as private, so
-	// detach it here rather than let an alias escape.
-	out, err := transformer.TransformContext(ctx, value)
-	if err != nil {
-		return out, err
+	return func(ctx context.Context, value T) (T, error) {
+		out, err := transformer.TransformContext(ctx, value)
+		if err != nil {
+			return out, err
+		}
+		// External implementations may return storage they still own.
+		return cloneContext(ctx, out)
 	}
-	return cloneContext(ctx, out)
 }
 
 type sequence[T any] struct{ values []Transformer[T] }

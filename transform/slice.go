@@ -5,6 +5,7 @@ import "context"
 // SliceTransformer transforms a slice and each of its elements.
 type SliceTransformer[T any] struct {
 	value    ValueTransformer[[]T]
+	identity bool
 	elements step[[]T]
 }
 
