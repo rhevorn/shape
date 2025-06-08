@@ -74,12 +74,6 @@ func (s TaggedSpec[T]) TransformContext(ctx context.Context, value T) (T, error)
 	return s.transformContext(ctx, value, false)
 }
 
-// transformDecodedContext is the owned entry point: the value came straight
-// from JSON decoding, so it is already a private copy.
-func (s TaggedSpec[T]) transformDecodedContext(ctx context.Context, value T) (T, error) {
-	return s.transformContext(ctx, value, true)
-}
-
 func (s TaggedSpec[T]) transformContext(ctx context.Context, value T, owned bool) (T, error) {
 	var zero T
 	var out T

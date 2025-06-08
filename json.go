@@ -5,16 +5,13 @@ import (
 	"context"
 	"errors"
 	"io"
+	"reflect"
 
 	"github.com/rhevorn/shape/internal/jsondecode"
 )
 
 // ErrJSONTooLarge reports that JSON input exceeded JSONOptions.MaxBytes.
 var ErrJSONTooLarge = errors.New("shape: JSON input too large")
-
-type decodedTransformer[T any] interface {
-	transformDecodedContext(context.Context, T) (T, error)
-}
 
 // JSONOptions controls the standard JSON decoding stage. MaxBytes zero means
 // unlimited; a positive value rejects larger input with ErrJSONTooLarge.
@@ -62,11 +59,16 @@ func ParseJSONReaderContext[T any](ctx context.Context, schema Schema[T], reader
 		return zero, err
 	}
 	var out T
-	if decoded, ok := schema.(decodedTransformer[T]); ok {
-		out, err = decoded.transformDecodedContext(ctx, candidate)
-	} else {
+	// Only exact built-in types may bypass the public transformation method.
+	switch builtIn := schema.(type) {
+	case TaggedSpec[T]:
+		out, err = builtIn.transformContext(ctx, candidate, jsondecode.OwnsStorage(reflect.TypeFor[T]()))
+	case *TaggedSpec[T]:
+		out, err = builtIn.transformContext(ctx, candidate, jsondecode.OwnsStorage(reflect.TypeFor[T]()))
+	default:
 		out, err = schema.TransformContext(ctx, candidate)
 	}
+
 	if ctx.Err() != nil {
 		return zero, ctx.Err()
 	}
@@ -74,6 +76,9 @@ func ParseJSONReaderContext[T any](ctx context.Context, schema Schema[T], reader
 		return zero, err
 	}
 	if err := schema.ValidateContext(ctx, out); err != nil {
+		return zero, err
+	}
+	if err := ctx.Err(); err != nil {
 		return zero, err
 	}
 	return out, nil

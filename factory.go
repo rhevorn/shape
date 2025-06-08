@@ -88,7 +88,7 @@ func Pointer[T any](inner Schema[T]) PointerSpec[T] {
 func pointerSpec[T any](inner Schema[T]) PointerSpec[T] {
 	requireSchema(inner)
 	return PointerSpec[T]{
-		transformer: transform.Pointer[T](inner), validator: validate.Pointer[T](inner),
+		transformer: transform.Pointer[T](schemaTransformer(inner)), validator: validate.Pointer[T](inner),
 	}
 }
 
@@ -100,7 +100,7 @@ func Slice[T any](inner Schema[T]) SliceSpec[T] {
 func sliceSpec[T any](inner Schema[T]) SliceSpec[T] {
 	requireSchema(inner)
 	return SliceSpec[T]{
-		transformer: transform.Slice[T](inner), validator: validate.Slice[T](inner),
+		transformer: transform.Slice[T](schemaTransformer(inner)), validator: validate.Slice[T](inner),
 	}
 }
 
@@ -109,7 +109,7 @@ func Map[K MapKey, V any](key Schema[K], value Schema[V]) MapSpec[K, V] {
 	requireSchema(key)
 	requireSchema(value)
 	return MapSpec[K, V]{
-		transformer: transform.Map[K, V](key, value), validator: validate.Map[K, V](key, value),
+		transformer: transform.Map[K, V](schemaTransformer(key), schemaTransformer(value)), validator: validate.Map[K, V](key, value),
 	}
 }
 
@@ -118,5 +118,5 @@ func Field[T any](name string, schema Schema[T]) FieldSpec {
 	if schema == nil {
 		panic("shape: nil field schema")
 	}
-	return explicitField[T]{name: name, transformer: schema, validator: schema}
+	return explicitField[T]{name: name, transformer: schemaTransformer(schema), validator: schema}
 }

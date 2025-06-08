@@ -52,20 +52,16 @@ func (s StructSpec[T]) Transform(value T) (T, error) {
 
 // TransformContext applies transforms and observes context cancellation.
 func (s StructSpec[T]) TransformContext(ctx context.Context, value T) (T, error) {
-	return s.transformContext(ctx, value, false)
+	return s.transformContext(ctx, value)
 }
 
-func (s StructSpec[T]) transformDecodedContext(ctx context.Context, value T) (T, error) {
-	return s.transformContext(ctx, value, true)
-}
-
-func (s StructSpec[T]) transformContext(ctx context.Context, value T, owned bool) (T, error) {
+func (s StructSpec[T]) transformContext(ctx context.Context, value T) (T, error) {
 	var zero T
 	out, err := s.transformer.TransformContext(ctx, value)
 	if err != nil {
 		return zero, normalizeTransformError(ctx, err)
 	}
-	out, err = pipeline.Apply(ctx, s.transforms, out, owned)
+	out, err = pipeline.Apply(ctx, s.transforms, out, false)
 	if err != nil {
 		return zero, normalizeTransformError(ctx, err)
 	}
