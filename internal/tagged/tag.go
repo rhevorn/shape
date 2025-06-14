@@ -120,7 +120,7 @@ func applyTag(p *Plan, text string) (out *Plan, err error) {
 			if p.typ.Kind() == reflect.Pointer {
 				ptr := reflect.New(t)
 				ptr.Elem().Set(value)
-				value = ptr
+				value = ptr.Convert(p.typ)
 			}
 			p = addOptions(p, spec.NewOption(o.Name, value.Interface()))
 		case "trim", "ltrim", "rtrim", "tolower", "toupper":

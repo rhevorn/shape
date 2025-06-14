@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"strings"
 
+	"github.com/rhevorn/shape/internal/jsonfields"
 	"github.com/rhevorn/shape/internal/validationlocale"
 	"github.com/rhevorn/shape/internal/validationmsg"
 	"github.com/rhevorn/shape/validate"
@@ -36,7 +36,7 @@ type Compiled struct{ fields []programField }
 func Compile(owner reflect.Type, specs []Definition) Compiled {
 	fields := make([]programField, 0, len(specs))
 	seen := make(map[string]struct{}, len(specs))
-	seenJSON := make(map[string]struct{}, len(specs))
+	jsonFields := directJSONFields(owner)
 	for _, spec := range specs {
 		definition := spec
 		if definition.Name == "" {
@@ -56,20 +56,14 @@ func Compile(owner reflect.Type, specs []Definition) Compiled {
 		if field.Type != definition.Type {
 			panic(fmt.Sprintf("shape: field %s has type %v, schema has type %v", definition.Name, field.Type, definition.Type))
 		}
-		jsonName := strings.Split(field.Tag.Get("json"), ",")[0]
-		if jsonName == "-" {
+		jsonName, _ := jsonfields.Name(field.Name, field.Tag.Get("json"))
+		if field.Tag.Get("json") == "-" {
 			panic(fmt.Sprintf("shape: field %s is excluded from JSON", definition.Name))
 		}
-		if jsonName == "" {
-			jsonName = field.Name
+		if jsonFields[jsonName] != field.Index[0] {
+			panic("shape: ambiguous or shadowed JSON field " + jsonName)
 		}
-		// Two Go fields mapping to one JSON key would make the first
-		// unreachable from JSON and give both the same issue path. The tagged
-		// compiler already rejects this; the explicit path must too.
-		if _, ok := seenJSON[jsonName]; ok {
-			panic("shape: duplicate JSON field name " + jsonName)
-		}
-		seenJSON[jsonName] = struct{}{}
+
 		fields = append(fields, programField{
 			index: field.Index[0], name: jsonName,
 			transform: definition.Transform, validateAll: definition.ValidateAll, validateOne: definition.ValidateOne,
@@ -220,8 +214,28 @@ func appendSchemaIssue(ctx context.Context, issues *[]validate.Issue, issue vali
 
 func validationIssues(err error) []validate.Issue {
 	var validationError *validate.Error
-	if errors.As(err, &validationError) && validationError != nil {
+	if errors.As(err, &validationError) && validationError != nil && len(validationError.Issues) != 0 {
 		return append([]validate.Issue(nil), validationError.Issues...)
 	}
 	return []validate.Issue{{Code: validate.CodeCustom, Message: err.Error()}}
+}
+
+func directJSONFields(owner reflect.Type) map[string]int {
+	candidates := make([]jsonfields.Candidate, 0, owner.NumField())
+	for i := 0; i < owner.NumField(); i++ {
+		field := owner.Field(i)
+		typ := field.Type
+		if typ.Kind() == reflect.Pointer {
+			typ = typ.Elem()
+		}
+		if field.PkgPath != "" && (!field.Anonymous || typ.Kind() != reflect.Struct) || field.Tag.Get("json") == "-" {
+			continue
+		}
+		name, tagged := jsonfields.Name(field.Name, field.Tag.Get("json"))
+		if field.Anonymous && !tagged && typ.Kind() == reflect.Struct {
+			continue
+		}
+		candidates = append(candidates, jsonfields.Candidate{Index: i, Name: name, Tagged: tagged})
+	}
+	return jsonfields.Resolve(candidates)
 }

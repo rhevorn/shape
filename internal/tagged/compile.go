@@ -2,6 +2,7 @@ package tagged
 
 import (
 	"fmt"
+	"github.com/rhevorn/shape/internal/jsonfields"
 	"reflect"
 	"strings"
 	"sync"
@@ -68,8 +69,8 @@ func compileType(t reflect.Type, active map[reflect.Type]bool) (*Plan, error) {
 		for i := 0; i < t.NumField(); i++ {
 			f := t.Field(i)
 			tag := f.Tag.Get("shape")
-			jsonName := strings.Split(f.Tag.Get("json"), ",")[0]
-			if f.PkgPath != "" || jsonName == "-" {
+			jsonName, _ := jsonfields.Name(f.Name, f.Tag.Get("json"))
+			if f.PkgPath != "" || f.Tag.Get("json") == "-" {
 				if tag != "" {
 					return nil, fmt.Errorf("shape: %s has a tag but is not processed", f.Name)
 				}
