@@ -21,13 +21,20 @@ func (e *UnsupportedSchemaError) Error() string {
 // ExportDocument exports representable behavior as a JSON Schema object without
 // a root $schema dialect declaration. Most users should call jsonschema.Export.
 func ExportDocument[T any](schema Schema[T]) (map[string]any, error) {
-	provider, ok := any(schema).(interface {
-		schemaPlan() (*tagged.Plan, error)
-	})
-	if !ok {
+	var plan *tagged.Plan
+	var err error
+	switch builtIn := schema.(type) {
+	case TaggedSpec[T]:
+		plan, err = builtIn.schemaPlan()
+	case *TaggedSpec[T]:
+		if builtIn == nil {
+			return nil, &UnsupportedSchemaError{Feature: "uninitialized schema"}
+		}
+		plan, err = builtIn.schemaPlan()
+	default:
 		return nil, &UnsupportedSchemaError{Feature: "custom schema"}
 	}
-	plan, err := provider.schemaPlan()
+
 	if err != nil {
 		return nil, err
 	}

@@ -14,7 +14,7 @@ type Request struct {
 	Name  string   `json:"name" shape:"notempty,maxlength=50"`
 	Age   int      `json:"age" shape:"min=18,max=120"`
 	Email *string  `json:"email" shape:"email"`
-	Tags  []string `json:"tags" shape:"notempty,unique"`
+	Tags  []string `json:"tags" shape:"notempty"`
 }
 
 type Transformed struct {

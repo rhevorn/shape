@@ -72,7 +72,9 @@ func exportTagPlanAt(p *Plan, pointee bool) (map[string]any, error) {
 			document["minimum"] = minimum
 			document["maximum"] = maximum
 		}
-	case reflect.Float32, reflect.Float64:
+	case reflect.Float32:
+		return nil, &UnsupportedError{Feature: "float32 decoding and rounding"}
+	case reflect.Float64:
 		document = map[string]any{"type": "number"}
 	case reflect.Pointer:
 		if p.element == nil {
@@ -231,11 +233,10 @@ func applyExportRules(document map[string]any, p *Plan, pointee bool) (map[strin
 			key, value = "pattern", pattern
 		case "ip":
 			key, value = "anyOf", []any{map[string]any{"format": "ipv4"}, map[string]any{"format": "ipv6"}}
-		case "email", "url", "uuid":
+		case "url":
+			return nil, &UnsupportedError{Feature: "URL host requirement"}
+		case "email", "uuid":
 			format := name
-			if format == "url" {
-				format = "uri"
-			}
 			key, value = "format", format
 		case "notempty":
 			switch p.typ.Kind() {
@@ -255,6 +256,12 @@ func applyExportRules(document map[string]any, p *Plan, pointee bool) (map[strin
 			// added is decided from the complete plan below.
 			continue
 		case "unique":
+			if !uniqueJSONEquality(p.element) {
+				return nil, &UnsupportedError{Feature: "unique after JSON decoding"}
+			}
+			if !deepEqualMatchesComparable(p.typ.Elem()) {
+				mergeExportConstraint(document, "maxItems", validate.MaxDeepUniqueItems)
+			}
 			key, value = "uniqueItems", true
 		default:
 			return nil, &UnsupportedError{Feature: "rule " + name}
@@ -409,4 +416,23 @@ func exportRegexp(tree *syntax.Regexp) (string, bool) {
 	default:
 		return "", false
 	}
+}
+
+// uniqueJSONEquality requires an injective decoding of supported scalar values.
+func uniqueJSONEquality(p *Plan) bool {
+	if p == nil {
+		return false
+	}
+	pointer := p.typ.Kind() == reflect.Pointer
+	if pointer {
+		p = p.element
+	}
+	if p == nil || hasCustomJSON(p.typ) {
+		return false
+	}
+	switch p.typ.Kind() {
+	case reflect.String, reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return pointer || !planAcceptsZero(p)
+	}
+	return false
 }

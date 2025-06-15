@@ -102,3 +102,92 @@ func TestUnrepresentableWireTypesFailExplicitly(t *testing.T) {
 		})
 	}
 }
+
+func TestExportRejectsDecodingDependentConstraints(t *testing.T) {
+	tests := []struct {
+		name   string
+		export func() error
+	}{
+		{"float32", func() error {
+			type Doc struct{ V float32 }
+			_, err := jsonschema.Export(shape.FromTags[Doc]())
+			return err
+		}},
+		{"float32 bound", func() error {
+			type Doc struct {
+				V float32 `shape:"min=0.1"`
+			}
+			_, err := jsonschema.Export(shape.FromTags[Doc]())
+			return err
+		}},
+		{"float32 pointer", func() error {
+			type Doc struct{ V *float32 }
+			_, err := jsonschema.Export(shape.FromTags[Doc]())
+			return err
+		}},
+		{"url", func() error {
+			type Doc struct {
+				V string `shape:"url"`
+			}
+			_, err := jsonschema.Export(shape.FromTags[Doc]())
+			return err
+		}},
+		{"unique integer zero and null", func() error {
+			type Doc struct {
+				V []int `shape:"unique"`
+			}
+			_, err := jsonschema.Export(shape.FromTags[Doc]())
+			return err
+		}},
+		{"unique string zero and null", func() error {
+			type Doc struct {
+				V []string `shape:"unique"`
+			}
+			_, err := jsonschema.Export(shape.FromTags[Doc]())
+			return err
+		}},
+		{"unique struct defaults", func() error {
+			type Item struct{ N int }
+			type Doc struct {
+				V []Item `shape:"unique"`
+			}
+			_, err := jsonschema.Export(shape.FromTags[Doc]())
+			return err
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var unsupported *jsonschema.UnsupportedError
+			if err := tc.export(); !errors.As(err, &unsupported) {
+				t.Fatalf("error=%v", err)
+			}
+		})
+	}
+}
+
+func TestUniquePointerScalarsKeepNullDistinct(t *testing.T) {
+	type Doc struct {
+		V []*int `json:"v" shape:"unique,max=2000"`
+	}
+	schema := shape.FromTags[Doc]()
+	p := rootObject(t, property[Doc](t, "v"))
+	if p["uniqueItems"] != true || p["maxItems"] != 1024 {
+		t.Fatalf("property=%v", p)
+	}
+	for _, tc := range []struct {
+		input string
+		valid bool
+	}{{`{"v":[0,null]}`, true}, {`{"v":[0,0]}`, false}, {`{"v":[null,null]}`, false}} {
+		if _, err := schema.ParseJSON([]byte(tc.input)); (err == nil) != tc.valid {
+			t.Fatalf("input=%s error=%v", tc.input, err)
+		}
+	}
+	tooMany := make([]*int, 1025)
+	for i := range tooMany {
+		tooMany[i] = new(int)
+		*tooMany[i] = i
+	}
+	if schema.Validate(Doc{V: tooMany}) == nil {
+		t.Fatal("deep equality bound missing")
+	}
+}
