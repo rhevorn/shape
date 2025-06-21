@@ -5,8 +5,8 @@ import (
 	"go/constant"
 	"go/types"
 	"reflect"
-	"strings"
 
+	"github.com/rhevorn/shape/internal/jsonfields"
 	"golang.org/x/tools/go/analysis"
 )
 
@@ -24,6 +24,7 @@ func checkExplicitSchema(pass *analysis.Pass, call *ast.CallExpr, target types.T
 		return
 	}
 	seen := make(map[string]bool, len(call.Args))
+	jsonFields := directJSONFields(owner)
 	for _, argument := range call.Args {
 		factory := explicitFieldCall(pass, argument)
 		if factory == nil {
@@ -55,9 +56,14 @@ func checkExplicitSchema(pass *analysis.Pass, call *ast.CallExpr, target types.T
 			pass.Reportf(factory.Args[0].Pos(), "invalid Shape explicit field: field %s is not exported", name)
 			continue
 		}
-		jsonName := reflect.StructTag(owner.Tag(fieldIndex(owner, field))).Get("json")
-		if strings.Split(jsonName, ",")[0] == "-" {
+		jsonTag := reflect.StructTag(owner.Tag(fieldIndex(owner, field))).Get("json")
+		if jsonTag == "-" {
 			pass.Reportf(factory.Args[0].Pos(), "invalid Shape explicit field: field %s is excluded from JSON", name)
+			continue
+		}
+		jsonName, _ := jsonfields.Name(field.Name(), jsonTag)
+		if jsonFields[jsonName] != fieldIndex(owner, field) {
+			pass.Reportf(factory.Pos(), "invalid Shape explicit field: ambiguous or shadowed JSON field %s", jsonName)
 			continue
 		}
 		schemaType := transformInputType(pass.TypesInfo.TypeOf(factory.Args[1]))
@@ -164,4 +170,25 @@ func transformInputType(t types.Type) types.Type {
 		return nil
 	}
 	return signature.Params().At(0).Type()
+}
+
+func directJSONFields(owner *types.Struct) map[string]int {
+	candidates := make([]jsonfields.Candidate, 0, owner.NumFields())
+	for i := 0; i < owner.NumFields(); i++ {
+		field := owner.Field(i)
+		typ := field.Type()
+		if classify(typ) == kPointer {
+			typ = element(typ)
+		}
+		tag := reflect.StructTag(owner.Tag(i)).Get("json")
+		if !field.Exported() && (!field.Embedded() || classify(typ) != kStruct) || tag == "-" {
+			continue
+		}
+		name, tagged := jsonfields.Name(field.Name(), tag)
+		if field.Embedded() && !tagged && classify(typ) == kStruct {
+			continue
+		}
+		candidates = append(candidates, jsonfields.Candidate{Index: i, Name: name, Tagged: tagged})
+	}
+	return jsonfields.Resolve(candidates)
 }

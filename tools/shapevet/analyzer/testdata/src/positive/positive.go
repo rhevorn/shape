@@ -91,3 +91,10 @@ func generic[T any]() {
 	_ = shape.FromTags[Box[T]]()
 	_ = shape.New[Box[T]](shape.Field("Value", shape.Value[T]()))
 }
+
+type NamePointer *string
+type NamedPointerDoc struct {
+	Name NamePointer `json:"name" shape:"ifnull=guest,trim,notnull"`
+}
+
+var namedPointerSchema = shape.FromTags[NamedPointerDoc]()

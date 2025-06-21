@@ -133,3 +133,15 @@ var _ = shape.FromTags[MapRequest]()   // want "recursive type is unsupported"
 type PointerEmpty struct {
 	Name *string `shape:"notempty"` // want "use notnull on pointers"
 }
+
+type PartialJSONConflict struct {
+	A string `json:"name"`
+	B string `json:"name"`
+}
+
+var partialJSONConflict = shape.New[PartialJSONConflict](shape.Field("A", shape.String())) // want "ambiguous or shadowed JSON field name"
+
+type NamedStringPointer *string
+type NestedNamedPointer struct{ Name *NamedStringPointer }
+
+var nestedNamedPointer = shape.FromTags[NestedNamedPointer]() // want "unsupported pointer field type"

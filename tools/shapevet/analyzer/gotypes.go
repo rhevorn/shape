@@ -36,6 +36,8 @@ func classify(t types.Type) kind {
 		t = named.Underlying()
 	}
 	switch underlying := t.Underlying().(type) {
+	case *types.Pointer:
+		return kPointer
 	case *types.Basic:
 		info := underlying.Info()
 		if info&types.IsString != 0 {
@@ -93,7 +95,7 @@ func mentionsTypeParam(t types.Type) bool {
 
 func element(t types.Type) types.Type {
 	t = types.Unalias(t)
-	if pointer, ok := t.(*types.Pointer); ok {
+	if pointer, ok := t.Underlying().(*types.Pointer); ok {
 		return pointer.Elem()
 	}
 	return t

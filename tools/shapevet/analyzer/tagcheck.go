@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rhevorn/shape/internal/jsonfields"
 	"github.com/rhevorn/shape/internal/spec"
 	"github.com/rhevorn/shape/internal/taglang"
 )
@@ -34,8 +35,8 @@ func checkStructType(t types.Type, active map[types.Type]bool) error {
 		field := value.Field(index)
 		tag := reflect.StructTag(value.Tag(index))
 		shapeTag := tag.Get("shape")
-		jsonName := strings.Split(tag.Get("json"), ",")[0]
-		if !field.Exported() || jsonName == "-" {
+		jsonName, _ := jsonfields.Name(field.Name(), tag.Get("json"))
+		if !field.Exported() || tag.Get("json") == "-" {
 			if shapeTag != "" {
 				return errText(field.Name() + " has a tag but is not processed")
 			}
@@ -78,7 +79,7 @@ func checkSupportedGraph(t types.Type, active map[types.Type]bool) error {
 	switch value := t.(type) {
 	case *types.Pointer:
 		element := types.Unalias(value.Elem())
-		if _, nested := element.(*types.Pointer); nested {
+		if classify(element) == kPointer {
 			return errText("multi-level pointers are unsupported in tags")
 		}
 		if classify(element) == kSlice || classify(element) == kMap {
