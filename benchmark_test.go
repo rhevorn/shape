@@ -188,3 +188,56 @@ func BenchmarkNoopPayload(b *testing.B) {
 		}
 	})
 }
+
+func BenchmarkExplicitByteSlice(b *testing.B) {
+	schema := shape.Slice(shape.Number[byte]())
+	input := make([]byte, 64*1024)
+	b.ReportAllocs()
+	b.SetBytes(int64(len(input)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := schema.Transform(input); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkTaggedByteSlice(b *testing.B) {
+	type Doc struct{ Data []byte }
+	schema := shape.FromTags[Doc]()
+	input := Doc{Data: make([]byte, 64*1024)}
+	b.ReportAllocs()
+	b.SetBytes(int64(len(input.Data)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := schema.Transform(input); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkValueByteSlice(b *testing.B) {
+	schema := shape.Value[[]byte]()
+	input := make([]byte, 64*1024)
+	b.ReportAllocs()
+	b.SetBytes(int64(len(input)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := schema.Transform(input); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkTransformByteSlice(b *testing.B) {
+	transformer := transform.Slice(transform.Number[byte]())
+	input := make([]byte, 64*1024)
+	b.ReportAllocs()
+	b.SetBytes(int64(len(input)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := transformer.Transform(input); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
