@@ -4,6 +4,9 @@
 
 ### Added
 
+- `validate.Issue.Target`, `IssueTarget`, `TargetValue`, and `TargetKey`
+  distinguish map-key failures from value failures independently of labels.
+
 - A pure `validate.Validator[T]` API with aggregate and fail-fast calls,
   structured paths, stable issue codes, localization, composition, and
   context-aware refinements.
@@ -30,6 +33,21 @@
 - Runnable examples and guides for the public API and struct tags.
 
 ### Fixed
+
+- Package JSON parsing and collection composition honor methods overridden by
+  schemas and transformers that embed built-in types.
+- Custom JSON and text decoders cannot expose shared storage to built-in
+  transforms; failed binds preserve the target.
+- Explicit field validation preserves non-nil empty validation errors, and
+  package JSON parsing checks cancellation after the final validation call.
+- JSON field binding detects conflicts with unbound fields and follows tagged
+  field precedence and JSON name validation.
+- Export rejects custom schema wrappers, float32 values, URL rules, and unique
+  constraints that do not preserve JSON equality.
+- Built-in collection composition avoids repeated element copies and skips
+  identity element transformations after detaching the input.
+- `shapevet` accepts named pointers supported by the runtime and diagnoses
+  ambiguous explicit JSON bindings.
 
 - Error enum values and exported documents no longer expose mutable schema state.
 - Exported constraints intersect instead of overwriting earlier rules; unsupported

@@ -41,7 +41,8 @@ unsupported wire representations, and recursive analyzer inputs.
 
 Export is currently a tagged-schema adapter. Explicit `New` Schemas remain
 runtime-only. Byte slices, `json:",string"`, custom codecs, Go duration strings,
-fallbacks, custom callbacks and unsupported regexps return
+float32 fields, URL rules, decoding-dependent uniqueness, fallbacks, custom
+callbacks and unsupported regexps return
 `UnsupportedSchemaError`. Multiple exportable rules intersect rather than
 overwriting one another. Only the supported Go regexp subset is translated to
 ECMA-262; consumers must enable format assertions if relying on format rules.

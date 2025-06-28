@@ -371,6 +371,7 @@ Errors and paths:
 ```go
 type Error struct { Issues []Issue }
 type Issue struct {
+    Target IssueTarget
     Code string
     Path Path
     Message string
@@ -378,6 +379,10 @@ type Issue struct {
     Expected any
     Received any
 }
+
+type IssueTarget string
+const TargetValue IssueTarget = ""
+const TargetKey IssueTarget = "key"
 
 FieldPath(string) PathSegment
 IndexPath(int) PathSegment
@@ -402,6 +407,11 @@ func (Path) MarshalJSON() ([]byte, error)
 Map-key segments preserve the concrete key value: integer key `3` renders as
 `[3]` and marshals as JSON number `3`, while string key `"3"` renders as
 `["3"]` and marshals as a JSON string.
+
+`Issue.Target` identifies what failed at `Path`: `TargetValue` (the zero value)
+means the value, and `TargetKey` means the map key at the final segment. Key
+issues encode `"target":"key"`; value issues omit `target`. This distinction
+survives custom labels and nested maps. `Label` is display text only.
 
 Stable codes:
 
@@ -519,10 +529,19 @@ openapi.JSONResponse(description, schema)
 Export is intentionally conservative. Currently only representable tagged
 `shape.FromTags[T]()` plans are exported. Transforms, custom callbacks, fallbacks,
 custom JSON representations, `json:",string"`, byte slices, Go duration strings,
-and unsupported rules return `UnsupportedSchemaError`; they are never omitted
-silently. Repeated rules intersect, and exported documents are detached from the
+float32 values, URL rules, and unsupported rules return `UnsupportedSchemaError`;
+they are never omitted silently. Repeated rules intersect, and exported documents are detached from the
 cached plan. Patterns export only when the supported ASCII Go regexp subset
 can be translated to ECMA-262; unsupported flags and Unicode classes fail.
+
+`unique` exports only for scalar elements whose decoded equality matches JSON
+equality. Scalar pointers to strings, booleans, and integers preserve the
+null/value distinction; ordinary scalar slices that accept both null and zero,
+struct slices, and nested collections are rejected. Exported pointer uniqueness
+also includes the runtime deep-comparison limit as `maxItems`.
+
+Only exact `TaggedSpec[T]` values and pointers export. Wrapping or embedding a
+Spec does not make custom behavior exportable.
 
 The adapters describe constraints on JSON values, not every lexical detail of
 `encoding/json` (for example integer token spelling or duplicate object keys).
@@ -591,10 +610,15 @@ errors do not promise an arbitrary deep copy of user data.
 
 Built-in transforms detach the mutable data they process before invoking
 callbacks. Explicit fields omitted from `New` pass through unchanged and may
-share storage; a whole-struct `Apply` detaches the data it receives. A fresh JSON
-decode transfers ownership to the pipeline, so redundant defensive copies can
-be skipped. Every fallback is snapshotted during construction and copied for
-use; the caller's later edits cannot change it.
+share storage; a whole-struct `Apply` detaches the data it receives. Tagged JSON
+parsing may reuse decoded storage when the type graph contains no custom JSON
+or text decoders and no interface fields. Otherwise transforms detach the data
+before modifying it. Every fallback is snapshotted during construction and
+copied for use; the caller's later edits cannot change it.
+
+Package-level JSON parsing and collection composition call the public methods
+of external Schema implementations, including wrappers that embed built-in
+Specs. Internal fast paths apply only to exact built-in types.
 
 `Value[T]` is intended for data values. Copying live synchronization objects,
 resource handles, closures or channels does not provide transactional isolation.

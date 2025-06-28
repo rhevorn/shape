@@ -154,7 +154,10 @@ document, err := jsonschema.Export(shape.FromTags[Request]())
 ```
 
 Only representable `FromTags` plans export. Explicit `New` schemas do not yet
-carry export metadata. Unsupported behavior returns an error
+carry export metadata. URL rules, float32 fields, and `unique` rules whose
+JSON-to-Go decoding changes equality are unsupported. For example, `[0,null]`
+becomes `[0,0]` in `[]int`, so its `unique` rule cannot export as `uniqueItems`.
+Unsupported behavior returns an error
 rather than silent omission.
 
 ```sh
@@ -183,8 +186,10 @@ See [API.md](API.md) and [examples](../examples).
 - Pointer/slice/map outer transforms now run before element transforms. Defaults
   and elements introduced by a whole-container `Apply` are normalized too.
 - `And` follows declaration order, including rules appended after it.
-- Export may now reject byte slices, JSON string options, Go durations and
-  non-portable regexps that previously produced misleading documents.
+- Export rejects byte slices, JSON string options, Go durations, float32 fields,
+  URL rules, decoding-dependent uniqueness, and non-portable regexps.
+- Use `Issue.Target == validate.TargetKey` to identify map-key errors; labels
+  are display text and may be customized.
 
 See [API ownership rules](API.md#7-ownership-and-callbacks) before adding custom
 callbacks or processing types with external resources.
