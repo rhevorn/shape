@@ -7,6 +7,7 @@ import (
 	"io"
 	"reflect"
 
+	"github.com/rhevorn/shape/internal/fieldmeta"
 	"github.com/rhevorn/shape/internal/jsondecode"
 )
 
@@ -50,6 +51,7 @@ func ParseJSONReaderContext[T any](ctx context.Context, schema Schema[T], reader
 	if len(options) == 1 {
 		opts = options[0]
 	}
+	ctx = fieldmeta.WithSource(ctx, fieldmeta.JSON)
 	candidate, err := jsondecode.Decode[T](ctx, reader, jsondecode.Options{
 		DisallowUnknownFields: opts.DisallowUnknownFields,
 		MaxBytes:              opts.MaxBytes,
@@ -58,30 +60,7 @@ func ParseJSONReaderContext[T any](ctx context.Context, schema Schema[T], reader
 	if err != nil {
 		return zero, err
 	}
-	var out T
-	// Only exact built-in types may bypass the public transformation method.
-	switch builtIn := schema.(type) {
-	case TaggedSpec[T]:
-		out, err = builtIn.transformContext(ctx, candidate, jsondecode.OwnsStorage(reflect.TypeFor[T]()))
-	case *TaggedSpec[T]:
-		out, err = builtIn.transformContext(ctx, candidate, jsondecode.OwnsStorage(reflect.TypeFor[T]()))
-	default:
-		out, err = schema.TransformContext(ctx, candidate)
-	}
-
-	if ctx.Err() != nil {
-		return zero, ctx.Err()
-	}
-	if err != nil {
-		return zero, err
-	}
-	if err := schema.ValidateContext(ctx, out); err != nil {
-		return zero, err
-	}
-	if err := ctx.Err(); err != nil {
-		return zero, err
-	}
-	return out, nil
+	return finishParse(ctx, schema, candidate, jsondecode.OwnsStorage(reflect.TypeFor[T]()))
 }
 
 // BindJSON derives the target's cached tagged struct Schema and atomically

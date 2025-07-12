@@ -5,6 +5,7 @@ import (
 	"errors"
 	"reflect"
 
+	"github.com/rhevorn/shape/internal/fieldmeta"
 	"github.com/rhevorn/shape/internal/maporder"
 	"github.com/rhevorn/shape/internal/validationlocale"
 	"github.com/rhevorn/shape/internal/validationmsg"
@@ -172,8 +173,10 @@ func transformTagPlan(ctx context.Context, p *Plan, value reflect.Value, path va
 			out = reflect.New(value.Type()).Elem()
 			out.Set(value)
 		}
+		source := fieldmeta.FromContext(ctx)
 		for _, field := range p.fields {
-			fieldPath := appendValidatePath(path, validate.FieldPath(field.name))
+			name := field.names.PathName(source)
+			fieldPath := appendValidatePath(path, validate.FieldPath(name))
 			item, err := transformTagPlan(ctx, field.plan, value.Field(field.index), fieldPath, depth+1, ownership)
 			if err != nil {
 				return reflect.Value{}, err
@@ -283,8 +286,10 @@ func validatePlan(ctx context.Context, p *Plan, value reflect.Value, path valida
 			return validatePlan(ctx, p.element, value.Elem(), path, depth+1, first, issues)
 		}
 	case reflect.Struct:
+		source := fieldmeta.FromContext(ctx)
 		for _, field := range p.fields {
-			stop, err := validatePlan(ctx, field.plan, value.Field(field.index), appendValidatePath(path, validate.FieldPath(field.name)), depth+1, first, issues)
+			name := field.names.PathName(source)
+			stop, err := validatePlan(ctx, field.plan, value.Field(field.index), appendValidatePath(path, validate.FieldPath(name)), depth+1, first, issues)
 			if err != nil || stop {
 				return stop, err
 			}

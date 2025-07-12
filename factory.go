@@ -35,7 +35,7 @@ func New[T any](fields ...FieldSpec) StructSpec[T] {
 }
 
 // FromTags derives and caches a Schema for an ordinary value struct from its
-// json and shape tags. Invalid program configuration panics during construction.
+// exported fields, shape rules, and input-name tags. Invalid definitions panic.
 func FromTags[T any]() TaggedSpec[T] {
 	typ := reflect.TypeFor[T]()
 	plan, err := tagged.Compile(typ)

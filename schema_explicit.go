@@ -3,6 +3,7 @@ package shape
 import (
 	"context"
 	"io"
+	"net/url"
 
 	"github.com/rhevorn/shape/internal/pipeline"
 	"github.com/rhevorn/shape/transform"
@@ -106,4 +107,24 @@ func (s StructSpec[T]) ParseJSONReader(reader io.Reader, options ...JSONOptions)
 // ParseJSONReaderContext is the context-aware reader form of ParseJSON.
 func (s StructSpec[T]) ParseJSONReaderContext(ctx context.Context, reader io.Reader, options ...JSONOptions) (T, error) {
 	return ParseJSONReaderContext(ctx, s, reader, options...)
+}
+
+// ParseForm decodes, transforms, and validates form parameters.
+func (s StructSpec[T]) ParseForm(values url.Values, options ...FormOptions) (T, error) {
+	return ParseForm(s, values, options...)
+}
+
+// ParseFormContext is the context-aware form of ParseForm.
+func (s StructSpec[T]) ParseFormContext(ctx context.Context, values url.Values, options ...FormOptions) (T, error) {
+	return ParseFormContext(ctx, s, values, options...)
+}
+
+// ParseQuery decodes, transforms, and validates query parameters.
+func (s StructSpec[T]) ParseQuery(values url.Values, options ...QueryOptions) (T, error) {
+	return ParseQuery(s, values, options...)
+}
+
+// ParseQueryContext is the context-aware form of ParseQuery.
+func (s StructSpec[T]) ParseQueryContext(ctx context.Context, values url.Values, options ...QueryOptions) (T, error) {
+	return ParseQueryContext(ctx, s, values, options...)
 }

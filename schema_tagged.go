@@ -3,6 +3,7 @@ package shape
 import (
 	"context"
 	"io"
+	"net/url"
 
 	"github.com/rhevorn/shape/internal/pipeline"
 	"github.com/rhevorn/shape/internal/tagged"
@@ -134,4 +135,24 @@ func (s TaggedSpec[T]) schemaPlan() (*tagged.Plan, error) {
 		return nil, &UnsupportedSchemaError{Feature: "custom Apply or Refine"}
 	}
 	return s.base.Plan, nil
+}
+
+// ParseForm decodes, transforms, and validates form parameters.
+func (s TaggedSpec[T]) ParseForm(values url.Values, options ...FormOptions) (T, error) {
+	return ParseForm(s, values, options...)
+}
+
+// ParseFormContext is the context-aware form of ParseForm.
+func (s TaggedSpec[T]) ParseFormContext(ctx context.Context, values url.Values, options ...FormOptions) (T, error) {
+	return ParseFormContext(ctx, s, values, options...)
+}
+
+// ParseQuery decodes, transforms, and validates query parameters.
+func (s TaggedSpec[T]) ParseQuery(values url.Values, options ...QueryOptions) (T, error) {
+	return ParseQuery(s, values, options...)
+}
+
+// ParseQueryContext is the context-aware form of ParseQuery.
+func (s TaggedSpec[T]) ParseQueryContext(ctx context.Context, values url.Values, options ...QueryOptions) (T, error) {
+	return ParseQueryContext(ctx, s, values, options...)
 }

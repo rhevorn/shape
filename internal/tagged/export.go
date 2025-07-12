@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rhevorn/shape/internal/fieldmeta"
 	"github.com/rhevorn/shape/validate"
 )
 
@@ -116,16 +117,22 @@ func exportTagPlanAt(p *Plan, pointee bool) (map[string]any, error) {
 		properties := make(map[string]any, len(p.fields))
 		required := make([]string, 0, len(p.fields))
 		for _, field := range p.fields {
+			if field.names.JSON == "" {
+				if field.plan.needsTransform || !planAcceptsZero(field.plan) {
+					return nil, &UnsupportedError{Feature: "rules on non-JSON field " + field.names.Default}
+				}
+				continue
+			}
 			if field.quoted {
-				return nil, &UnsupportedError{Feature: "json string option on " + field.name}
+				return nil, &UnsupportedError{Feature: "json string option on " + field.names.JSON}
 			}
 			child, err := Export(field.plan)
 			if err != nil {
 				return nil, err
 			}
-			properties[field.name] = child
+			properties[field.names.JSON] = child
 			if !planAcceptsZero(field.plan) {
-				required = append(required, field.name)
+				required = append(required, field.names.JSON)
 			}
 		}
 		document = map[string]any{"type": "object", "properties": properties}
@@ -281,7 +288,7 @@ func planAcceptsZero(p *Plan) bool {
 		return false
 	}
 	issues := make([]validate.Issue, 0)
-	_, err := validatePlan(context.Background(), p, reflect.Zero(p.typ), nil, 0, false, &issues)
+	_, err := validatePlan(fieldmeta.WithSource(context.Background(), fieldmeta.JSON), p, reflect.Zero(p.typ), nil, 0, false, &issues)
 	return err == nil && len(issues) == 0
 }
 

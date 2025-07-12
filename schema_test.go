@@ -175,7 +175,6 @@ func TestExplicitSchemaRejectsBadFields(t *testing.T) {
 		{"case mismatch", func() { _ = shape.New[User](shape.Field("name", shape.String())) }},
 		{"wrong type", func() { _ = shape.New[User](shape.Field("Name", shape.Int())) }},
 		{"duplicate", func() { _ = shape.New[User](shape.Field("Name", shape.String()), shape.Field("Name", shape.String())) }},
-		{"json excluded", func() { _ = shape.New[User](shape.Field("Hidden", shape.String())) }},
 		{"unnamed", func() { _ = shape.New[User](shape.Field("", shape.String())) }},
 	}
 	for _, test := range tests {
@@ -569,10 +568,7 @@ func TestWholeStructApplyUsesOneWorkingCopy(t *testing.T) {
 }
 
 // Both Schema paths must protect caller-owned storage when a whole-struct
-// Apply fails. The tagged plan only detaches the fields it compiles, so
-// storage held by json:"-" (and unexported) fields — which a nested Apply
-// reaches through promoted or exported selectors — stayed shared with the
-// caller.
+// Apply fails, including storage in fields excluded from JSON decoding.
 func TestFailedWholeStructApplyDoesNotMutateInput(t *testing.T) {
 	boom := errors.New("boom")
 

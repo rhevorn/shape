@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/rhevorn/shape/internal/fieldmeta"
 	"github.com/rhevorn/shape/internal/jsonfields"
 	"github.com/rhevorn/shape/internal/validationlocale"
 	"github.com/rhevorn/shape/internal/validationmsg"
@@ -23,7 +24,7 @@ type Definition struct {
 
 type programField struct {
 	index       int
-	name        string
+	names       fieldmeta.Names
 	transform   func(context.Context, reflect.Value) (reflect.Value, error)
 	validateAll func(context.Context, reflect.Value) error
 	validateOne func(context.Context, reflect.Value) error
@@ -36,6 +37,7 @@ type Compiled struct{ fields []programField }
 func Compile(owner reflect.Type, specs []Definition) Compiled {
 	fields := make([]programField, 0, len(specs))
 	seen := make(map[string]struct{}, len(specs))
+	paths := make(map[string]bool, len(specs))
 	jsonFields := directJSONFields(owner)
 	for _, spec := range specs {
 		definition := spec
@@ -56,16 +58,18 @@ func Compile(owner reflect.Type, specs []Definition) Compiled {
 		if field.Type != definition.Type {
 			panic(fmt.Sprintf("shape: field %s has type %v, schema has type %v", definition.Name, field.Type, definition.Type))
 		}
-		jsonName, _ := jsonfields.Name(field.Name, field.Tag.Get("json"))
-		if field.Tag.Get("json") == "-" {
-			panic(fmt.Sprintf("shape: field %s is excluded from JSON", definition.Name))
-		}
-		if jsonFields[jsonName] != field.Index[0] {
-			panic("shape: ambiguous or shadowed JSON field " + jsonName)
+		names := fieldmeta.Resolve(field.Name, field.Tag)
+		if names.JSON != "" && jsonFields[names.JSON] != field.Index[0] {
+			panic("shape: ambiguous or shadowed JSON field " + names.JSON)
 		}
 
+		if paths[names.Default] {
+			panic("shape: duplicate field path " + names.Default)
+		}
+		paths[names.Default] = true
+
 		fields = append(fields, programField{
-			index: field.Index[0], name: jsonName,
+			index: field.Index[0], names: names,
 			transform: definition.Transform, validateAll: definition.ValidateAll, validateOne: definition.ValidateOne,
 		})
 	}
@@ -94,7 +98,9 @@ func (t Transformer[T]) TransformContext(ctx context.Context, value T) (T, error
 	}
 	out := reflect.New(reflect.TypeFor[T]()).Elem()
 	out.Set(reflect.ValueOf(&value).Elem())
+	source := fieldmeta.FromContext(ctx)
 	for _, field := range t.compiled.fields {
+		name := field.names.PathName(source)
 		if err := ctx.Err(); err != nil {
 			return zero, err
 		}
@@ -103,7 +109,7 @@ func (t Transformer[T]) TransformContext(ctx context.Context, value T) (T, error
 			if ctx.Err() != nil {
 				return zero, ctx.Err()
 			}
-			return zero, &TransformError{Path: validate.Path{validate.FieldPath(field.name)}, Err: err}
+			return zero, &TransformError{Path: validate.Path{validate.FieldPath(name)}, Err: err}
 		}
 		out.Field(field.index).Set(item)
 	}
@@ -143,7 +149,9 @@ func (v Validator[T]) run(ctx context.Context, value T, first bool) error {
 	}
 	root := reflect.ValueOf(&value).Elem()
 	issues := make([]validate.Issue, 0)
+	source := fieldmeta.FromContext(ctx)
 	for _, field := range v.compiled.fields {
+		name := field.names.PathName(source)
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -164,7 +172,7 @@ func (v Validator[T]) run(ctx context.Context, value T, first bool) error {
 		}
 		fieldIssues := validationIssues(err)
 		for _, issue := range fieldIssues {
-			issue.Path = append(validate.Path{validate.FieldPath(field.name)}, issue.Path...)
+			issue.Path = append(validate.Path{validate.FieldPath(name)}, issue.Path...)
 			if appendSchemaIssue(ctx, &issues, issue, first) {
 				return &validate.Error{Issues: issues}
 			}

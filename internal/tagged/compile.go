@@ -2,11 +2,12 @@ package tagged
 
 import (
 	"fmt"
-	"github.com/rhevorn/shape/internal/jsonfields"
 	"reflect"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/rhevorn/shape/internal/fieldmeta"
 )
 
 type structCacheEntry struct {
@@ -36,7 +37,7 @@ func Compile(t reflect.Type) (*Plan, error) {
 
 type tagField struct {
 	index  int
-	name   string
+	names  fieldmeta.Names
 	quoted bool
 	plan   *Plan
 }
@@ -69,8 +70,8 @@ func compileType(t reflect.Type, active map[reflect.Type]bool) (*Plan, error) {
 		for i := 0; i < t.NumField(); i++ {
 			f := t.Field(i)
 			tag := f.Tag.Get("shape")
-			jsonName, _ := jsonfields.Name(f.Name, f.Tag.Get("json"))
-			if f.PkgPath != "" || f.Tag.Get("json") == "-" {
+			fieldNames := fieldmeta.Resolve(f.Name, f.Tag)
+			if f.PkgPath != "" {
 				if tag != "" {
 					return nil, fmt.Errorf("shape: %s has a tag but is not processed", f.Name)
 				}
@@ -79,13 +80,10 @@ func compileType(t reflect.Type, active map[reflect.Type]bool) (*Plan, error) {
 			if f.Anonymous {
 				return nil, fmt.Errorf("shape: anonymous field %s is unsupported", f.Name)
 			}
-			if jsonName == "" {
-				jsonName = f.Name
+			if names[fieldNames.Default] {
+				return nil, fmt.Errorf("shape: duplicate field name %s", fieldNames.Default)
 			}
-			if names[jsonName] {
-				return nil, fmt.Errorf("shape: duplicate field name %s", jsonName)
-			}
-			names[jsonName] = true
+			names[fieldNames.Default] = true
 			inner, e := compileType(f.Type, active)
 			if e != nil {
 				return nil, fmt.Errorf("%s: %w", f.Name, e)
@@ -94,7 +92,7 @@ func compileType(t reflect.Type, active map[reflect.Type]bool) (*Plan, error) {
 			if e != nil {
 				return nil, fmt.Errorf("%s: %w", f.Name, e)
 			}
-			fields = append(fields, tagField{index: i, name: jsonName, plan: inner, quoted: jsonQuoted(f)})
+			fields = append(fields, tagField{index: i, names: fieldNames, plan: inner, quoted: jsonQuoted(f)})
 		}
 		p.fields = fields
 	case reflect.Slice:

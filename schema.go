@@ -14,8 +14,8 @@ import (
 
 // Schema describes transformation and validation for T.
 // Transformation and validation remain independently callable.
-// JSON decode lives on StructSpec/TaggedSpec (JSONSchema) and package-level
-// ParseJSON*; tag-driven BindJSON* is package-level only.
+// StructSpec and TaggedSpec provide JSON, form, and query parsing methods.
+// Package-level Parse and tag-driven Bind functions provide the same inputs.
 type Schema[T any] interface {
 	Transform(T) (T, error)
 	TransformContext(context.Context, T) (T, error)
