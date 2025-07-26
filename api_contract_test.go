@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/rhevorn/shape"
@@ -206,3 +208,51 @@ func compilePublicAPI(ctx context.Context, reader io.Reader, source []byte) {
 }
 
 var _ = compilePublicAPI
+
+func compileParameterAPI(ctx context.Context, values url.Values) {
+	var _ error = &shape.ParameterError{Source: "form", Path: validate.Path{validate.FieldPath("bio")}, Err: errors.New("invalid")}
+	form := shape.FormOptions{DisallowUnknownFields: true}
+	query := shape.QueryOptions{DisallowUnknownFields: true}
+	tagged, explicit := shape.FromTags[contractProfile](), shape.New[contractProfile]()
+	var target contractProfile
+
+	var _ func(shape.Schema[contractProfile], url.Values, ...shape.FormOptions) (contractProfile, error) = shape.ParseForm[contractProfile]
+	var _ func(context.Context, shape.Schema[contractProfile], url.Values, ...shape.FormOptions) (contractProfile, error) = shape.ParseFormContext[contractProfile]
+	var _ func(*contractProfile, url.Values, ...shape.FormOptions) error = shape.BindForm[contractProfile]
+	var _ func(context.Context, *contractProfile, url.Values, ...shape.FormOptions) error = shape.BindFormContext[contractProfile]
+	_, _ = tagged.ParseForm(values, form)
+	_, _ = tagged.ParseFormContext(ctx, values, form)
+	_, _ = explicit.ParseForm(values, form)
+	_, _ = explicit.ParseFormContext(ctx, values, form)
+	_ = shape.BindForm(&target, values, form)
+	_ = shape.BindFormContext(ctx, &target, values, form)
+
+	var _ func(shape.Schema[contractProfile], url.Values, ...shape.QueryOptions) (contractProfile, error) = shape.ParseQuery[contractProfile]
+	var _ func(context.Context, shape.Schema[contractProfile], url.Values, ...shape.QueryOptions) (contractProfile, error) = shape.ParseQueryContext[contractProfile]
+	var _ func(*contractProfile, url.Values, ...shape.QueryOptions) error = shape.BindQuery[contractProfile]
+	var _ func(context.Context, *contractProfile, url.Values, ...shape.QueryOptions) error = shape.BindQueryContext[contractProfile]
+	_, _ = tagged.ParseQuery(values, query)
+	_, _ = tagged.ParseQueryContext(ctx, values, query)
+	_, _ = explicit.ParseQuery(values, query)
+	_, _ = explicit.ParseQueryContext(ctx, values, query)
+	_ = shape.BindQuery(&target, values, query)
+	_ = shape.BindQueryContext(ctx, &target, values, query)
+}
+
+var _ = compileParameterAPI
+
+func compileRequestAPI(request *http.Request) {
+	var _ func(*contractProfile, *http.Request, ...shape.RequestOptions) error = shape.BindRequest[contractProfile]
+	var _ error = &shape.SourceConflictError{Field: "Bio", Sources: []string{"query", "json"}}
+	var _ shape.RequestPrecedence = shape.RejectConflicts
+	var _ shape.RequestPrecedence = shape.QueryFirst
+	var _ shape.RequestPrecedence = shape.BodyFirst
+	var _ int64 = shape.DefaultMaxRequestBytes
+	_ = shape.ErrRequestTooLarge
+	_ = shape.ErrUnsupportedContentType
+	_ = shape.ErrRequestFiles
+	var target contractProfile
+	_ = shape.BindRequest(&target, request, shape.RequestOptions{DisallowUnknownFields: true, MaxBytes: 1024, Precedence: shape.QueryFirst})
+}
+
+var _ = compileRequestAPI
