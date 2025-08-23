@@ -105,9 +105,10 @@ func invalidConstruction(data []byte) {
 	_ = shape.FromTags[FloatMapKey]()    // want "map key must be string or integer"
 	_ = shape.FromTags[Recursive]()      // want "recursive type is unsupported"
 	_ = shape.FromTags[Embedded]()       // want "anonymous fields are unsupported"
-	_ = shape.FromTags[TaggedIgnored]()  // want "has a tag but is not processed"
+	_ = shape.FromTags[TaggedIgnored]()  // want "secret has a tag but is not processed"
 
 	var invalid InterfaceField
+	_ = shape.BindRequest(&invalid, nil)                                                     // want "unsupported field type"
 	_ = shape.BindJSON(&invalid, data)                                                       // want "unsupported field type"
 	_ = shape.BindJSONContext(context.Background(), &invalid, data)                          // want "unsupported field type"
 	_ = shape.BindJSONReader(&invalid, strings.NewReader("{}"))                              // want "unsupported field type"
@@ -115,10 +116,10 @@ func invalidConstruction(data []byte) {
 
 	_ = shape.New[Explicit](shape.Field("Missing", shape.String())) // want "target has no direct field Missing"
 	_ = shape.New[Explicit](shape.Field("private", shape.String())) // want "field private is not exported"
-	_ = shape.New[Explicit](shape.Field("Hidden", shape.String()))  // want "field Hidden is excluded from JSON"
-	_ = shape.New[Explicit](shape.Field("Name", shape.Int()))       // want "field Name has type string, schema has type int"
-	_ = shape.New[Explicit](shape.Field("Count", shape.String()))   // want "field Count has type int, schema has type string"
-	_ = shape.New[Explicit](shape.Field("Child", shape.String()))   // want "target has no direct field Child"
+	_ = shape.New[Explicit](shape.Field("Hidden", shape.String()))
+	_ = shape.New[Explicit](shape.Field("Name", shape.Int()))     // want "field Name has type string, schema has type int"
+	_ = shape.New[Explicit](shape.Field("Count", shape.String())) // want "field Count has type int, schema has type string"
+	_ = shape.New[Explicit](shape.Field("Child", shape.String())) // want "target has no direct field Child"
 }
 
 // Valid Go recursive containers must produce diagnostics, never recurse forever.
@@ -145,3 +146,26 @@ type NamedStringPointer *string
 type NestedNamedPointer struct{ Name *NamedStringPointer }
 
 var nestedNamedPointer = shape.FromTags[NestedNamedPointer]() // want "unsupported pointer field type"
+
+type DuplicateQuery struct {
+	A string `query:"name"`
+	B string `query:"name"`
+}
+type BadFormName struct {
+	A string `form:"nested.name"`
+}
+type ObjectList struct{ Values []struct{ Name string } }
+
+func invalidParameters() {
+	var a DuplicateQuery
+	var b BadFormName
+	var c ObjectList
+	_ = shape.BindQuery(&a, nil)                              // want "duplicate field name name"
+	_ = shape.BindQueryContext(context.Background(), &a, nil) // want "duplicate field name name"
+	_ = shape.BindForm(&b, nil)                               // want "invalid field name nested.name"
+	_ = shape.BindFormContext(context.Background(), &b, nil)  // want "invalid field name nested.name"
+	_ = shape.BindRequest(&c, nil)                            // want "unsupported parameter type"
+	_ = shape.BindForm(&c, nil)                               // want "unsupported parameter type"
+	_, _ = shape.FromTags[DuplicateQuery]().ParseQuery(nil)   // want "duplicate field name name"
+	_, _ = shape.ParseForm(shape.New[ObjectList](), nil)      // want "unsupported parameter type"
+}

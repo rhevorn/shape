@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/rhevorn/shape/internal/fieldmeta"
 	"github.com/rhevorn/shape/internal/taglang"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
@@ -89,6 +90,14 @@ func checkConstructionCall(pass *analysis.Pass, call *ast.CallExpr) {
 		return
 	}
 	var target types.Type
+	source := fieldmeta.Value
+	switch object.Name() {
+	case "BindForm", "BindFormContext", "ParseForm", "ParseFormContext":
+		source = fieldmeta.Form
+	case "BindQuery", "BindQueryContext", "ParseQuery", "ParseQueryContext":
+		source = fieldmeta.Query
+	}
+	parse := false
 	switch object.Name() {
 	case "New":
 		if typeArgument != nil {
@@ -98,13 +107,18 @@ func checkConstructionCall(pass *analysis.Pass, call *ast.CallExpr) {
 			checkExplicitSchema(pass, call, target)
 		}
 		return
+	case "ParseForm", "ParseFormContext", "ParseQuery", "ParseQueryContext":
+		parse = true
+		if result, ok := pass.TypesInfo.TypeOf(call).(*types.Tuple); ok && result.Len() == 2 {
+			target = result.At(0).Type()
+		}
 	case "FromTags":
 		if typeArgument != nil {
 			target = pass.TypesInfo.TypeOf(typeArgument)
 		}
-	case "BindJSON", "BindJSONReader":
+	case "BindJSON", "BindJSONReader", "BindForm", "BindQuery", "BindRequest":
 		target = bindTargetType(pass, call, 0)
-	case "BindJSONContext", "BindJSONReaderContext":
+	case "BindJSONContext", "BindJSONReaderContext", "BindFormContext", "BindQueryContext":
 		target = bindTargetType(pass, call, 1)
 	default:
 		return
@@ -115,8 +129,25 @@ func checkConstructionCall(pass *analysis.Pass, call *ast.CallExpr) {
 	if mentionsTypeParam(target) {
 		return
 	}
-	if err := checkStructType(target, map[types.Type]bool{}); err != nil {
-		pass.Reportf(call.Pos(), "invalid Shape struct schema: %v", err)
+	if !parse {
+		if err := checkStructType(target, map[types.Type]bool{}); err != nil {
+			pass.Reportf(call.Pos(), "invalid Shape struct schema: %v", err)
+			return
+		}
+	}
+	if object.Name() == "BindRequest" {
+		for _, input := range []fieldmeta.Source{fieldmeta.Query, fieldmeta.Form} {
+			if err := checkParameterStruct(target, input, map[types.Type]bool{}, 0); err != nil {
+				pass.Reportf(call.Pos(), "invalid Shape request %s schema: %v", input, err)
+				return
+			}
+		}
+	}
+
+	if source != fieldmeta.Value {
+		if err := checkParameterStruct(target, source, map[types.Type]bool{}, 0); err != nil {
+			pass.Reportf(call.Pos(), "invalid Shape %s schema: %v", source, err)
+		}
 	}
 }
 

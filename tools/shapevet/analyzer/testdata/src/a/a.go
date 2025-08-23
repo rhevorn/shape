@@ -103,10 +103,10 @@ func build() {
 		shape.Field("Name", shape.String()),
 		shape.Field("Name", shape.String()), // want "duplicate field Name"
 	)
-	_ = shape.New[Explicit](shape.Field("Hidden", shape.String())) // want "field Hidden is excluded from JSON"
-	_ = shape.New[Explicit](shape.Field("", shape.String()))       // want "field name must not be empty"
-	_ = shape.New[time.Time]()                                     // want "target must be an ordinary value struct"
-	_ = shape.FromTags[time.Time]()                                // want "target must be an ordinary value struct"
+	_ = shape.New[Explicit](shape.Field("Hidden", shape.String()))
+	_ = shape.New[Explicit](shape.Field("", shape.String())) // want "field name must not be empty"
+	_ = shape.New[time.Time]()                               // want "target must be an ordinary value struct"
+	_ = shape.FromTags[time.Time]()                          // want "target must be an ordinary value struct"
 }
 
 func genericBind[T any](target *T, data []byte) error {

@@ -6,6 +6,7 @@ import (
 	"go/types"
 	"reflect"
 
+	"github.com/rhevorn/shape/internal/fieldmeta"
 	"github.com/rhevorn/shape/internal/jsonfields"
 	"golang.org/x/tools/go/analysis"
 )
@@ -24,6 +25,7 @@ func checkExplicitSchema(pass *analysis.Pass, call *ast.CallExpr, target types.T
 		return
 	}
 	seen := make(map[string]bool, len(call.Args))
+	paths := make(map[string]bool, len(call.Args))
 	jsonFields := directJSONFields(owner)
 	for _, argument := range call.Args {
 		factory := explicitFieldCall(pass, argument)
@@ -56,16 +58,17 @@ func checkExplicitSchema(pass *analysis.Pass, call *ast.CallExpr, target types.T
 			pass.Reportf(factory.Args[0].Pos(), "invalid Shape explicit field: field %s is not exported", name)
 			continue
 		}
-		jsonTag := reflect.StructTag(owner.Tag(fieldIndex(owner, field))).Get("json")
-		if jsonTag == "-" {
-			pass.Reportf(factory.Args[0].Pos(), "invalid Shape explicit field: field %s is excluded from JSON", name)
-			continue
-		}
-		jsonName, _ := jsonfields.Name(field.Name(), jsonTag)
-		if jsonFields[jsonName] != fieldIndex(owner, field) {
+		names := fieldmeta.Resolve(field.Name(), reflect.StructTag(owner.Tag(fieldIndex(owner, field))))
+		jsonName := names.JSON
+		if jsonName != "" && jsonFields[jsonName] != fieldIndex(owner, field) {
 			pass.Reportf(factory.Pos(), "invalid Shape explicit field: ambiguous or shadowed JSON field %s", jsonName)
 			continue
 		}
+		if paths[names.Default] {
+			pass.Reportf(factory.Pos(), "invalid Shape explicit field: duplicate field path %s", names.Default)
+			continue
+		}
+		paths[names.Default] = true
 		schemaType := transformInputType(pass.TypesInfo.TypeOf(factory.Args[1]))
 		if schemaType != nil && !types.Identical(field.Type(), schemaType) {
 			pass.Reportf(factory.Pos(), "invalid Shape explicit field: field %s has type %s, schema has type %s", name, field.Type(), schemaType)

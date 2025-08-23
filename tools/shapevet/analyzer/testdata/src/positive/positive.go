@@ -38,7 +38,7 @@ type Tagged struct {
 	ChildPtr *Child               `json:"childPtr" shape:"notnull"`
 	Names    Names                `json:"names" shape:"notnull,notempty,min=1,max=5,len=2,unique"`
 	Counts   Counts               `json:"counts" shape:"notnull,notempty,min=1,max=5,len=2"`
-	Hidden   chan int             `json:"-"`
+	Hidden   string               `json:"-"`
 	private  any
 }
 
@@ -98,3 +98,20 @@ type NamedPointerDoc struct {
 }
 
 var namedPointerSchema = shape.FromTags[NamedPointerDoc]()
+
+type MultiSource struct {
+	FormOnly  string                `json:"-" form:"name" shape:"notempty"`
+	QueryOnly int                   `json:"-" query:"page" shape:"min=1"`
+	Nested    struct{ Name string } `json:"nested"`
+}
+
+func parameterSources() {
+	s := shape.FromTags[MultiSource]()
+	_ = shape.New[MultiSource](shape.Field("FormOnly", shape.String().NotEmpty()))
+	var v MultiSource
+	_ = shape.BindRequest(&v, nil)
+	_ = shape.BindForm(&v, nil)
+	_ = shape.BindQueryContext(context.Background(), &v, nil)
+	_, _ = s.ParseForm(nil)
+	_, _ = shape.ParseQuery(s, nil)
+}

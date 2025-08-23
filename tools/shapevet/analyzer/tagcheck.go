@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rhevorn/shape/internal/jsonfields"
+	"github.com/rhevorn/shape/internal/fieldmeta"
 	"github.com/rhevorn/shape/internal/spec"
 	"github.com/rhevorn/shape/internal/taglang"
 )
@@ -35,8 +35,8 @@ func checkStructType(t types.Type, active map[types.Type]bool) error {
 		field := value.Field(index)
 		tag := reflect.StructTag(value.Tag(index))
 		shapeTag := tag.Get("shape")
-		jsonName, _ := jsonfields.Name(field.Name(), tag.Get("json"))
-		if !field.Exported() || tag.Get("json") == "-" {
+		fieldNames := fieldmeta.Resolve(field.Name(), tag)
+		if !field.Exported() {
 			if shapeTag != "" {
 				return errText(field.Name() + " has a tag but is not processed")
 			}
@@ -45,13 +45,10 @@ func checkStructType(t types.Type, active map[types.Type]bool) error {
 		if field.Embedded() {
 			return errText("anonymous fields are unsupported")
 		}
-		if jsonName == "" {
-			jsonName = field.Name()
+		if names[fieldNames.Default] {
+			return errText("duplicate field name " + fieldNames.Default)
 		}
-		if names[jsonName] {
-			return errText("duplicate field name " + jsonName)
-		}
-		names[jsonName] = true
+		names[fieldNames.Default] = true
 		items, err := taglang.Parse(shapeTag)
 		if err != nil {
 			return errText("field " + field.Name() + ": " + err.Error())
