@@ -34,6 +34,7 @@ packages are useful when a reusable struct Schema is unnecessary.
 | Example | What it shows |
 | --- | --- |
 | [`config`](config) | Defaults, strict config loading, duration strings, and atomic replacement |
+| [`http-parameters`](http-parameters) | Explicit Form/Query parsing and automatic BindRequest with source conflicts, limits, and typed errors |
 | [`http`](http) | Binding an HTTP request body with cancellation, strict JSON, limits, and typed error responses |
 
 The examples intentionally print transformed values or inspected errors so the

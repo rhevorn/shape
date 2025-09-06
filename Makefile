@@ -32,6 +32,8 @@ fuzz-smoke:
 	go test ./transform -run '^$$' -fuzz '^FuzzStringTransformer$$' -fuzztime 2s
 	go test ./types -run '^$$' -fuzz '^FuzzDurationJSON$$' -fuzztime 2s
 	go test . -run '^$$' -fuzz '^FuzzTaggedSchemaJSON$$' -fuzztime 2s
+	go test . -run '^$$' -fuzz '^FuzzParameterDecoding$$' -fuzztime 2s
+	go test . -run '^$$' -fuzz '^FuzzBindRequest$$' -fuzztime 2s
 
 bench:
 	go test -run '^$$' -bench . -benchmem ./...

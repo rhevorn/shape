@@ -2,6 +2,10 @@ package shape_test
 
 import (
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/rhevorn/shape"
@@ -11,8 +15,8 @@ import (
 
 func BenchmarkSchemaParseJSON(b *testing.B) {
 	type Request struct {
-		Name string `json:"name" shape:"trim,notempty,maxlength=50"`
-		Age  int    `json:"age" shape:"min=18"`
+		Name string `json:"name" shape:"trim,notempty,maxlength=50" form:"name" query:"name"`
+		Age  int    `json:"age" shape:"min=18" form:"age" query:"age"`
 	}
 	schema := shape.FromTags[Request]()
 	data := []byte(`{"name":" Pong ","age":20}`)
@@ -108,7 +112,7 @@ func BenchmarkLargeTransformerThen(b *testing.B) {
 }
 
 type BenchDTO struct {
-	Items []int `json:"items"`
+	Items []int `json:"items" form:"items" query:"items"`
 }
 
 var benchOut BenchDTO
@@ -239,5 +243,53 @@ func BenchmarkTransformByteSlice(b *testing.B) {
 		if _, err := transformer.Transform(input); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+func BenchmarkSchemaParseParameters(b *testing.B) {
+	type Request struct {
+		Name string `json:"name" shape:"trim,notempty,maxlength=50" form:"name" query:"name"`
+		Age  int    `json:"age" shape:"min=18" form:"age" query:"age"`
+	}
+	schema := shape.FromTags[Request]()
+	values := url.Values{"name": {" Pong "}, "age": {"20"}}
+	b.Run("Form", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			if _, err := schema.ParseForm(values); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	b.Run("Query", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			if _, err := schema.ParseQuery(values); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
+
+func BenchmarkBindRequest(b *testing.B) {
+	type Request struct {
+		Name string `json:"name" form:"name" query:"name" shape:"trim,notempty"`
+		Age  int    `json:"age" form:"age" query:"age" shape:"min=18"`
+	}
+	for _, tc := range []struct{ name, media, body string }{
+		{"JSON", "application/json", `{"name":" Pong "}`},
+		{"Form", "application/x-www-form-urlencoded", "name=+Pong+"},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			r := &http.Request{URL: &url.URL{RawQuery: "age=20"}, Header: http.Header{"Content-Type": {tc.media}}}
+			b.ReportAllocs()
+			for b.Loop() {
+				r.Body = io.NopCloser(strings.NewReader(tc.body))
+				var out Request
+				if err := shape.BindRequest(&out, r); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }
