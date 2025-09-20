@@ -4,6 +4,17 @@
 
 ### Added
 
+- `BindRequest` combines Query and a Content-Type-selected body, rejects source
+  conflicts by default, and supports explicit `QueryFirst` / `BodyFirst` precedence.
+  Body limits, typed conflict errors, and multipart text binding are included.
+
+- Form and query parsing with `ParseForm*` / `ParseQuery*` methods and package
+  functions, plus atomic tag-driven `BindForm*` / `BindQuery*` helpers.
+- Independent `form` and `query` field mappings, dotted nested fields, repeated
+  scalar slices, strict unknown-field options, and typed `ParameterError`.
+- Parameter text decoding through `encoding.TextUnmarshaler` and duration syntax,
+  and static checks for parameter schemas in `shapevet`.
+
 - `validate.Issue.Target`, `IssueTarget`, `TargetValue`, and `TargetKey`
   distinguish map-key failures from value failures independently of labels.
 
@@ -33,6 +44,10 @@
 - Runnable examples and guides for the public API and struct tags.
 
 ### Fixed
+
+- Input tags now govern decoding only. All parse and bind paths execute the
+  same Schema rules as direct Transform/Validate. Form and Query names use
+  only their own tags, falling back to Go names.
 
 - Package JSON parsing and collection composition honor methods overridden by
   schemas and transformers that embed built-in types.

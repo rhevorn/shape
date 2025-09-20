@@ -11,7 +11,7 @@ compatibility policy.
 The root package is the recommended API for reusable Schemas. Every root Spec
 is a `Schema[T]` (Transform + Validate). `StructSpec` and `TaggedSpec` also
 implement `JSONSchema[T]` for ParseJSON. Tag-driven in-place bind is only the
-package-level `BindJSON*` helpers.
+package-level `BindJSON*`, `BindForm*`, `BindQuery*`, and `BindRequest` helpers.
 
 ### Construction
 
@@ -23,7 +23,7 @@ func FromTags[T any]() TaggedSpec[T]
 - `New[T]` accepts an ordinary value struct and explicit fields.
 - An empty field list is valid for a Schema containing only whole-struct
   `Apply`/`Refine` callbacks.
-- `FromTags[T]` compiles `json` and `shape` tags and caches the plan by Go type.
+- `FromTags[T]` compiles field mappings and `shape` tags and caches the plan by Go type.
 - Invalid program configuration panics during construction.
 - Both returned values are immutable and safe for concurrent reuse.
 
@@ -56,8 +56,8 @@ root, as a collection element, or as a struct field. `Field` binds a value
 Schema to one direct Go field name and is the only way to construct a
 `FieldSpec`. Every argument to `New` must be a `Field(...)`. The name is the
 exact, case-sensitive name of a direct exported Go field, not its JSON name.
-`New` rejects empty, missing, unexported, duplicate, type-mismatched, and
-`json:"-"` fields.
+`New` rejects empty, missing, unexported, duplicate, and type-mismatched fields.
+Input exclusion tags do not prevent explicit rule bindings.
 
 `Numeric` includes named forms of signed and unsigned integer types except
 `uintptr`, plus `float32` and `float64`. Complex numbers are excluded. `MapKey` includes named
@@ -184,6 +184,10 @@ Validate
 JSON (also JSONSchema[T])
   ParseJSON  ParseJSONContext
   ParseJSONReader  ParseJSONReaderContext
+
+Parameters
+  ParseForm  ParseFormContext
+  ParseQuery  ParseQueryContext
 ```
 
 Whole-struct callbacks run after all field callbacks in the same phase.
@@ -200,6 +204,10 @@ Validate
 JSON (also JSONSchema[T])
   ParseJSON  ParseJSONContext
   ParseJSONReader  ParseJSONReaderContext
+
+Parameters
+  ParseForm  ParseFormContext
+  ParseQuery  ParseQueryContext
 ```
 
 Same whole-struct callback timing as `StructSpec`. Adding `Apply`/`Refine`
@@ -255,6 +263,93 @@ BindJSONReaderContext[T](ctx context.Context, target *T, reader io.Reader, optio
 
 Bind derives a cached tagged Schema from `T`, runs the same decode → transform →
 validate pipeline, and writes `*target` only on complete success.
+
+### Form and query parameters
+
+Both `StructSpec[T]` and `TaggedSpec[T]` expose:
+
+```go
+ParseForm(url.Values, ...FormOptions) (T, error)
+ParseFormContext(context.Context, url.Values, ...FormOptions) (T, error)
+ParseQuery(url.Values, ...QueryOptions) (T, error)
+ParseQueryContext(context.Context, url.Values, ...QueryOptions) (T, error)
+```
+
+Package-level calls accept any `Schema[T]` with an ordinary value struct `T`:
+
+```go
+ParseForm[T](Schema[T], url.Values, ...FormOptions) (T, error)
+ParseFormContext[T](context.Context, Schema[T], url.Values, ...FormOptions) (T, error)
+ParseQuery[T](Schema[T], url.Values, ...QueryOptions) (T, error)
+ParseQueryContext[T](context.Context, Schema[T], url.Values, ...QueryOptions) (T, error)
+BindForm[T](*T, url.Values, ...FormOptions) error
+BindFormContext[T](context.Context, *T, url.Values, ...FormOptions) error
+BindQuery[T](*T, url.Values, ...QueryOptions) error
+BindQueryContext[T](context.Context, *T, url.Values, ...QueryOptions) error
+
+type FormOptions struct { DisallowUnknownFields bool }
+type QueryOptions struct { DisallowUnknownFields bool }
+type ParameterError struct {
+    Source string
+    Path   validate.Path
+    Err    error
+}
+func (*ParameterError) Error() string
+func (*ParameterError) Unwrap() error
+```
+
+These methods do not widen `Schema[T]` or `JSONSchema[T]`. Invalid input
+returns errors and no partial value; Bind replaces the target only on success.
+Input exclusion affects decoding only. All Parse/Bind calls and direct
+Transform/Validate process the same Schema fields and rules. Whole-struct callbacks
+always run. Built-in error paths use the selected input's names.
+
+The complete naming, duplicate, empty-value, conversion, nesting, error-order,
+and unsupported-type contracts are in [PARAMETERS.md](PARAMETERS.md). Input maps
+and slices must not be mutated concurrently by callers. Plans are immutable
+and cached separately for each input and Go type.
+
+### Automatic HTTP binding
+
+```go
+BindRequest[T](*T, *http.Request, ...RequestOptions) error
+
+type RequestPrecedence uint8
+const (
+    RejectConflicts RequestPrecedence = iota
+    QueryFirst
+    BodyFirst
+)
+const DefaultMaxRequestBytes int64 = 1 << 20
+
+type RequestOptions struct {
+    DisallowUnknownFields bool
+    MaxBytes              int64
+    Precedence            RequestPrecedence
+}
+type SourceConflictError struct {
+    Field   string
+    Sources []string
+}
+func (*SourceConflictError) Error() string
+var ErrRequestTooLarge error
+var ErrUnsupportedContentType error
+var ErrRequestFiles error
+```
+
+BindRequest uses the request context, derives a tagged Schema, and combines
+Query and the body before one Transform/Validate pass. Content-Type selects
+JSON or Form; decoding never guesses another format after a failure. Conflicts
+are errors by default. Explicit precedence operates on submitted top-level Go
+fields, including zero/empty/null values; nested objects and slices are not
+recursively merged. All submitted sources must decode successfully.
+
+The default body limit is 1 MiB. It consumes the body without closing it and
+must run before another body parser. Multipart text fields are supported;
+file parts and root custom JSON unmarshaling require the explicit input APIs.
+Both Form and Query type definitions are checked before reading input; exclude
+unsupported fields with the corresponding input tags.
+See [PARAMETERS.md](PARAMETERS.md#automatic-http-binding) for the full contract.
 
 ### JSON configuration
 
@@ -554,7 +649,7 @@ values or validate a response body.
 
 - `Transform` never validates.
 - `Validate` never transforms.
-- Schema JSON operations run Decode → Transform → Validate.
+- JSON, form, and query operations run Decode → Transform → Validate.
 - `Validate` aggregates up to `validate.DefaultMaxIssues`.
 - `ValidateFirst` returns at most one issue and stops evaluation.
 - Transform steps preserve the order in which their fluent methods are called.
@@ -567,7 +662,8 @@ values or validate a response body.
 - `IfNull` applies only to nilable values and preserves nil/empty distinction.
 - Context cancellation stops traversal and returns the context error.
 - Transformers, Validators, and Schemas are immutable and concurrency-safe.
-- User input errors return errors; invalid program configuration panics at construction.
+- User input errors return errors; invalid program configuration panics at construction
+  or, for a form/query decoding plan, its first use.
 
 ## 6. Compatibility policy
 
@@ -616,7 +712,7 @@ or text decoders and no interface fields. Otherwise transforms detach the data
 before modifying it. Every fallback is snapshotted during construction and
 copied for use; the caller's later edits cannot change it.
 
-Package-level JSON parsing and collection composition call the public methods
+Package-level parsing and collection composition call the public methods
 of external Schema implementations, including wrappers that embed built-in
 Specs. Internal fast paths apply only to exact built-in types.
 

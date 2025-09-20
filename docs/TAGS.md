@@ -1,6 +1,7 @@
 # Struct tag reference
 
-`shape:"..."` configures tag-driven `shape.BindJSON*` and the reusable Schema
+`shape:"..."` configures tag-driven `shape.BindJSON*`, `shape.BindForm*`,
+`shape.BindQuery*`, and the reusable Schema
 returned by `shape.FromTags[T]()`. This file is the complete tag specification.
 
 Tags are the convenience form for static DTO behavior. The recommended primary
@@ -21,8 +22,9 @@ var request Request
 err := shape.BindJSON(&request, data)
 ```
 
-The `json` tag and `encoding/json` decide how input becomes a Go value. The
-`shape` tag only sees that decoded value.
+The input decoder and `json`, `form`, or `query` tags decide how input becomes
+a Go value. The `shape` tag only sees that decoded value. Form/query field
+mapping and decoding rules are defined in [PARAMETERS.md](PARAMETERS.md).
 
 Schema keeps two plans. All tag transforms run first; then all tag rules run.
 Their relative position in one tag does not interleave the two phases:
@@ -55,9 +57,15 @@ anonymous fields, recursive types, `**T`, `*[]T`, and `*map[K]V` are rejected.
 Use the basic `validate` and `transform` packages when a value does not fit the
 tagged DTO model.
 
-Unexported fields and `json:"-"` fields are ignored, but placing a non-empty
-`shape` tag on either is an error. Duplicate effective JSON field names are an
-error. Paths use the effective JSON name.
+FromTags processes all exported fields, even when an input tag is `"-"`.
+Unexported fields are ignored; a non-empty `shape` tag on an unexported field is
+an error. Duplicate Schema paths are rejected. Form/query names are checked
+when their decoding plan is first used. Each input uses only its own tag,
+falling back to the Go name. Input exclusion never disables field rules.
+
+ParseForm/ParseQuery errors use input names, with Schema names for excluded
+fields. Direct Transform/Validate and BindRequest use effective JSON names,
+or Go names for fields excluded from JSON.
 
 ## 3. Transform tags
 
@@ -146,13 +154,13 @@ the standard library's behavior.
 
 ## 7. Errors and static checking
 
-`shape.FromTags[T]()` and `shape.BindJSON*` panic for invalid program
+`shape.FromTags[T]()` and tag-driven Bind calls panic for invalid program
 configuration. Input data that fails a rule returns `*validate.Error`. JSON
 syntax/type failures remain decode errors.
 
 Go itself does not understand struct-tag contents. Runtime construction is the
 authoritative check. CI can optionally check statically visible fields,
-`shape.FromTags[T]()` calls, `shape.BindJSON*` target types, and direct explicit
+`shape.FromTags[T]()` calls, tag-driven Bind target types, and direct explicit
 `shape.New[T](...)` fields:
 
 ```sh

@@ -3,8 +3,11 @@
 ```text
 shape.New[T](...)     explicit Schema (primary)
 shape.BindJSON(...)   tag DTO, no Schema variable
-shape.FromTags[T]()     reusable tagged Schema
+shape.FromTags[T]()   reusable tagged Schema
 shape.ParseJSON(...)  any Schema as JSON root
+shape.ParseForm(...)  form values into a struct
+shape.ParseQuery(...) query values into a struct
+shape.BindRequest(...) automatic Query and HTTP body binding
 validate / transform  standalone packages
 ```
 
@@ -33,9 +36,9 @@ var userSchema = shape.New[User](
 ```
 
 `Field` strings are exact, case-sensitive **Go field names**; error paths use
-**JSON names**.
-Construction panics on missing, unexported, duplicate, type-mismatched, or
-`json:"-"` fields. Omitted fields pass through unchanged. `shape` tags are
+**the selected input names** (JSON names for direct Transform/Validate).
+Construction panics on missing, unexported, duplicate, or type-mismatched
+fields. Input exclusion tags do not disable a Schema’s field rules. Omitted fields pass through unchanged. `shape` tags are
 ignored by `New`.
 
 ### Transform and Validate
@@ -109,6 +112,20 @@ var requestSchema = shape.FromTags[Request]().Apply(normalize).Refine(check)
 ```
 
 Full tag grammar and type matrix: [TAGS.md](TAGS.md).
+
+### Form and query inputs
+
+```go
+user, err := userSchema.ParseForm(values)
+user, err = shape.ParseForm(userSchema, values)
+user, err = userSchema.ParseQuery(values)
+user, err = shape.ParseQuery(userSchema, values)
+```
+
+`values` is `url.Values`. Tagged DTOs can use `shape.BindForm(&request, values)`
+or `shape.BindQuery(&request, values)`. These calls also have context versions.
+See [PARAMETERS.md](PARAMETERS.md) for input names, conversion rules, strict
+options, nested fields, and HTTP request handling.
 
 ## 4. JSON options
 

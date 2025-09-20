@@ -35,7 +35,9 @@ go test -run '^$' -bench 'Benchmark(NoopPayload|NestedJSON|SchemaParseJSON)' -be
 The regression suite covers mutable error/export data, declaration order,
 pointer and collection defaults, canceled contexts, typed map keys, mixed
 transform paths, finite checks after traversal pruning, export intersections,
-unsupported wire representations, and recursive analyzer inputs.
+unsupported wire representations, recursive analyzer inputs, and form/query
+duplicates, field exclusions, nesting, numeric boundaries, custom text decoders,
+HTTP parsing, and concurrent reuse across input formats.
 
 ## Export boundary
 
